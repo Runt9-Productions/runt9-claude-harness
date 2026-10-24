@@ -1,0 +1,137 @@
+name: CI
+
+# `gate` is the check branch rules require. Never filter this workflow with paths or paths-ignore: a PR the filter
+# excludes never starts it, so `gate` never reports and the PR waits forever. `edited` is listed because changing a
+# PR's base branch raises only that event, and the new base needs its own run.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  # zizmor audits this workflow, so every other job waits for it: a flaw it would flag must not run first.
+  zizmor:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # zizmor reads a config file it finds in the repo, and outside .github/workflows the bot can write one, so a
+      # config could switch audits off without an owner commit.
+      - name: No zizmor config file
+        shell: bash
+        run: |
+          configs="$(find . -path ./.git -prune -o -iname '*zizmor*.y*ml' -print)"
+          if [[ -n $configs ]]; then
+            echo "::error::zizmor would read a config from the repo: $configs"
+            exit 1
+          fi
+
+      # Online audits are off because they spend API rate limit.
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          online-audits: false
+          advanced-security: false
+          annotations: true
+
+  guard:
+    needs: zizmor
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        shell: bash
+
+    # The checkout is GitHub's merge of the PR into its base, so HEAD^1 is the base as it will be merged into and
+    # `git diff HEAD^1 HEAD` is exactly what the merge changes, even when the base has moved since the PR forked.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # Zero-width, bidirectional and variation-selector characters, the soft hyphen, the byte-order mark and
+      # Unicode tag characters render as nothing, so text an agent reads can hide in a file that reviews clean. Any
+      # changed file can reach an agent (skills, hook commands, settings fragments, scripts), so all are scanned.
+      # -a because one NUL byte makes grep skip a file as binary while GitHub still shows it as text; `--` because
+      # a changed file can be named like an option. grep exits 2 on an error, which must fail the step.
+      - name: No invisible characters
+        run: |
+          list="$RUNNER_TEMP/changed"
+          git diff -z --name-only --diff-filter=d HEAD^1 HEAD > "$list"
+          mapfile -d '' files < "$list"
+          if (( ${#files[@]} == 0 )); then
+            echo "No file added or changed."
+            exit 0
+          fi
+
+          status=0
+          LC_ALL=C.UTF-8 grep -nHaP \
+            '[\x{00AD}\x{061C}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{2069}\x{FE00}-\x{FE0F}\x{FEFF}\x{E0000}-\x{E007F}\x{E0100}-\x{E01EF}]' \
+            -- "${files[@]}" || status=$?
+          case $status in
+            0) echo "::error::The lines above hold an invisible character."; exit 1 ;;
+            1) echo "${#files[@]} changed file(s) checked, none holds an invisible character." ;;
+            *) echo "::error::grep failed (exit $status), so the files were not checked."; exit 1 ;;
+          esac
+
+      # A marketplace entry can carry components or `strict: false` and so ship behaviour that no plugin version
+      # covers. Entries hold only a pointer to plugins/<name>, which the version check below does cover.
+      - name: Marketplace entries only point at plugins/
+        run: |
+          bad="$(jq -c '.plugins[] | select((keys - ["name", "source", "description"]) != []
+            or .source != "./plugins/\(.name)")' .claude-plugin/marketplace.json)"
+          if [[ -n $bad ]]; then
+            echo "::error file=.claude-plugin/marketplace.json::Entries may hold only name, source and description," \
+                 "with source ./plugins/<name>:"
+            echo "$bad"
+            exit 1
+          fi
+
+      # Installed users get a plugin's change only when its version rises, so a change merged without a bump
+      # reaches nobody and nothing reports it. Tests and a plugin's top-level README do not ship behaviour.
+      - name: Every changed plugin raises its version
+        run: |
+          changed="$(git diff --name-only HEAD^1 HEAD -- ':(glob)plugins/**' \
+            ':(glob,exclude)plugins/*/README.md' ':(glob,exclude)**/*.test.ts' ':(glob,exclude)**/test_*.py')"
+
+          status=0
+          for plugin in $(cut -d/ -f2 <<< "$changed" | sort -u); do
+            manifest="plugins/$plugin/.claude-plugin/plugin.json"
+            [[ -f $manifest ]] || continue
+            head="$(jq -r .version "$manifest")"
+            if ! base="$(git show "HEAD^1:$manifest" 2>/dev/null | jq -r .version)"; then
+              echo "$plugin: new at $head"
+              continue
+            fi
+            newest="$(printf '%s\n' "$base" "$head" | sort -V | tail -n 1)"
+            if [[ $head == "$base" || $newest != "$head" ]]; then
+              echo "::error file=$manifest::$plugin changed, so its version must rise above $base (it is $head)."
+              status=1
+            else
+              echo "$plugin: $base -> $head"
+            fi
+          done
+          exit "$status"
+
+  # Runs even when a job it needs failed: with a plain `needs` this job would be skipped, and GitHub passes a
+  # skipped required check.
+  gate:
+    needs: [zizmor, guard]
+    if: always()
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Fail if any needed job failed or was cancelled
+        shell: bash
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          if [[ " $RESULTS " == *" failure "* || " $RESULTS " == *" cancelled "* ]]; then
+            exit 1
+          fi

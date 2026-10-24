@@ -1,0 +1,8 @@
+{
+  "name": "runt9",
+  "description": "Opt-in Claude Code plugins: guardrails, the development process, delegation and session tooling",
+  "owner": {
+    "name": "Runt9 Productions"
+  },
+  "plugins": []
+}
