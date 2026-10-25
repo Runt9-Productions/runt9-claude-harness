@@ -14,7 +14,7 @@ history keeps whatever was pushed. A plugin change reaches users only when its v
 - Single commit: `git show <sha> > <review-dir>/diff.patch`
 - Range: `git diff <a>..<b> > <review-dir>/diff.patch`
 - Pull request: `gh pr diff <n> > <review-dir>/diff.patch`; commit messages with `gh pr view <n> --json commits`,
-  the description with `gh pr view <n> --json body`. `gh` needs a token: see section 11.
+  the description with `gh pr view <n> --json body`. `gh` reads its token from `GH_TOKEN`; in CI that token can only read.
 - Default branch: `main`
 - Paths excluded from review: none. `package-lock.json` stays in the diff for `guard-security` and `public-leak`;
   other reviewers skip it.
@@ -127,8 +127,9 @@ history keeps whatever was pushed. A plugin change reaches users only when its v
 
 ## 11. Report delivery
 
-Not decided yet; it depends on whether the review runs locally or in CI. Until it is, return the report to the
-caller.
+Write the full report to `<review-dir>/report.md` and return it to the caller; deliver it nowhere else. A CI review
+job, when one runs, reads that file, posts it on the pull request, and fails on a Critical or High finding. That
+keeps any token that can write to GitHub away from the reviewing agent.
 
 ## 12. Standing reviewer instructions
 
