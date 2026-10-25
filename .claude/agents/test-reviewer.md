@@ -47,8 +47,8 @@ causes are inputs on which the right and wrong answers coincide:
 - A value equal to its own complement, a scale of 1, round numbers on which two formulas agree.
 - An expected side built from the actual side, which degenerates to `{} == {}` when the actual is empty. Pair it with
   a size or membership assertion.
-- A random outcome asserted directly. Assert the deterministic question instead (did the input reach the roll), or a
-  recorded seeded value whose break you named before recording it.
+- A random outcome asserted directly. Assert the deterministic question instead (did the input reach the random
+  draw), or a recorded seeded value whose break you named before recording it.
 
 **4. Does it catch something no other test catches, and does the suite want it?**
 Name a defect this test reports that no other test in the suite would. If every break you can name for it is reported

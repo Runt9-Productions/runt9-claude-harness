@@ -19,8 +19,9 @@ is the one that cannot tell a refusal from a failure to run.
    ran (a count of what was checked, a stub call), or a script that checks nothing passes it.
 3. **A check that cannot fail outside the last line.** Bash errexit ignores a negated command (`! grep ...`) and
    every member of an `&&` or `||` list except the last, so on any line but a test's last, those never fail it.
-   `run` swallows the exit status, so a `run` with no `$status` check asserts nothing about the exit. Use
-   `refute_grep` from `helpers.bash` for an absence, and check `$status` after every `run` whose exit matters.
+   `run` swallows the exit status, so a `run` with no `$status` check asserts nothing about the exit. For an
+   absence use `refute_grep` from `.github/scripts/tests/helpers.bash`, or in a file that does not load it, `run grep`
+   then `[ "$status" -eq 1 ]`. Check `$status` after every `run` whose exit matters.
 4. **A substring that matches more than the decision.** `[[ $output == *"x"* ]]` passes when `x` appears anywhere:
    in a file name the script echoes, a usage line, a temporary path, a port. Match the line the decision produces,
    and make sure the fixture's names do not contain the pattern.
