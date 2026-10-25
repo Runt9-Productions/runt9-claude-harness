@@ -27,6 +27,7 @@ jobs:
       pull-requests: read
     outputs:
       report: ${{ steps.result.outputs.report }}
+      payload: ${{ steps.result.outputs.payload }}
 
     defaults:
       run:
@@ -102,7 +103,17 @@ jobs:
         if: needs.review.result == 'success'
         env:
           REPORT: ${{ needs.review.outputs.report }}
-        run: gh api "repos/$REPO/pulls/$PR/reviews" -f event=COMMENT -f body="$REPORT" > /dev/null
+          PAYLOAD: ${{ needs.review.outputs.payload }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # GitHub rejects a whole review when one inline comment misses the diff. The report alone, which holds every
+        # finding, is posted then, and when the review wrote no payload.
+        run: |
+          if [[ -n $PAYLOAD ]] && jq --arg sha "$HEAD_SHA" '{commit_id: $sha, event: "COMMENT", body,
+              comments: [.comments[]? | {path, line, side, body}]}' <<< "$PAYLOAD" \
+              | gh api "repos/$REPO/pulls/$PR/reviews" --input - > /dev/null; then
+            exit 0
+          fi
+          gh api "repos/$REPO/pulls/$PR/reviews" -f event=COMMENT -f body="$REPORT" > /dev/null
 
       - name: Remove the label
         if: always()

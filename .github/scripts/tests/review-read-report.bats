@@ -17,6 +17,20 @@ setup() {
     [ "$status" -eq 0 ]
     grep -q '^later report$' "$GITHUB_OUTPUT"
     refute_grep 'earlier report' "$GITHUB_OUTPUT"
+    refute_grep '^payload<<' "$GITHUB_OUTPUT"
+}
+
+@test "the payload beside the newest report is passed on" {
+    echo '{"body": "earlier payload"}' > "$reports/earlier/review-payload.json"
+    echo "earlier report" > "$reports/earlier/review.md"
+    touch -d '1 hour ago' "$reports/earlier/review.md"
+    echo '{"body": "later payload"}' > "$reports/later/review-payload.json"
+    echo "later report" > "$reports/later/review.md"
+    run bash "$SCRIPTS/review-read-report.sh" "$reports"
+    [ "$status" -eq 0 ]
+    grep -q '^payload<<' "$GITHUB_OUTPUT"
+    grep -q '^{"body": "later payload"}$' "$GITHUB_OUTPUT"
+    refute_grep 'earlier payload' "$GITHUB_OUTPUT"
 }
 
 @test "no report fails" {
