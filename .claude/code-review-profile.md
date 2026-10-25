@@ -138,8 +138,8 @@ Write the full report to `<review-dir>/review.md` and return it to the caller; d
 file, and this skill runs forked.
 
 When the target is a pull request number, also write `<review-dir>/review-payload.json`, the review as GitHub posts
-it: `{"body": "<markdown>", "comments": [{"path": "<repo-relative path>", "line": 42, "side": "RIGHT", "body":
-"<one finding>"}]}`.
+it: `{"commit_id": "<the PR head the diff was fetched at>", "body": "<markdown>", "comments": [{"path":
+"<repo-relative path>", "line": 42, "side": "RIGHT", "body": "<one finding>"}]}`.
 
 - **Inline comments only on lines inside the diff:** an added or context line of a hunk, numbered from the `+` side of
   its hunk header, not the file on disk. GitHub rejects the whole review if one comment misses, and CI then posts

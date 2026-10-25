@@ -74,8 +74,9 @@ jobs:
             --permission-mode dontAsk --allowedTools Bash Read Write Agent Skill --disallowedTools WebFetch WebSearch \
             --no-session-persistence --output-format json < /dev/null > "$RUNNER_TEMP/review.json"
           jq '{is_error, num_turns, total_cost_usd, duration_ms, permission_denials}' "$RUNNER_TEMP/review.json"
-          # The run's closing text, which says why when it wrote no report.
-          jq -r '.result // empty' "$RUNNER_TEMP/review.json" | head -c 4000
+          # The run's closing text, which says why when it wrote no report. Quoted, so a line of it cannot act as a
+          # workflow command, and cut inside jq, since `| head` would kill jq with SIGPIPE and fail the step.
+          jq '.result // empty | .[:4000]' "$RUNNER_TEMP/review.json"
 
       - name: Read the report
         id: result
@@ -106,12 +107,19 @@ jobs:
           PAYLOAD: ${{ needs.review.outputs.payload }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         # GitHub rejects a whole review when one inline comment misses the diff. The report alone, which holds every
-        # finding, is posted then, and when the review wrote no payload.
+        # finding, is posted then, and when the review wrote no payload. The payload's commit_id is the head the diff
+        # was fetched at, which a push after the label leaves behind the event's.
         run: |
-          if [[ -n $PAYLOAD ]] && jq --arg sha "$HEAD_SHA" '{commit_id: $sha, event: "COMMENT", body,
-              comments: [.comments[]? | {path, line, side, body}]}' <<< "$PAYLOAD" \
-              | gh api "repos/$REPO/pulls/$PR/reviews" --input - > /dev/null; then
+          if [[ -n $PAYLOAD ]] && request=$(jq --arg sha "$HEAD_SHA" '{
+                commit_id: ((.commit_id | strings | select(test("^[0-9a-f]{40}$"))) // $sha),
+                event: "COMMENT", body,
+                comments: [.comments[]? | {path, line, side, body} | with_entries(select(.value != null))]
+              }' <<< "$PAYLOAD") \
+              && gh api "repos/$REPO/pulls/$PR/reviews" --input - <<< "$request" > /dev/null; then
             exit 0
+          fi
+          if [[ -n $PAYLOAD ]]; then
+            echo "::warning::The inline review could not be posted, so the report is posted as the review body alone."
           fi
           gh api "repos/$REPO/pulls/$PR/reviews" -f event=COMMENT -f body="$REPORT" > /dev/null
 
