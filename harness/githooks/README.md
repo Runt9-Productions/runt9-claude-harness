@@ -1,6 +1,34 @@
 # githooks
 
-## pre-push
+Hooks for a repository an agent commits and pushes in under its own bot identity: an authorship check in
+`pre-commit` and `pre-push`, and a leak gate in `pre-push` after it. See Install below.
+
+## Authorship
+
+Keeps the agent from committing or pushing as its owner. Set in the repository's git config:
+
+| Key | Meaning |
+|---|---|
+| `claude.botEmail` | The bot's commit email. Unset, the authorship check does nothing. |
+| `claude.botName` | The bot's commit name. Required once `claude.botEmail` is set. |
+| `claude.branchPrefix` | The only branches the bot may push. Default `claude/`. |
+
+Both hooks check only inside a Claude Code session, recognised by `CLAUDE_CODE_SESSION_ID`, so the owner's own
+commits and pushes pass untouched.
+
+- `pre-commit` refuses a commit whose author or committer is not `claude.botEmail` and prints the
+  `git -c user.name=... -c user.email=... commit` to use instead.
+- `pre-push` refuses a push to or deletion of any ref outside `claude.branchPrefix`, and a push of any commit whose
+  author or committer is not `claude.botEmail` and that no remote-tracking ref already has. Each refusal names the
+  identity that is wrong. A rebase or cherry-pick can bring in such a commit
+  without the pre-commit check ever seeing it. Commits a merge brings in from a branch already on the remote, such as
+  main, are not checked again. It runs before the leak gate, so a push it refuses spends no review.
+
+`--no-verify` skips both, and a remote-tracking ref left behind after its branch was deleted on the remote can take a
+commit out of the push check. Branch rules on the server are the control; these hooks turn a likely mistake into an
+immediate local error.
+
+## pre-push: leak gate
 
 Refuses a push that would publish private information. It checks what the push publishes: every commit the pushed
 refs reach that no branch or tag on the remote already has, the annotated tags it pushes, and the pushed ref names.
@@ -41,11 +69,6 @@ refuse those. An agent set on defeating it also holds the bot's key and can push
 merge is the control there. CI on the public repository is the backstop, and it runs only after a pushed branch is
 already public.
 
-**Install a copy, not the checkout.** Copy `githooks/` and `leak-scan/` side by side into one directory outside the
-repository, then set `git config core.hooksPath <dir>/githooks`. The hook keeps its pass cache and working files in
-`<dir>/state/`, so whatever keeps the agent from writing to the installed copy has to cover all of `<dir>`.
-`core.hooksPath` replaces `.git/hooks/`, so any other hook you rely on has to move into the same directory.
-
 The hook runs tools only from `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin` and `/bin`, so
 `claude`, `betterleaks`, `git` and `jq` have to be in one of them.
 
@@ -58,3 +81,11 @@ it too, so the agent's harness has to keep it on HTTPS.
 
 Needs whatever `leak-scan` needs, plus `claude`, logged in. A review costs about $0.10 to $0.50, depending on the size
 of the diff.
+
+## Install
+
+**Install a copy, not the checkout.** Copy `githooks/` and `leak-scan/` side by side into one directory outside the
+repository, then set `git config core.hooksPath <dir>/githooks` in each repository the agent works in. The leak gate
+keeps its pass cache and working files in `<dir>/state/`, so whatever keeps the agent from writing to the installed
+copy has to cover all of `<dir>`. `core.hooksPath` replaces `.git/hooks/`, so any other hook you rely on has to move
+into the same directory. Set the authorship keys above in the same repository; without them only the leak gate runs.

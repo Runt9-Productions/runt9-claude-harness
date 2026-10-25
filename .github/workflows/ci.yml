@@ -85,7 +85,7 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: shellcheck
-        run: git ls-files -z '*.sh' '*.bash' '*.bats' harness/githooks/pre-push | xargs -0 shellcheck
+        run: git ls-files -z '*.sh' '*.bash' '*.bats' harness/githooks/pre-commit harness/githooks/pre-push | xargs -0 shellcheck
 
       # bats passes when it finds no tests, so the files are listed and counted.
       - name: bats

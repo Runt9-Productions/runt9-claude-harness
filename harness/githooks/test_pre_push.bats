@@ -279,3 +279,88 @@ leak="write to someone@acme-corp"".com"
         on && /end-of-line$/ { print line; exit }' "$stub_dir/bundle/commits.patch")
     [ "$whole" = "+$(cat "$repo/long.txt")" ]
 }
+
+bot_email='1+example-bot[bot]@users.noreply.example.com'
+
+bot_commit() {
+    git -C "$repo" add -A
+    git -C "$repo" -c user.name=example-bot -c user.email="$bot_email" commit -qm "$1"
+}
+
+# Names a bot in the repo's config and starts claude/bot from main with one commit of the bot's.
+use_bot() {
+    git -C "$repo" config claude.botEmail "$bot_email"
+    git -C "$repo" switch -q -c claude/bot main
+    echo "a bot line" > "$repo/bot.txt"
+    bot_commit bot
+}
+
+# The stdin line for pushing HEAD to <remote ref>, which is at <remote sha> on the remote.
+update_of() {
+    echo "refs/heads/claude/bot $(git -C "$repo" rev-parse HEAD) $1 ${2:-$zero}"
+}
+
+@test "a commit not by the bot, from a session: refused before the leak gate" {
+    git -C "$repo" config claude.botEmail "$bot_email"
+    CLAUDE_CODE_SESSION_ID=synthetic-session push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"is authored by <test@example.com>, not by the bot"* ]]
+}
+
+@test "a ref outside the bot's branch prefix, from a session: refused before the leak gate" {
+    use_bot
+    CLAUDE_CODE_SESSION_ID=synthetic-session push normal "$remote" "$(update_of refs/heads/main)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"pushes and deletes only branches under claude/, not refs/heads/main"* ]]
+}
+
+@test "the bot's branch after merging the owner's new commits on main: allowed" {
+    use_bot
+    git -C "$repo" push -q "$remote" claude/bot
+    pushed=$(git -C "$repo" rev-parse HEAD)
+    git -C "$repo" switch -q main
+    echo "an owner line" > "$repo/owner.txt"
+    commit owner
+    git -C "$repo" push -q "$remote" main
+    git -C "$repo" fetch -q "$remote" '+refs/heads/*:refs/remotes/bot/*'
+    git -C "$repo" switch -q claude/bot
+    git -C "$repo" -c user.name=example-bot -c user.email="$bot_email" merge -q --no-edit main
+    CLAUDE_CODE_SESSION_ID=synthetic-session push normal "$remote" "$(update_of refs/heads/claude/bot "$pushed")"
+    [ "$status" -eq 0 ]
+    [ "$calls" -eq 1 ]
+}
+
+@test "outside a session: the owner's push is not checked for authorship" {
+    git -C "$repo" config claude.botEmail "$bot_email"
+    unset CLAUDE_CODE_SESSION_ID
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 0 ]
+    [ "$calls" -eq 1 ]
+}
+
+@test "a commit the bot authored but did not commit, from a session: refused, naming the committer" {
+    use_bot
+    echo "a cherry-picked line" > "$repo/picked.txt"
+    git -C "$repo" add -A
+    GIT_COMMITTER_EMAIL=test@example.com git -C "$repo" -c user.name=example-bot -c user.email="$bot_email" \
+        commit -qm picked
+    CLAUDE_CODE_SESSION_ID=synthetic-session push normal "$remote" "$(update_of refs/heads/claude/bot)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"is committed by <test@example.com>, not by the bot"* ]]
+    [[ $output != *"is authored by"* ]]
+}
+
+@test "deletions from a session: allowed under the bot's branch prefix, refused outside it" {
+    git -C "$repo" config claude.botEmail "$bot_email"
+    main=$(git -C "$repo" rev-parse main)
+    CLAUDE_CODE_SESSION_ID=synthetic-session push fail "$remote" "(delete) $zero refs/heads/claude/change $main"
+    [ "$status" -eq 0 ]
+    [ "$calls" -eq 0 ]
+    CLAUDE_CODE_SESSION_ID=synthetic-session push fail "$remote" "(delete) $zero refs/heads/main $main"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"pushes and deletes only branches under claude/, not refs/heads/main"* ]]
+}

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Refuses a commit made from a Claude Code session unless both its author and committer are the bot named by git config
+# claude.botEmail and claude.botName. Inert where claude.botEmail is unset, and outside a session: CLAUDE_CODE_SESSION_ID
+# is the only sign that the agent, not its owner, is committing. `git commit --no-verify` skips it. Any error refuses.
+set -Eeuo pipefail
+trap 'echo "pre-commit: failed at line $LINENO, commit refused" >&2; exit 1' ERR
+
+bot_email=$(git config --get claude.botEmail || true)
+if [[ -z $bot_email || -z ${CLAUDE_CODE_SESSION_ID:-} ]]; then
+    exit 0
+fi
+bot_name=$(git config --get claude.botName || true)
+if [[ -z $bot_name ]]; then
+    echo "pre-commit: claude.botEmail is set but claude.botName is not; set both or neither. Commit refused" >&2
+    exit 1
+fi
+
+# git var gives the identity this commit will carry. user.email from config would miss GIT_AUTHOR_EMAIL and
+# GIT_COMMITTER_EMAIL.
+ident_email() {
+    git var "$1" | sed -n 's/.*<\(.*\)>.*/\1/p'
+}
+author=$(ident_email GIT_AUTHOR_IDENT)
+committer=$(ident_email GIT_COMMITTER_IDENT)
+if [[ $author == "$bot_email" && $committer == "$bot_email" ]]; then
+    exit 0
+fi
+
+cat >&2 << EOF
+pre-commit: this commit would be authored by <$author> and committed by <$committer>, not by the bot <$bot_email>.
+Commit refused. Once pushed, a wrong identity is fixed only by rewriting the branch. Commit as the bot:
+    git -c user.name='$bot_name' -c user.email='$bot_email' commit ...
+EOF
+exit 1
