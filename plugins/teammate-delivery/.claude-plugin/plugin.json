@@ -1,0 +1,8 @@
+{
+  "name": "teammate-delivery",
+  "version": "0.1.0",
+  "description": "Delivers a message to a busy teammate at its next model request, instead of when its whole turn ends",
+  "author": {
+    "name": "Runt9 Productions"
+  }
+}

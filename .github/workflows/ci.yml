@@ -119,10 +119,77 @@ jobs:
       - name: Scan the PR's commits
         run: bash .github/scripts/leak-scan-pr.sh
 
+  plugins:
+    needs: zizmor
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install the pinned tools
+        run: npm ci
+
+      # Newest release on every run, outside the lockfile: a mod must pass against the version its users auto-update
+      # to. With scripts off the package's `claude` binary is a stub that exits 1; cli-wrapper.cjs is the package's
+      # launcher for that case.
+      - name: Install Claude Code
+        run: | # zizmor: ignore[adhoc-packages] latest on purpose, see above
+          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec node "%s" "$@"\n' \
+            "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs" > "$RUNNER_TEMP/bin/claude"
+          chmod +x "$RUNNER_TEMP/bin/claude"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/claude" --version
+
+      - name: Every plugin validates strictly
+        run: |
+          shopt -s nullglob
+          status=0
+          for dir in plugins/*/; do
+            claude plugin validate --strict "$dir" || status=1
+          done
+          exit "$status"
+
+      # Loading a mod writes its types and tsconfig.json; with no credentials the run then fails, which is expected.
+      # That `-p` writes them is undocumented, and type-aware oxlint passes silently without them, so their absence
+      # fails the step.
+      - name: Every mod type-checks, lints and passes its tests
+        run: |
+          shopt -s nullglob
+          status=0
+          for hooks in plugins/*/hooks/hooks.json; do
+            jq -e '.modules' "$hooks" > /dev/null || continue
+            dir="${hooks%/hooks/hooks.json}"
+            echo "::group::$dir"
+            CLAUDE_CODE_PLUGIN_DIR_WATCH=1 timeout 120 claude -p --plugin-dir "$dir" x > /dev/null 2>&1 || true
+            if [[ -f $dir/tsconfig.json && -d $dir/.claude-plugin/types ]]; then
+              npx --no-install tsc -p "$dir" || status=1
+              npx --no-install oxlint -c .oxlintrc.json "$dir" || status=1
+            else
+              echo "::error::$dir: Claude Code wrote no types, so the mod cannot be type-checked."
+              status=1
+            fi
+            claude plugin test "$dir" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
+
   # Runs even when a job it needs failed: with a plain `needs` this job would be skipped, and GitHub passes a
   # skipped required check.
   gate:
-    needs: [zizmor, guard, scripts, leak-scan]
+    needs: [zizmor, guard, scripts, leak-scan, plugins]
     if: always()
     runs-on: ubuntu-24.04
 

@@ -45,6 +45,8 @@ history keeps whatever was pushed. A plugin change reaches users only when its v
 - **A check that passes on nothing.** bats passes with no test files, so the `bats` step counts them first; the
   leak scan's `self_check` plants an address in every channel it reads and stops if one goes unreported. Removing
   either lets a broken run pass.
+- **Type-aware oxlint without types exits 0.** The mod check fails only because a step tests that Claude Code wrote
+  `tsconfig.json` and `.claude-plugin/types/`. Removing or reordering that step makes lint pass on nothing.
 - **A plugin changed without its version rising reaches nobody.** CI checks one plugin at a time; plugins with a
   contract between them (section 4) must rise together, which CI does not check.
 - **Marketplace entries carry only `name`, `source` and `description`.** Anything else ships behaviour no plugin
@@ -58,7 +60,11 @@ history keeps whatever was pushed. A plugin change reaches users only when its v
 
 ## 4. Contracts between plugins
 
-None yet. A contract is added with the second plugin that depends on it.
+| Contract | Sides |
+|---|---|
+| teammate-delivery redirects only sends whose origin is the model; a plugin's `session.send` keeps its own framing and timing | `plugins/teammate-delivery/hooks/register.ts` and any plugin that sends to a teammate |
+| An idle teammate receives a delivered message as from `team-lead`, the engine's name for the main session | `plugins/teammate-delivery/hooks/register.ts` `LEAD_NAME` and any tool text that tells a teammate who a message is from |
+| teammate-delivery answers a model's send to a running teammate `{ isDelivered: true }` without `next`, so a `session.send` hook beneath it never sees that send | `plugins/teammate-delivery/hooks/register.ts` and any plugin with a `session.send` hook |
 
 ## 5. Living docs that go stale
 
