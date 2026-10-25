@@ -49,12 +49,13 @@ jobs:
           chmod +x "$RUNNER_TEMP/bin/claude"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB refuses to start without bubblewrap, and Ubuntu 24.04's AppArmor stops bwrap
-      # creating the user namespace it runs in. The last line fails this step, not the review, if bwrap still cannot.
-      - name: Install bubblewrap
+      # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB runs Bash in Claude Code's sandbox, which needs bubblewrap, and socat for its
+      # network bridge; without socat no Bash command starts. Ubuntu 24.04's AppArmor stops bwrap creating the user
+      # namespace it runs in. The last line fails this step, not the review, if bwrap still cannot.
+      - name: Install the sandbox's tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap
+          sudo apt-get install -y -q bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --ro-bind / / true
 
@@ -71,7 +72,9 @@ jobs:
           claude -p "/code-review $PR auto" --settings '{"disableAllHooks": true}' --strict-mcp-config \
             --permission-mode dontAsk --allowedTools Bash Read Write Agent Skill --disallowedTools WebFetch WebSearch \
             --no-session-persistence --output-format json < /dev/null > "$RUNNER_TEMP/review.json"
-          jq '{is_error, num_turns, total_cost_usd, duration_ms}' "$RUNNER_TEMP/review.json"
+          jq '{is_error, num_turns, total_cost_usd, duration_ms, permission_denials}' "$RUNNER_TEMP/review.json"
+          # The run's closing text, which says why when it wrote no report.
+          jq -r '.result // empty' "$RUNNER_TEMP/review.json" | head -c 4000
 
       - name: Read the report
         id: result
