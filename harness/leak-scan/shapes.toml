@@ -1,0 +1,118 @@
+# betterleaks rules for text shaped like private information: who someone is, where they work, which machine.
+# Paranoid on purpose; a false positive costs an allowlist entry, a miss is public forever. Names, customers and
+# private project vocabulary have no shape and are left to the leak review agent.
+#
+# Each filter returns true for a match that is public on purpose. Grow these lists rather than loosening a regex.
+
+[[rules]]
+id = "email-address"
+description = "An email address"
+keywords = ["@"]
+regex = '''[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}\b'''
+filter = '''
+filter.matchesAny(finding["match"], [
+    `(?i)@users\.noreply\.github\.com$`,
+    `(?i)^noreply@github\.com$`,
+    `(?i)^noreply@anthropic\.com$`,
+    `(?i)@example\.(?:com|org|net)$`,
+    `(?i)\.(?:test|example|invalid|localhost)$`,
+    `(?i)^git@github\.com$`,
+    `^(?:this|super|return|break|continue)@`
+])
+'''
+
+[[rules]]
+id = "home-directory"
+description = "A path inside a named user's home directory"
+keywords = ["/home/", "/users/", "\\users\\"]
+regex = '''(?i)(?:/home/|/Users/|[A-Z]:\\Users\\)[A-Za-z0-9._-]+'''
+filter = '''
+filter.matchesAny(finding["match"], [`(?i)(?:/home/|/Users/|\\Users\\)(?:runner|user|username|you|me|example)$`])
+'''
+
+[[rules]]
+id = "ipv4-address"
+description = "An IPv4 address"
+regex = '''\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b'''
+filter = '''
+filter.matchesAny(finding["match"], [
+    `^127\.`, `^0\.0\.0\.0$`, `^255\.255\.255\.255$`,
+    `^192\.0\.2\.`, `^198\.51\.100\.`, `^203\.0\.113\.`
+])
+'''
+
+[[rules]]
+id = "ipv6-address"
+description = "An IPv6 address"
+keywords = [":"]
+# Neither side may touch a letter, digit, underscore or colon, so `std::cout` and `Foo::Bar` are not addresses.
+regex = '''(?i)(?:^|[^0-9a-z_:])((?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:|(?:[0-9a-f]{1,4}:){1,6}:[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,5}(?::[0-9a-f]{1,4}){1,2}|(?:[0-9a-f]{1,4}:){1,4}(?::[0-9a-f]{1,4}){1,3}|(?:[0-9a-f]{1,4}:){1,3}(?::[0-9a-f]{1,4}){1,4}|(?:[0-9a-f]{1,4}:){1,2}(?::[0-9a-f]{1,4}){1,5}|[0-9a-f]{1,4}:(?::[0-9a-f]{1,4}){1,6}|:(?:(?::[0-9a-f]{1,4}){1,7}|:))(?:$|[^0-9a-z_:])'''
+secretGroup = 1
+# `::` and `::1` in short and full form (also `[::2]`, a slice), and the documentation prefix.
+filter = '''
+filter.matchesAny(finding["secret"], [`^::[0-9a-f]{0,4}$`, `^(?:0{1,4}:){7}0{0,3}[01]$`, `(?i)^2001:0{0,3}db8:`])
+'''
+
+[[rules]]
+id = "mac-address"
+description = "A hardware address"
+regex = '''(?i)\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b'''
+
+[[rules]]
+id = "internal-hostname"
+description = "A host name under a suffix used only inside private networks"
+keywords = [".local", ".lan", ".corp", ".internal", ".intranet", ".home.arpa", ".localdomain", ".private", ".intra"]
+# The suffix must end the name: `settings.local.json` and `files.internal.foo` are file and package names, and
+# `threading.local()`, `self.private_key` and `x.internal[0]` are code. Anything else after it ends the name, a period
+# included when no name follows.
+regex = '''(?i)\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:local|lan|corp|internal|intranet|home\.arpa|localdomain|private|intra)(?:$|[^a-z0-9_.(\[-]|\.(?:$|[^a-z0-9_-]))'''
+
+[[rules]]
+id = "url-host"
+description = "A URL on a host not known to be public documentation or tooling"
+keywords = ["http://", "https://"]
+regex = '''(?i)https?://[^\s/"'<>()\[\]{}`]+'''
+filter = '''
+filter.matchesAny(finding["match"], [
+    `(?i)^https?://(?:[a-z0-9-]+\.)*(?:github\.com|githubusercontent\.com|github\.io|github\.blog|githubapp\.com)$`,
+    `(?i)^https?://(?:[a-z0-9-]+\.)*(?:anthropic\.com|claude\.ai|claude\.com)$`,
+    `(?i)^https?://(?:[a-z0-9-]+\.)*(?:npmjs\.com|npmjs\.org|nodejs\.org|pypi\.org|python\.org)$`,
+    `(?i)^https?://(?:[a-z0-9-]+\.)*(?:cdnjs\.cloudflare\.com|jsdelivr\.net|unpkg\.com|googleapis\.com|gstatic\.com)$`,
+    `(?i)^https?://(?:[a-z0-9-]+\.)*(?:zizmor\.sh|expr-lang\.org|json-schema\.org|schemastore\.org|semver\.org|spdx\.org)$`,
+    `(?i)^https?://(?:[a-z0-9-]+\.)*example\.(?:com|org|net)(?::\d+)?$`,
+    `(?i)^https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::.*)?$`
+])
+'''
+
+[[rules]]
+id = "ticket-key"
+description = "Something shaped like an issue tracker key (ABC-123)"
+regex = '''\b[A-Z][A-Z0-9]{1,9}-\d{1,6}\b'''
+# `Z0-9` is the tail of the character class `[A-Z0-9]`.
+filter = '''
+filter.matchesAny(finding["match"], [
+    `^(?:UTF|SHA|ISO|CVE|RFC|ES|TLS|SSL|HTTP|CVSS|GHSA|PEP|ECMA|IEEE|X|U|AES|RSA|MD|CRC|BASE|ANSI|IEC|EN|DIN|POSIX|GPL|LGPL|AGPL|LICENSE|BSD|CC|CC0|BY|MPL|EPL|APACHE|OFL)-`,
+    `^Z0-9$`
+])
+'''
+
+[[rules]]
+id = "uuid"
+description = "A UUID, which is how sessions, installations and records are named"
+regex = '''(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b'''
+filter = '''
+filter.matchesAny(finding["match"], [`^0{8}-0{4}-0{4}-0{4}-0{12}$`])
+'''
+
+[[rules]]
+id = "hex-identifier"
+description = "A long hexadecimal string copied from a live system (an id, a hash, a token)"
+regex = '''(?i)\b[0-9a-f]{16,}\b'''
+# A pinned action is the one place a full commit hash belongs in this repository.
+filter = '''
+filter.matchesAny(finding["match"], [`^[0-9]+$`]) ||
+(
+    finding["line"].contains("@" + finding["match"]) &&
+    filter.matchesAny(finding["line"], [`^\s*-?\s*uses:\s*[\w.-]+/[\w./-]+@[0-9a-f]{40}\b`])
+)
+'''
