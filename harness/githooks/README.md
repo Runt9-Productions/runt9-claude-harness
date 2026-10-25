@@ -46,9 +46,6 @@ repository, then set `git config core.hooksPath <dir>/githooks`. The hook keeps 
 `<dir>/state/`, so whatever keeps the agent from writing to the installed copy has to cover all of `<dir>`.
 `core.hooksPath` replaces `.git/hooks/`, so any other hook you rely on has to move into the same directory.
 
-The hook runs tools only from `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin` and `/bin`, so
-`claude`, `betterleaks`, `git` and `jq` have to be in one of them.
-
 A passing review is cached in `<dir>/state/passed/`, keyed by the hash of what the agent read and of every file in the
 installed copy. Pushing the same commits again costs nothing; updating the installed copy reviews them again.
 
