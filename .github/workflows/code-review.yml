@@ -1,0 +1,97 @@
+name: Code review
+
+# Adding the code-review-requested label to a same-repo PR runs one review, posted as a comment-type review. The label
+# is removed when the run ends, whatever its outcome, so adding it again runs another. No branch rule requires this
+# workflow: it comes before a human review and never blocks a merge.
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  # Fork PRs get no secrets under pull_request, so they are not reviewed. This job holds the Claude token and a
+  # read-only GitHub token; post-review holds the write token and no Claude token, so a prompt-injected reviewer has
+  # nothing that can write. The review runs with the PR's own .claude/, so a change to a reviewer is reviewed by the
+  # changed reviewer.
+  review:
+    if: >-
+      github.event.label.name == 'code-review-requested' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    environment: claude-review
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      report: ${{ steps.result.outputs.report }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Newest release, outside the lockfile. Never `npm ci` here: the PR controls package.json and the lockfile, and
+      # this job holds the Claude token.
+      - name: Install Claude Code
+        run: | # zizmor: ignore[adhoc-packages] latest on purpose: the version auto-updating users run
+          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec node "%s" "$@"\n' \
+            "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs" > "$RUNNER_TEMP/bin/claude"
+          chmod +x "$RUNNER_TEMP/bin/claude"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          # dontAsk refuses every write inside .claude/, so the report goes outside the checkout.
+          CODE_REVIEW_OUTPUT: ${{ runner.temp }}/code-review
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          claude -p "/code-review $PR auto" --settings '{"disableAllHooks": true}' --strict-mcp-config \
+            --permission-mode dontAsk --allowedTools Bash Read Write Agent Skill --disallowedTools WebFetch WebSearch \
+            --no-session-persistence --output-format json < /dev/null > "$RUNNER_TEMP/review.json"
+          jq '{is_error, num_turns, total_cost_usd, duration_ms}' "$RUNNER_TEMP/review.json"
+
+      - name: Read the report
+        id: result
+        run: bash .github/scripts/review-read-report.sh "$RUNNER_TEMP/code-review"
+
+  # Runs when the review failed or was cancelled too, so the label always comes off.
+  post-review:
+    needs: review
+    if: always() && needs.review.result != 'skipped'
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+
+    steps:
+      - name: Post the review
+        if: needs.review.result == 'success'
+        env:
+          REPORT: ${{ needs.review.outputs.report }}
+        run: gh api "repos/$REPO/pulls/$PR/reviews" -f event=COMMENT -f body="$REPORT" > /dev/null
+
+      - name: Remove the label
+        if: always()
+        run: gh api -X DELETE "repos/$REPO/issues/$PR/labels/code-review-requested" > /dev/null

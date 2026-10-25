@@ -54,74 +54,75 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
 
-      # Zero-width, bidirectional and variation-selector characters, the soft hyphen, the byte-order mark and
-      # Unicode tag characters render as nothing, so text an agent reads can hide in a file that reviews clean. Any
-      # changed file can reach an agent (skills, hook commands, settings fragments, scripts), so all are scanned.
-      # -a because one NUL byte makes grep skip a file as binary while GitHub still shows it as text; `--` because
-      # a changed file can be named like an option. grep exits 2 on an error, which must fail the step.
       - name: No invisible characters
-        run: |
-          list="$RUNNER_TEMP/changed"
-          git diff -z --name-only --diff-filter=d HEAD^1 HEAD > "$list"
-          mapfile -d '' files < "$list"
-          if (( ${#files[@]} == 0 )); then
-            echo "No file added or changed."
-            exit 0
-          fi
+        run: bash .github/scripts/guard-invisible-characters.sh
 
-          status=0
-          LC_ALL=C.UTF-8 grep -nHaP \
-            '[\x{00AD}\x{061C}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{2069}\x{FE00}-\x{FE0F}\x{FEFF}\x{E0000}-\x{E007F}\x{E0100}-\x{E01EF}]' \
-            -- "${files[@]}" || status=$?
-          case $status in
-            0) echo "::error::The lines above hold an invisible character."; exit 1 ;;
-            1) echo "${#files[@]} changed file(s) checked, none holds an invisible character." ;;
-            *) echo "::error::grep failed (exit $status), so the files were not checked."; exit 1 ;;
-          esac
-
-      # A marketplace entry can carry components or `strict: false` and so ship behaviour that no plugin version
-      # covers. Entries hold only a pointer to plugins/<name>, which the version check below does cover.
       - name: Marketplace entries only point at plugins/
+        run: bash .github/scripts/guard-marketplace-entries.sh
+
+      - name: Every changed plugin raises its version
+        run: bash .github/scripts/guard-plugin-versions.sh
+
+  # shellcheck and the bats tests over every tracked shell script: these workflow scripts and the harness.
+  scripts:
+    needs: zizmor
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install bats, shellcheck and betterleaks
         run: |
-          bad="$(jq -c '.plugins[] | select((keys - ["name", "source", "description"]) != []
-            or .source != "./plugins/\(.name)")' .claude-plugin/marketplace.json)"
-          if [[ -n $bad ]]; then
-            echo "::error file=.claude-plugin/marketplace.json::Entries may hold only name, source and description," \
-                 "with source ./plugins/<name>:"
-            echo "$bad"
+          sudo apt-get update -q
+          sudo apt-get install -y -q bats shellcheck
+          bash .github/scripts/install-betterleaks.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: shellcheck
+        run: git ls-files -z '*.sh' '*.bash' '*.bats' harness/githooks/pre-push | xargs -0 shellcheck
+
+      # bats passes when it finds no tests, so the files are listed and counted.
+      - name: bats
+        run: |
+          mapfile -d '' tests < <(git ls-files -z '*.bats')
+          if (( ${#tests[@]} == 0 )); then
+            echo "::error::No .bats files found."
             exit 1
           fi
+          bats "${tests[@]}"
 
-      # Installed users get a plugin's change only when its version rises, so a change merged without a bump
-      # reaches nobody and nothing reports it. Tests and a plugin's top-level README do not ship behaviour.
-      - name: Every changed plugin raises its version
+  leak-scan:
+    needs: zizmor
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install betterleaks
         run: |
-          changed="$(git diff --name-only HEAD^1 HEAD -- ':(glob)plugins/**' \
-            ':(glob,exclude)plugins/*/README.md' ':(glob,exclude)**/*.test.ts' ':(glob,exclude)**/test_*.py')"
+          bash .github/scripts/install-betterleaks.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-          status=0
-          for plugin in $(cut -d/ -f2 <<< "$changed" | sort -u); do
-            manifest="plugins/$plugin/.claude-plugin/plugin.json"
-            [[ -f $manifest ]] || continue
-            head="$(jq -r .version "$manifest")"
-            if ! base="$(git show "HEAD^1:$manifest" 2>/dev/null | jq -r .version)"; then
-              echo "$plugin: new at $head"
-              continue
-            fi
-            newest="$(printf '%s\n' "$base" "$head" | sort -V | tail -n 1)"
-            if [[ $head == "$base" || $newest != "$head" ]]; then
-              echo "::error file=$manifest::$plugin changed, so its version must rise above $base (it is $head)."
-              status=1
-            else
-              echo "$plugin: $base -> $head"
-            fi
-          done
-          exit "$status"
+      - name: Scan the PR's commits
+        run: bash .github/scripts/leak-scan-pr.sh
 
   # Runs even when a job it needs failed: with a plain `needs` this job would be skipped, and GitHub passes a
   # skipped required check.
   gate:
-    needs: [zizmor, guard]
+    needs: [zizmor, guard, scripts, leak-scan]
     if: always()
     runs-on: ubuntu-24.04
 

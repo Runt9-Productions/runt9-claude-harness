@@ -1,0 +1,21 @@
+# This repository's allowlist for the leak scan's shape rules. The scan reads it from the base branch, never from
+# the change being checked, so an entry takes effect only after review. Only a top-level `filter` belongs here:
+# true skips a finding.
+#
+# The owner's address is allowed only as a commit author or committer, which the scan reads from <sha>.identity files.
+# It is written as a regex so this file does not match it. The betterleaks checksum is allowed only on its pinned
+# line; finding["line"] keeps its newline, hence `\s*$`.
+
+filter = '''
+filter.matchesAny(finding["match"], [`^(?:ABC|PROJ)-123$`]) ||
+(
+    finding["rule_id"] == "hex-identifier" &&
+    attributes["path"] == ".github/scripts/install-betterleaks.sh" &&
+    filter.matchesAny(finding["line"], [`^expected=[0-9a-f]{64}\s*$`])
+) ||
+(
+    finding["rule_id"] == "email-address" &&
+    filter.matchesAny(finding["match"], [`^runt9@runt9productions\.com$`]) &&
+    attributes["path"] matches `^/.*/[0-9a-f]{40,64}\.identity$`
+)
+'''
