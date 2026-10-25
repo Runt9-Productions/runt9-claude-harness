@@ -4,8 +4,8 @@
 set -Eeuo pipefail
 
 if ! git cat-file -e HEAD^1:harness/leak-scan/scan.sh 2> /dev/null; then
-    echo "::warning::The base branch has no leak scan yet, so this PR is not scanned."
-    exit 0
+    echo "::error::The base branch has no leak scan, so this PR cannot be scanned."
+    exit 1
 fi
 scanner=$(mktemp -d)
 trap 'rm -rf "$scanner"' EXIT

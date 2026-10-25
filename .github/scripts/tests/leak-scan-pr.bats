@@ -23,12 +23,12 @@ EOF
     git_t -C "$FIXTURE" merge -q main
 }
 
-@test "a base branch without the scanner passes with a warning" {
+@test "a base branch without the scanner fails" {
     merge_pr
     cd "$FIXTURE"
     run bash "$SCRIPTS/leak-scan-pr.sh"
-    [ "$status" -eq 0 ]
-    [[ $output == *"::warning::"* ]]
+    [ "$status" -eq 1 ]
+    [[ $output == *"::error::The base branch has no leak scan"* ]]
 }
 
 @test "the base branch's scanner runs over the PR's commits" {

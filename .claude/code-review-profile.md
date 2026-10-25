@@ -135,11 +135,24 @@ None yet. A contract is added with the second plugin that depends on it.
 
 Write the full report to `<review-dir>/review.md` and return it to the caller; deliver it nowhere else. Not
 `report.md`: Claude Code refuses a subagent's write to any `REPORT*`, `SUMMARY*`, `FINDINGS*` or `ANALYSIS*` `.md`
-file, and this skill runs forked. In CI, the
-`code-review-requested` label on a pull request runs `/code-review <n> auto`, and a separate job posts that file as a
-comment-type review and removes the label, so the reviewing agent never holds a token that can write to GitHub. A bot
-that pushes adds the label to request a review, then addresses the findings; the owner adds it for another round.
-The review precedes a human review and never blocks a merge.
+file, and this skill runs forked.
+
+When the target is a pull request number, also write `<review-dir>/review-payload.json`, the review as GitHub posts
+it: `{"commit_id": "<the PR head the diff was fetched at>", "body": "<markdown>", "comments": [{"path":
+"<repo-relative path>", "line": 42, "side": "RIGHT", "body": "<one finding>"}]}`.
+
+- **Inline comments only on lines inside the diff:** an added or context line of a hunk, numbered from the `+` side of
+  its hunk header, not the file on disk. GitHub rejects the whole review if one comment misses, and CI then posts
+  `review.md` alone as the body. A finding on a line the PR did not touch goes in the body.
+- **The body is the report**, with every severity header. A finding posted inline appears there as a one-line
+  pointer, so the counts per severity still read in one place. Each comment carries one finding: severity, claim,
+  consequence, evidence and the reviewer that found it.
+
+In CI, the `code-review-requested` label on a pull request runs `/code-review <n> auto`, and a separate job posts
+the payload, or `review.md` without one, as a comment-type review on the PR's head commit and removes the label, so
+the reviewing agent never holds a token that can write to GitHub. A bot that pushes adds the label to request a
+review, then addresses the findings; the owner adds it for another round. The review precedes a human review and
+never blocks a merge.
 
 ## 12. Standing reviewer instructions
 
