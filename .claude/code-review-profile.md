@@ -64,7 +64,7 @@ history keeps whatever was pushed. A plugin change reaches users only when its v
 |---|---|
 | teammate-delivery redirects only sends whose origin is the model; a plugin's `session.send` keeps its own framing and timing | `plugins/teammate-delivery/hooks/register.ts` and any plugin that sends to a teammate |
 | An idle teammate receives a delivered message as from `team-lead`, the engine's name for the main session | `plugins/teammate-delivery/hooks/register.ts` `LEAD_NAME` and any tool text that tells a teammate who a message is from |
-| teammate-delivery answers a model's send to a running teammate `{ isDelivered: true }` without `next`, so a `session.send` hook beneath it never sees that send | `plugins/teammate-delivery/hooks/register.ts` and any plugin with a `session.send` hook |
+| teammate-delivery answers a model's send to a running teammate `{ isDelivered: true }` without `next`, so a `session.send` hook beneath it never sees that send, no `session.receive` hook sees it arrive, and the receiver has no harness-verified `origin.teammate`, only the sender's name in the row's header | `plugins/teammate-delivery/hooks/register.ts` and any plugin with a `session.send` or `session.receive` hook |
 
 ## 5. Living docs that go stale
 

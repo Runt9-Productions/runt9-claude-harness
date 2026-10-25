@@ -32,7 +32,8 @@ with synthetic content only, live in `plugins/<name>/local.example/`, or beside 
 Start a separate session with `claude --plugin-dir plugins/<name>`. It replaces the installed copy of that plugin
 for that session only.
 
-To check a mod, run `npm ci` once at the root, then load the mod as above, which writes the types `tsc` needs into
+To check a mod, run `npm ci` once at the root with npm 11.10 or newer (older npm ignores the `min-release-age`
+cooldown in `.npmrc`), then load the mod as above, which writes the types `tsc` needs into
 the plugin. Then run `npx tsc -p plugins/<name>`, `npx oxlint -c .oxlintrc.json plugins/<name>` and
 `claude plugin test plugins/<name>`.
 
