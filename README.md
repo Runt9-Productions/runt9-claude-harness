@@ -12,3 +12,4 @@ Updates are manual: run `claude plugin update <name>@runt9` when you want one.
 MIT licensed.
 
 Probe PR: proves CI runs on a docs-only change. Will be closed unmerged.
+Hidden​character probe.
