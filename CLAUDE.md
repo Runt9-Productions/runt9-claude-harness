@@ -7,8 +7,9 @@ nothing from an employer, a private project or a specific machine goes in, in co
 
 - `plugins/<name>/`: one self-contained plugin each, listed in `.claude-plugin/marketplace.json`.
 - `harness/`: what a plugin cannot carry (status line, settings fragments, git hooks, `CLAUDE.md` template and
-  fragments, style-guide skills). So far it holds `githooks/` (the pre-push review) and `leak-scan/` (the scan
-  that hook and CI run, with its allowlist in `.leak-scan.toml`). A `bootstrap.py` at the root will copy the parts a
+  fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
+  `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`) and `leak-scan/` (the scan that gate and CI
+  run, with its allowlist in `.leak-scan.toml`). A `bootstrap.py` at the root will copy the parts a
   user picks into `~/.claude`; it does not exist yet.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
