@@ -62,10 +62,17 @@ async function addToRunningLoop($: EngineInterface, e: SessionSendInput): Promis
 
   // Another plugin's session.append hook may have rewritten the row, and the conversation holds what was stored.
   const row = textOf(appended.message.content)
-  // A turn that ended while the row was stored has already delivered its rows, so this one goes now.
-  const turn = turns.get(teammate.id) ?? 'answer'
+  // A turn that ended while the row was stored has already delivered its rows, so this one goes now. The entry is
+  // set: midTurnTeammate found it open, and none is ever deleted.
+  const turn = turns.get(teammate.id)!
   if (turn === 'open') unread.set(teammate.id, [...(unread.get(teammate.id) ?? []), row])
-  else await deliverUnread($, turn, teammate.id, nameOf(agents, teammate.id), [row])
+  else {
+    const name = teammate.name ?? teammate.id
+    // The row is stored, so a failure here must not reach the caller, which would send the message by mailbox too.
+    await deliverUnread($, turn, teammate.id, name, [row]).catch((error: unknown) => {
+      $.ui.toast(`teammate-delivery: ${name} may not have read a message (${String(error)})`)
+    })
+  }
   return true
 }
 

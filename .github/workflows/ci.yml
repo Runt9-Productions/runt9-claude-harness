@@ -159,6 +159,12 @@ jobs:
           status=0
           for dir in plugins/*/; do
             claude plugin validate --strict "$dir" || status=1
+            # The mod step finds a mod only at hooks/hooks.json, so one that `hooks` in plugin.json points elsewhere
+            # would pass unchecked.
+            if jq -e 'has("hooks")' "$dir.claude-plugin/plugin.json" > /dev/null; then
+              echo "::error::${dir}.claude-plugin/plugin.json sets hooks; keep them in hooks/hooks.json so the mod is checked."
+              status=1
+            fi
           done
           exit "$status"
 
@@ -169,14 +175,6 @@ jobs:
         run: |
           shopt -s nullglob
           status=0
-          # This step finds a mod only at hooks/hooks.json, so one that `hooks` in plugin.json points elsewhere would
-          # pass unchecked.
-          for manifest in plugins/*/.claude-plugin/plugin.json; do
-            if jq -e 'has("hooks")' "$manifest" > /dev/null; then
-              echo "::error::$manifest sets hooks; keep them in hooks/hooks.json so the mod is checked."
-              status=1
-            fi
-          done
           for hooks in plugins/*/hooks/hooks.json; do
             jq -e '.modules' "$hooks" > /dev/null || continue
             dir="${hooks%/hooks/hooks.json}"
