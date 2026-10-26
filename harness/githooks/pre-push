@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Two checks in turn. The authorship check refuses, from a Claude Code session, a push of a commit the bot did not
-# both author and commit, and a push or deletion of a ref outside the bot's branch prefix. The leak gate then refuses
-# a push that would publish private information: the shape scan runs first, and the public-leak agent reviews
-# whatever the scan passes. Any error refuses the push.
+# Two checks in turn. The authorship check refuses, from a Claude Code session, a push of a commit the bot (git config
+# claude.botName and claude.botEmail) did not both author and commit, and a push or deletion of a ref outside the
+# bot's branch prefix. The leak gate then refuses a push that would publish private information: the shape scan runs
+# first, and the public-leak agent reviews whatever the scan passes. Any error refuses the push.
 #
 # They stop the mistakes of an agent pushing as a bot. They are no boundary against a process running as the same
 # user, which can skip any hook; review before merge is. Run an installed copy, never the checkout's: see README.md. On
@@ -21,7 +21,15 @@ mapfile -t updates
 # the agent, not its owner, is pushing.
 bot_email=$(git config --get claude.botEmail || true)
 if [[ -n $bot_email && -n ${CLAUDE_CODE_SESSION_ID:-} ]]; then
-    prefix=$(git config --get claude.branchPrefix || echo claude/)
+    bot_name=$(git config --get claude.botName || true)
+    if [[ -z $bot_name ]]; then
+        echo "pre-push: claude.botEmail is set but claude.botName is not; set both or neither. Push refused" >&2
+        exit 1
+    fi
+    bot="$bot_name <$bot_email>"
+    # git config prints an empty value with exit 0, which would make the prefix match every branch.
+    prefix=$(git config --get claude.branchPrefix || true)
+    prefix=${prefix:-claude/}
     misnamed=0
     misidentified=0
     for update in "${updates[@]}"; do
@@ -34,21 +42,23 @@ if [[ -n $bot_email && -n ${CLAUDE_CODE_SESSION_ID:-} ]]; then
         if [[ $local_sha =~ ^0+$ ]]; then
             continue
         fi
-        # Only what no remote-tracking ref has. A range from remote_sha alone would also hold every commit a merge
-        # brings in from another branch, such as the owner's commits on main. remote_sha is excluded as well for a
-        # remote pushed to by URL, which has no tracking refs.
+        # Only what no remote-tracking ref of any remote has. A range from remote_sha alone would also hold every
+        # commit a merge brings in from another branch, such as the owner's commits on main. remote_sha is excluded as
+        # well for a remote pushed to by URL, which has no tracking refs.
         exclude=(--not --remotes)
         if [[ ! $remote_sha =~ ^0+$ ]] && git cat-file -e "$remote_sha^{commit}" 2> /dev/null; then
             exclude+=("$remote_sha")
         fi
-        identities=$(git log --format='%H %ae %ce' "$local_sha" "${exclude[@]}")
-        while read -r sha author committer; do
-            if [[ -n $sha && $author != "$bot_email" ]]; then
-                echo "pre-push: $sha on $remote_ref is authored by <$author>, not by the bot <$bot_email>" >&2
+        identities=$(git log --format='%H%x09%an <%ae>%x09%cn <%ce>' "$local_sha" "${exclude[@]}")
+        while IFS=$'\t' read -r sha author committer; do
+            # An empty range still gives one empty line.
+            [[ -n $sha ]] || continue
+            if [[ $author != "$bot" ]]; then
+                echo "pre-push: $sha on $remote_ref is authored by $author, not by the bot $bot" >&2
                 misidentified=1
             fi
-            if [[ -n $sha && $committer != "$bot_email" ]]; then
-                echo "pre-push: $sha on $remote_ref is committed by <$committer>, not by the bot <$bot_email>" >&2
+            if [[ $committer != "$bot" ]]; then
+                echo "pre-push: $sha on $remote_ref is committed by $committer, not by the bot $bot" >&2
                 misidentified=1
             fi
         done <<< "$identities"
@@ -57,9 +67,10 @@ if [[ -n $bot_email && -n ${CLAUDE_CODE_SESSION_ID:-} ]]; then
         echo "pre-push: push to a branch under $prefix and open a pull request from it" >&2
     fi
     if (( misidentified )); then
-        echo "pre-push: re-author those commits as the bot before pushing, for example with" \
-            "git -c user.name=<bot name> -c user.email='$bot_email'" \
-            "rebase --exec 'git commit --amend --no-edit --reset-author' <base>" >&2
+        echo "pre-push: re-author those commits as the bot before pushing, with the remote's default branch as the" \
+            "base so no commit already on it is rewritten, for example" \
+            "git -c user.name='$bot_name' -c user.email='$bot_email'" \
+            "rebase --exec 'git commit --amend --no-edit --reset-author' $1/main" >&2
     fi
     if (( misnamed || misidentified )); then
         echo "pre-push: the authorship check refused this push" >&2

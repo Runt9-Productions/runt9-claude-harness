@@ -1,7 +1,7 @@
 # githooks
 
 Hooks for a repository an agent commits and pushes in under its own bot identity: an authorship check in
-`pre-commit` and `pre-push`, and a leak gate in `pre-push` after it. See Install below.
+`pre-commit`, `pre-merge-commit` and `pre-push`, and a leak gate in `pre-push` after it. See Install below.
 
 ## Authorship
 
@@ -11,22 +11,24 @@ Keeps the agent from committing or pushing as its owner. Set in the repository's
 |---|---|
 | `claude.botEmail` | The bot's commit email. Unset, the authorship check does nothing. |
 | `claude.botName` | The bot's commit name. Required once `claude.botEmail` is set. |
-| `claude.branchPrefix` | The only branches the bot may push. Default `claude/`. |
+| `claude.branchPrefix` | The only branches the bot may push. Default `claude/`, also when set empty. |
 
-Both hooks check only inside a Claude Code session, recognised by `CLAUDE_CODE_SESSION_ID`, so the owner's own
-commits and pushes pass untouched.
+The hooks check only where `CLAUDE_CODE_SESSION_ID` is set, which Claude Code sets for every command a session runs.
+A commit or push the owner runs in their own shell passes untouched; one run from inside a session, such as a
+`! git push`, is checked like the agent's.
 
-- `pre-commit` refuses a commit whose author or committer is not `claude.botEmail` and prints the
-  `git -c user.name=... -c user.email=... commit` to use instead.
-- `pre-push` refuses a push to or deletion of any ref outside `claude.branchPrefix`, and a push of any commit whose
-  author or committer is not `claude.botEmail` and that no remote-tracking ref already has. Each refusal names the
-  identity that is wrong. A rebase or cherry-pick can bring in such a commit
-  without the pre-commit check ever seeing it. Commits a merge brings in from a branch already on the remote, such as
-  main, are not checked again. It runs before the leak gate, so a push it refuses spends no review.
+- `pre-commit` refuses a commit whose author or committer is not `claude.botName <claude.botEmail>` and prints the
+  `git -c user.name=... -c user.email=... commit` to use instead, with `--amend --reset-author` for an amend.
+  `pre-merge-commit` runs the same check for the commit `git merge` makes.
+- `pre-push` refuses a push to or deletion of any ref outside `claude.branchPrefix`. It also refuses a push of any
+  commit whose author or committer is not the bot and that no remote-tracking ref already has, naming each such
+  commit with its wrong identity. A rebase, a cherry-pick or a fast-forward merge can bring in such a commit without
+  `pre-commit` ever seeing it. Any remote's tracking refs count, so commits a merge brings in from a branch already on
+  any remote, such as main, are not checked again. It runs before the leak gate, so a push it refuses spends no review.
 
-`--no-verify` skips both, and a remote-tracking ref left behind after its branch was deleted on the remote can take a
-commit out of the push check. Branch rules on the server are the control; these hooks turn a likely mistake into an
-immediate local error.
+`--no-verify` skips all three, and a remote-tracking ref left behind after its branch was deleted on the remote can
+take a commit out of the push check. Branch rules on the server are the control; these hooks turn a likely mistake
+into an immediate local error.
 
 ## pre-push: leak gate
 
@@ -39,8 +41,8 @@ refs reach that no branch or tag on the remote already has, the annotated tags i
    `claude -p`. Any finding not rated Normal refuses the push, and so does any open question, or a review that does
    not report reading every input to its last line. Normal findings are only printed.
 
-Neither check reads binary content. The review raises an open question for every binary file the push adds or
-changes, so such a push is always refused, and binaries go out only over the SSH override below.
+Neither the scan nor the review reads binary content. The review raises an open question for every binary file the
+push adds or changes, so such a push is always refused, and binaries go out only over the SSH override below.
 
 Any error refuses the push, including a missing tool, a failed `claude` run or a remote whose default branch cannot be
 fetched.
@@ -75,9 +77,9 @@ The hook runs tools only from `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/b
 A passing review is cached in `<dir>/state/passed/`, keyed by the hash of what the agent read and of every file in the
 installed copy. Pushing the same commits again costs nothing; updating the installed copy reviews them again.
 
-**Override:** `LEAK_SCAN_SKIP=1 git push` skips both checks, but only on an SSH remote. On any other remote it refuses
-the push instead. It is for the owner, for example to push a binary file. An agent that can reach an SSH key can use
-it too, so the agent's harness has to keep it on HTTPS.
+**Override:** `LEAK_SCAN_SKIP=1 git push` skips the scan and the review, but only on an SSH remote, and never the
+authorship check. On any other remote it refuses the push instead. It is for the owner, for example to push a binary
+file. An agent that can reach an SSH key can use it too, so the agent's harness has to keep it on HTTPS.
 
 Needs whatever `leak-scan` needs, plus `claude`, logged in. A review costs about $0.10 to $0.50, depending on the size
 of the diff.

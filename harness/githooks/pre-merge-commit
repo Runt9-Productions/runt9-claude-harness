@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# `git merge` runs this hook instead of pre-commit, so a merge commit gets the same authorship check. A refused merge
+# stays in progress, and the `git commit` pre-commit suggests completes it.
+exec "$(dirname "${BASH_SOURCE[0]}")/pre-commit"

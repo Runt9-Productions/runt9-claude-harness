@@ -47,10 +47,41 @@ as_owner() {
     [[ $output == *"git -c user.name='$bot_name' -c user.email='$bot_email' commit"* ]]
 }
 
+@test "the agent's commit with the bot's email but not its name: refused" {
+    as_agent git -C "$repo" -c user.email="$bot_email" commit -qm change
+    [ "$status" -eq 1 ]
+    [[ $output == *"authored by owner <$bot_email>"* ]]
+}
+
 @test "the agent's commit with the bot identity given to git -c: allowed, and recorded as the bot" {
     as_agent git -C "$repo" -c user.name="$bot_name" -c user.email="$bot_email" commit -qm change
     [ "$status" -eq 0 ]
-    [ "$(git -C "$repo" log -1 --format='%ae %ce')" = "$bot_email $bot_email" ]
+    [ "$(git -C "$repo" log -1 --format='%an <%ae> %cn <%ce>')" = "$bot_name <$bot_email> $bot_name <$bot_email>" ]
+}
+
+@test "the agent amending the owner's commit as the bot: refused, and allowed with the printed --reset-author" {
+    as_owner git -C "$repo" commit -qm change
+    as_agent git -C "$repo" -c user.name="$bot_name" -c user.email="$bot_email" commit -q --amend --no-edit
+    [ "$status" -eq 1 ]
+    [[ $output == *"commit --amend --reset-author"* ]]
+    as_agent git -C "$repo" -c user.name="$bot_name" -c user.email="$bot_email" commit -q --amend --reset-author --no-edit
+    [ "$status" -eq 0 ]
+}
+
+@test "the agent's merge commit as the owner: refused by pre-merge-commit, and completed by the printed commit" {
+    as_owner git -C "$repo" commit -qm base
+    git -C "$repo" switch -q -c side
+    echo b > "$repo/b.txt"
+    git -C "$repo" add b.txt
+    as_owner git -C "$repo" commit -qm side
+    git -C "$repo" switch -q -
+    as_agent git -C "$repo" merge --no-ff --no-edit side
+    [ "$status" -eq 1 ]
+    [[ $output == *"not by the bot"* ]]
+    as_agent git -C "$repo" -c user.name="$bot_name" -c user.email="$bot_email" commit -q --no-edit
+    [ "$status" -eq 0 ]
+    [ "$(git -C "$repo" rev-parse HEAD^2)" = "$(git -C "$repo" rev-parse side)" ]
+    [ "$(git -C "$repo" log -1 --format=%ae)" = "$bot_email" ]
 }
 
 @test "claude.botEmail without claude.botName: refused" {
