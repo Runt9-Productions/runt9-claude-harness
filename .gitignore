@@ -2,6 +2,7 @@
 .claude/settings.local.json
 .claude/worktrees/
 node_modules/
+__pycache__/
 # Claude Code writes a mod's types and tsconfig when it loads the mod; CI regenerates them.
 plugins/*/tsconfig.json
 plugins/*/.claude-plugin/types/

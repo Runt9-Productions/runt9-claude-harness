@@ -97,6 +97,39 @@ jobs:
           fi
           bats "${tests[@]}"
 
+  # ruff and pytest over every Python file, at the versions requirements-dev.txt pins.
+  python:
+    needs: zizmor
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Wheels only, so installing runs no package's build code; pip check fails if the pins stop fitting together.
+      - name: Install the pinned tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check --no-deps --only-binary :all: \
+            -r requirements-dev.txt
+          "$RUNNER_TEMP/venv/bin/pip" check
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+
+      - name: ruff check
+        run: ruff check --no-cache .
+
+      - name: ruff format
+        run: ruff format --check --no-cache .
+
+      # pytest exits 5 when it collects no tests, so a run that finds none fails.
+      - name: pytest
+        run: python -m pytest -p no:cacheprovider
+
   leak-scan:
     needs: zizmor
     runs-on: ubuntu-24.04
@@ -195,7 +228,7 @@ jobs:
   # Runs even when a job it needs failed: with a plain `needs` this job would be skipped, and GitHub passes a
   # skipped required check.
   gate:
-    needs: [zizmor, guard, scripts, leak-scan, plugins]
+    needs: [zizmor, guard, scripts, python, leak-scan, plugins]
     if: always()
     runs-on: ubuntu-24.04
 

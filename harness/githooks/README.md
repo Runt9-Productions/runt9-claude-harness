@@ -83,8 +83,10 @@ of the diff.
 
 ## Install
 
-**Install a copy, not the checkout.** Copy `githooks/` and `leak-scan/` side by side into one directory outside the
-repository, then set `git config core.hooksPath <dir>/githooks` in each repository the agent works in. The leak gate
+**Install a copy, not the checkout.** `python3 bootstrap.py githooks hooks-path --repo <repo>` does both steps: it
+copies `githooks/` and `leak-scan/` side by side into `~/.claude/harness/`, then sets `core.hooksPath` to that copy's
+`githooks/` in each repository named with `--repo`. By hand, copy both into one directory outside the repository and
+set `git config core.hooksPath <dir>/githooks` in each repository the agent works in. The leak gate
 keeps its pass cache and working files in `<dir>/state/`, so whatever keeps the agent from writing to the installed
 copy has to cover all of `<dir>`. `core.hooksPath` replaces `.git/hooks/`, so any other hook you rely on has to move
 into the same directory. Set the authorship keys above in the same repository; without them only the leak gate runs.

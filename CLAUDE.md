@@ -9,12 +9,15 @@ nothing from an employer, a private project or a specific machine goes in, in co
 - `harness/`: what a plugin cannot carry (status line, settings fragments, git hooks, `CLAUDE.md` template and
   fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`) and `leak-scan/` (the scan that gate and CI
-  run, with its allowlist in `.leak-scan.toml`). A `bootstrap.py` at the root will copy the parts a
-  user picks into `~/.claude`; it does not exist yet.
+  run, with its allowlist in `.leak-scan.toml`).
+- `bootstrap.py`: installs the parts a user picks. It copies `harness/` parts into `~/.claude/harness/` and installs
+  plugins through `claude plugin`. A new installable part registers a component there. Tests in `test_bootstrap.py`.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
   `.oxlintrc.json`).
+- `requirements-dev.txt` at the root: the pinned Python tools CI runs (pytest, and ruff with `ruff.toml`), every
+  dependency listed because CI installs them with `--no-deps`. Python here is standard library only.
 
 ## Releasing
 
