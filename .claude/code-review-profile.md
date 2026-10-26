@@ -162,6 +162,7 @@ never blocks a merge.
 
 ## 12. Standing reviewer instructions
 
-The standards `code-health` judges against: the repository's `CLAUDE.md` ("Writing here"), and where present on the
-machine running the review, `~/.claude/code-style-principles.md`, `~/.claude/comment-style-guide.md` and the
-language's guide (`~/.claude/python-style-guide.md` for Python).
+The standards `code-health` judges against: the repository's `CLAUDE.md` ("Writing here") and the style-guide skills
+in this checkout, `harness/skills/code-style/SKILL.md`, `harness/skills/comment-style/SKILL.md` and the language's
+skill (`harness/skills/python-style/SKILL.md` for Python, `harness/skills/kotlin-style/SKILL.md` for Kotlin,
+`harness/skills/typescript-style/SKILL.md` for TypeScript).

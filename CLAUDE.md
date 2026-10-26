@@ -8,10 +8,11 @@ nothing from an employer, a private project or a specific machine goes in, in co
 - `plugins/<name>/`: one self-contained plugin each, listed in `.claude-plugin/marketplace.json`.
 - `harness/`: what a plugin cannot carry (status line, settings fragments, git hooks, `CLAUDE.md` template and
   fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
-  `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`) and `leak-scan/` (the scan that gate and CI
-  run, with its allowlist in `.leak-scan.toml`).
-- `bootstrap.py`: installs the parts a user picks. It copies `harness/` parts into `~/.claude/harness/` and installs
-  plugins through `claude plugin`. A new installable part registers a component there. Tests in `test_bootstrap.py`.
+  `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`), `leak-scan/` (the scan that gate and CI
+  run, with its allowlist in `.leak-scan.toml`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`,
+  `typescript-style` and `comment-style` skills).
+- `bootstrap.py`: installs the parts a user picks. It copies `harness/` parts into `~/.claude/harness/`, skills into
+  `~/.claude/skills/`, and installs plugins through `claude plugin`. A new installable part registers a component there. Tests in `test_bootstrap.py`.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
@@ -28,7 +29,8 @@ between them bump together. Marketplace entries hold only a name, a description 
 
 ## Machine-local layers
 
-A plugin reads machine-local data from `~/.claude/local/<plugin>/` and treats a missing file as empty. Examples,
+A plugin reads machine-local data from `~/.claude/local/<plugin>/` and treats a missing file as empty; a skill in
+`harness/skills/` does the same from `~/.claude/local/<skill>/`. Examples,
 with synthetic content only, live in `plugins/<name>/local.example/`, or beside the file in `harness/`.
 
 ## Trying a change

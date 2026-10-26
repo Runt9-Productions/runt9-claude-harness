@@ -8,14 +8,17 @@ Run it from a clone of this repository, in your own shell rather than a Claude C
     python3 bootstrap.py hooks-path --repo <repo> --repo <other-repo>
     python3 bootstrap.py --list                list the components
 
-Files are copied into ~/.claude/harness/, never linked, with the commit they came from in its SOURCE_COMMIT, so
-switching branches in the clone changes nothing installed. To update, check out main, pull and run it again.
+Files are copied, never linked, so switching branches in the clone changes nothing installed: harness parts into
+~/.claude/harness/, with the commit they came from in its SOURCE_COMMIT, and skills into ~/.claude/skills/. An
+installed skill is yours to edit; when it differs from the clone's copy, a run shows the difference and asks before
+replacing it. To update, check out main, pull and run it again.
 
 It refuses a clone with uncommitted changes to tracked files, warns when HEAD is not on origin/main as of the last
 fetch, and refuses inside a Claude Code session, whose agents are kept out of ~/.claude/harness/.
 """
 
 import argparse
+import difflib
 import json
 import os
 import shutil
@@ -28,6 +31,7 @@ from pathlib import Path
 
 CHECKOUT = Path(__file__).resolve().parent
 HARNESS_PARTS = ("githooks", "leak-scan")
+SKILLS_SOURCE = Path("harness") / "skills"
 SOURCE_COMMIT_FILE = "SOURCE_COMMIT"
 MAIN_REF = "origin/main"
 MARKETPLACE_FILE = CHECKOUT / ".claude-plugin" / "marketplace.json"
@@ -41,8 +45,16 @@ class BootstrapError(Exception):
 
 @dataclass(frozen=True)
 class Context:
-    install_dir: Path
+    claude_dir: Path
     repos: tuple[Path, ...]
+
+    @property
+    def install_dir(self) -> Path:
+        return self.claude_dir / "harness"
+
+    @property
+    def skills_dir(self) -> Path:
+        return self.claude_dir / "skills"
 
 
 type Installer = Callable[[Context], None]
@@ -101,12 +113,17 @@ def install_githooks(context: Context) -> None:
     report(f"installed {', '.join(HARNESS_PARTS)} from {commit} into {context.install_dir}")
 
 
-def copy_tracked(source: Path, destination: Path) -> None:
-    """Replaces destination with the tracked files under source, so a file deleted from the repo leaves the install."""
+def tracked_files(source: Path) -> list[Path]:
     listing = git(CHECKOUT, "ls-files", "-z", "--", str(source))
     files = [Path(name) for name in listing.split("\0") if name]
     if not files:
         raise BootstrapError(f"{source} holds no tracked files")
+    return files
+
+
+def copy_tracked(source: Path, destination: Path) -> None:
+    """Replaces destination with the tracked files under source, so a file deleted from the repo leaves the install."""
+    files = tracked_files(source)
     if destination.exists():
         shutil.rmtree(destination)
     for file in files:
@@ -127,6 +144,57 @@ def install_hooks_path(context: Context) -> None:
         report(f"core.hooksPath in {repo} is now {hooks}")
         if not git_succeeds(repo, "config", "--get", "claude.botEmail"):
             report(f"note: {repo} sets no claude.botEmail, so only the leak gate runs there")
+
+
+@register_component("skills", "the style-guide skills from harness/skills, copied into ~/.claude/skills")
+def install_skills(context: Context) -> None:
+    relatives = [file.relative_to(SKILLS_SOURCE) for file in tracked_files(SKILLS_SOURCE)]
+    # A file directly under harness/skills, such as its README, is not a skill.
+    names = sorted({relative.parts[0] for relative in relatives if len(relative.parts) > 1})
+    for name in names:
+        refuse_outside(context.skills_dir / name, context.claude_dir)
+    for name in names:
+        install_skill(SKILLS_SOURCE / name, context.skills_dir / name)
+
+
+def refuse_outside(destination: Path, root: Path) -> None:
+    """Catches a symlinked skills directory or skill pointing outside root, such as into another repository."""
+    resolved = destination.resolve()
+    if not resolved.is_relative_to(root.resolve()):
+        raise BootstrapError(f"{destination} resolves to {resolved}, outside {root}; refusing to write there")
+
+
+def install_skill(source: Path, destination: Path) -> None:
+    if destination.exists():
+        changes = installed_changes(source, destination)
+        if not changes:
+            report(f"{destination} is up to date")
+            return
+        report(changes)
+        if not ask(f"Replace {destination} with the clone's copy shown above?", "rerun it in a terminal to answer"):
+            report(f"kept {destination}")
+            return
+    copy_tracked(source, destination)
+    report(f"installed {destination}")
+
+
+def installed_changes(source: Path, destination: Path) -> str:
+    """A diff from the installed copy to the clone's, empty when they match."""
+    clone_files = {file.relative_to(source): CHECKOUT / file for file in tracked_files(source)}
+    installed_files = {file.relative_to(destination): file for file in destination.rglob("*") if file.is_file()}
+    lines = []
+    for relative in sorted(clone_files.keys() | installed_files.keys()):
+        before = read_lines(installed_files.get(relative))
+        after = read_lines(clone_files.get(relative))
+        name = destination / relative
+        lines.extend(difflib.unified_diff(before, after, f"{name} (installed)", f"{name} (clone)"))
+    return "".join(lines)
+
+
+def read_lines(file: Path | None) -> list[str]:
+    if file is None:
+        return []
+    return file.read_text().splitlines(keepends=True)
 
 
 def install_plugin(marketplace: str, plugin: str, context: Context) -> None:
@@ -188,14 +256,19 @@ def picked_components(names: list[str]) -> list[Component]:
         raise BootstrapError(f"unknown component {', '.join(unknown)}; --list shows them")
     if names:
         return [component for component in COMPONENTS if component.name in names]
-    return [component for component in COMPONENTS if confirm(component)]
+    picked = []
+    for component in COMPONENTS:
+        question = f"Install {component.name} ({component.summary})?"
+        if ask(question, "name the components on the command line"):
+            picked.append(component)
+    return picked
 
 
-def confirm(component: Component) -> bool:
+def ask(question: str, without_stdin: str) -> bool:
     try:
-        answer = input(f"Install {component.name} ({component.summary})? [y/N] ")
+        answer = input(f"{question} [y/N] ")
     except EOFError as error:
-        raise BootstrapError("no answer on stdin; name the components on the command line") from error
+        raise BootstrapError(f"no answer on stdin; {without_stdin}") from error
     return answer.strip().lower() in ("y", "yes")
 
 
@@ -214,9 +287,8 @@ def main() -> None:
     if os.environ.get("CLAUDE_CODE_SESSION_ID"):
         sys.exit("bootstrap: refusing to run inside a Claude Code session; run it in your own shell")
 
-    install_dir = Path.home() / ".claude" / "harness"
     repos = tuple(repo.expanduser() for repo in arguments.repo)
-    context = Context(install_dir, repos)
+    context = Context(Path.home() / ".claude", repos)
     try:
         check_checkout()
         for component in picked_components(arguments.components):

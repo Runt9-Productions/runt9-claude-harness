@@ -21,6 +21,8 @@ MARKETPLACE = """{
 STUB_CLAUDE = """#!/bin/sh
 echo "$*" >> "$CLAUDE_STUB_LOG"
 """
+SKILL = "---\nname: example-skill\n---\nExample rule.\n"
+ANOTHER_SKILL = "---\nname: another-skill\n---\nAnother rule.\n"
 # The test's own git calls get this too: a machine's commit.gpgsign or core.hooksPath would otherwise reach them.
 GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 GIT_ENV = {**os.environ, **GIT_ISOLATION}
@@ -36,6 +38,10 @@ class Sandbox:
     @property
     def install_dir(self) -> Path:
         return self.home / ".claude" / "harness"
+
+    @property
+    def skills_dir(self) -> Path:
+        return self.home / ".claude" / "skills"
 
     def run(self, *args: str, stdin: str = "", env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         command = [sys.executable, str(self.clone / "bootstrap.py"), *args]
@@ -62,6 +68,9 @@ def sandbox(tmp_path: Path) -> Sandbox:
     shutil.copy2(SCRIPT, clone / "bootstrap.py")
     write(clone / "harness" / "githooks" / "pre-push", "#!/bin/sh\n", 0o755)
     write(clone / "harness" / "leak-scan" / "rules" / "shapes.toml", "# example\n")
+    write(clone / "harness" / "skills" / "README.md", "# example\n")
+    write(clone / "harness" / "skills" / "example-skill" / "SKILL.md", SKILL)
+    write(clone / "harness" / "skills" / "another-skill" / "SKILL.md", ANOTHER_SKILL)
     write(clone / ".claude-plugin" / "marketplace.json", MARKETPLACE)
     git(clone, "init", "-q", "-b", "main")
     git(clone, "add", ".")
@@ -161,6 +170,81 @@ def test_hooks_path_refuses_before_githooks_is_installed(sandbox: Sandbox, tmp_p
     assert unset.returncode == 1
 
 
+def test_skills_installs_each_skill_and_leaves_a_matching_copy_alone(sandbox: Sandbox) -> None:
+    first = sandbox.run("skills")
+    second = sandbox.run("skills")
+
+    assert first.returncode == 0, first.stderr
+    assert not (sandbox.skills_dir / "README.md").exists()
+    assert second.returncode == 0, second.stderr
+    for name, text in (("example-skill", SKILL), ("another-skill", ANOTHER_SKILL)):
+        assert (sandbox.skills_dir / name / "SKILL.md").read_text() == text
+        assert f"{sandbox.skills_dir / name} is up to date" in second.stderr
+
+
+def test_skills_shows_an_edited_copy_and_replaces_it_only_on_yes(sandbox: Sandbox) -> None:
+    sandbox.run("skills")
+    installed = sandbox.skills_dir / "example-skill" / "SKILL.md"
+    edited = "---\nname: example-skill\n---\nEdited rule.\n"
+    write(installed, edited)
+    added = sandbox.skills_dir / "example-skill" / "notes.md"
+    write(added, "added by hand\n")
+
+    kept = sandbox.run("skills", stdin="\n")
+
+    assert kept.returncode == 0, kept.stderr
+    assert "-Edited rule.\n+Example rule." in kept.stderr
+    assert "-added by hand" in kept.stderr
+    assert installed.read_text() == edited
+
+    replaced = sandbox.run("skills", stdin="y\n")
+
+    assert replaced.returncode == 0, replaced.stderr
+    assert installed.read_text() == SKILL
+    assert not added.exists()
+
+
+def test_skills_keeps_an_edited_copy_when_stdin_has_no_answer(sandbox: Sandbox) -> None:
+    sandbox.run("skills")
+    installed = sandbox.skills_dir / "example-skill" / "SKILL.md"
+    edited = "---\nname: example-skill\n---\nEdited rule.\n"
+    write(installed, edited)
+
+    result = sandbox.run("skills", stdin="")
+
+    assert result.returncode == 1
+    assert "no answer on stdin; rerun it in a terminal to answer" in result.stderr
+    assert installed.read_text() == edited
+
+
+def test_skills_refuses_a_skills_directory_linked_outside_claude(sandbox: Sandbox, tmp_path: Path) -> None:
+    elsewhere = tmp_path / "other-repo" / "skills"
+    elsewhere.mkdir(parents=True)
+    sandbox.skills_dir.parent.mkdir()
+    sandbox.skills_dir.symlink_to(elsewhere)
+
+    result = sandbox.run("skills")
+
+    assert result.returncode != 0
+    assert f"outside {sandbox.home / '.claude'}; refusing to write there" in result.stderr
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_skills_refuses_a_linked_skill_before_writing_any(sandbox: Sandbox, tmp_path: Path) -> None:
+    elsewhere = tmp_path / "other-repo" / "example-skill"
+    elsewhere.mkdir(parents=True)
+    sandbox.skills_dir.mkdir(parents=True)
+    # Sorted after another-skill, so a check made skill by skill would install another-skill first.
+    (sandbox.skills_dir / "example-skill").symlink_to(elsewhere)
+
+    result = sandbox.run("skills")
+
+    assert result.returncode != 0
+    assert f"outside {sandbox.home / '.claude'}; refusing to write there" in result.stderr
+    assert list(elsewhere.iterdir()) == []
+    assert not (sandbox.skills_dir / "another-skill").exists()
+
+
 def test_plugin_installs_and_warns_of_a_plugin_dir_loading_it(sandbox: Sandbox, tmp_path: Path) -> None:
     unnamed = tmp_path / "unnamed" / "example-plugin"
     unnamed.mkdir(parents=True)
@@ -193,8 +277,8 @@ def test_plugin_refuses_an_unreadable_plugin_dir_manifest_before_installing(sand
 
 
 def test_with_no_components_named_asks_about_each(sandbox: Sandbox) -> None:
-    # In install order: githooks, hooks-path (no --repo, so a yes would fail), plugin:example-plugin.
-    result = sandbox.run(stdin="y\nn\ny\n")
+    # In install order: githooks, hooks-path (no --repo, so a yes would fail), skills, plugin:example-plugin.
+    result = sandbox.run(stdin="y\nn\nn\ny\n")
 
     assert result.returncode == 0, result.stderr
     assert (sandbox.install_dir / "githooks" / "pre-push").exists()
