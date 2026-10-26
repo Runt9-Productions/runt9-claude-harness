@@ -8,8 +8,11 @@ Read by the `/test-review` skill and by the `test-reviewer` agent it spawns.
 |---|---|---|---|
 | bats | `**/*.bats`, with shared helpers in `.github/scripts/tests/helpers.bash` | `bats <file>`, or `bats -f '<name regex>' <file>` for one test | TAP: `1..N`, then an `ok` or `not ok` line per test |
 | mod kit | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | `claude plugin test plugins/<name>` | a `(pass)` or `(fail)` line per test, then `N pass` and `N fail` |
+| pytest | `**/test_*.py` | `python -m pytest -p no:cacheprovider -v <file>`, or with `-k '<name>'` for one test, using the packages `requirements-dev.txt` pins | a `PASSED` or `FAILED` line per test, then `N passed` and `N failed` |
 
 - A bats file with no tests passes. Count the per-test lines against the tests in the file.
+- pytest counts each parametrized case as a test, so count cases, not functions. CI also runs ruff over Python files,
+  tests included, so a fix to a Python test must stay ruff-clean (`ruff check` and `ruff format --check`).
 - A test CI does not run protects nothing between manual runs. Check in `.github/workflows/ci.yml` that each scoped
   file is one a CI step picks up, and report it if not. CI also runs shellcheck over tracked shell files, tests
   included, so a fix to a shell test must stay shellcheck-clean.
@@ -22,6 +25,7 @@ Read by the `/test-review` skill and by the `test-reviewer` agent it spawns.
 |---|---|
 | `**/*.bats` | `.claude/agents/references/test-review-shell.md` |
 | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | `.claude/agents/references/test-review-mod-kit.md` |
+| `**/test_*.py` | `.claude/agents/references/test-review-pytest.md` |
 
 ## 3. Suite policy
 
