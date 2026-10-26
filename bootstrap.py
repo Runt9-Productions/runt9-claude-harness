@@ -130,10 +130,12 @@ def install_hooks_path(context: Context) -> None:
 
 
 def install_plugin(marketplace: str, plugin: str, context: Context) -> None:
+    # Read before installing, so a manifest that cannot be read refuses with nothing installed.
+    loading = plugin_dirs_loading(plugin)
     run(["claude", "plugin", "marketplace", "add", MARKETPLACE_SOURCE])
     installed = run(["claude", "plugin", "install", f"{plugin}@{marketplace}"])
     report(installed)
-    for directory in plugin_dirs_loading(plugin):
+    for directory in loading:
         report(f"warning: {plugin} also loads from {directory}; remove it from CLAUDE_CODE_PLUGIN_DIRS")
 
 
@@ -147,10 +149,20 @@ def plugin_dirs_loading(plugin: str) -> list[Path]:
         manifest = directory / ".claude-plugin" / "plugin.json"
         name = directory.name
         if manifest.is_file():
-            name = json.loads(manifest.read_text())["name"]
+            name = manifest_name(manifest)
         if name == plugin:
             matches.append(directory)
     return matches
+
+
+def manifest_name(manifest: Path) -> str:
+    try:
+        name = json.loads(manifest.read_text()).get("name")
+    except (OSError, ValueError, AttributeError) as error:
+        raise BootstrapError(f"cannot read {manifest}: {error}") from error
+    if not isinstance(name, str):
+        raise BootstrapError(f"{manifest} names no plugin")
+    return name
 
 
 def register_plugins() -> None:

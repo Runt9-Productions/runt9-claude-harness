@@ -180,6 +180,18 @@ def test_plugin_installs_and_warns_of_a_plugin_dir_loading_it(sandbox: Sandbox, 
     assert f"also loads from {renamed}" not in result.stderr
 
 
+def test_plugin_refuses_an_unreadable_plugin_dir_manifest_before_installing(sandbox: Sandbox, tmp_path: Path) -> None:
+    broken = tmp_path / "broken" / "example-plugin"
+    write(broken / ".claude-plugin" / "plugin.json", "{not json\n")
+    env = {**sandbox.env, "CLAUDE_CODE_PLUGIN_DIRS": str(broken)}
+
+    result = sandbox.run("plugin:example-plugin", env=env)
+
+    assert result.returncode == 1
+    assert f"bootstrap: cannot read {broken / '.claude-plugin' / 'plugin.json'}" in result.stderr
+    assert not sandbox.claude_log.exists()
+
+
 def test_with_no_components_named_asks_about_each(sandbox: Sandbox) -> None:
     # In install order: githooks, hooks-path (no --repo, so a yes would fail), plugin:example-plugin.
     result = sandbox.run(stdin="y\nn\ny\n")
