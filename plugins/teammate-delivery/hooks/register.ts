@@ -6,6 +6,11 @@ const LEAD_NAME = 'team-lead'
 // Every line break a reader could render as one, so no line of a quoted body escapes the quote.
 const LINE_BREAK = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/
 
+// The `<` of an opening or closing tag whose name holds a `-`, `_` or `:`, as the harness's do, escaped as `<\` the
+// way mailbox delivery escapes its own envelope tags. `List<String>` and `<div>` pass, and so do the harness's
+// one-word tags (`channel`, `terminal`, `browser`).
+const TAG_OPENER = /<(?=\/?[A-Za-z][\w.]*[-_:][\w:.-]*(?:[\s/>]|$))/g
+
 const DELIVERED = 'delivered while you were working'
 
 // Sent by mailbox to wake a teammate whose turn ended before reading rows added to it: those rows are already in its
@@ -35,14 +40,15 @@ function nameOf(agents: readonly AgentInfo[], agentId: string | undefined): stri
 }
 
 /**
- * The row the receiving loop reads, its body quoted so that a line inside it cannot pass for a header:
+ * The row the receiving loop reads, its body quoted so that a line inside it cannot pass for a header, and its tags
+ * escaped so that none passes for the harness's:
  *
  * [Message from team-lead, delivered while you were working]
  * > Stop after this file and report.
  */
 function framed(agents: readonly AgentInfo[], e: SessionSendInput): string {
   const header = `[Message from ${nameOf(agents, e.agentId)}, ${DELIVERED}]`
-  const lines = e.text.split(LINE_BREAK).map(line => `> ${line}`)
+  const lines = e.text.split(LINE_BREAK).map(line => `> ${line.replace(TAG_OPENER, '<\\')}`)
   return [header, ...lines].join('\n')
 }
 
