@@ -71,9 +71,6 @@ refuse those. An agent set on defeating it also holds the bot's key and can push
 merge is the control there. CI on the public repository is the backstop, and it runs only after a pushed branch is
 already public.
 
-The hook runs tools only from `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin` and `/bin`, so
-`claude`, `betterleaks`, `git` and `jq` have to be in one of them.
-
 A passing review is cached in `<dir>/state/passed/`, keyed by the hash of what the agent read and of every file in the
 installed copy. Pushing the same commits again costs nothing; updating the installed copy reviews them again.
 

@@ -1,0 +1,7 @@
+{
+  "options": { "typeAware": true },
+  "rules": {
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error"
+  }
+}

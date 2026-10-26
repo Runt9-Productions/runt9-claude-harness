@@ -1,6 +1,6 @@
 # runt9-claude-harness
 
-Opt-in plugins and harness pieces for Claude Code. Being migrated in; no plugin is published yet.
+Opt-in plugins and harness pieces for Claude Code, still being migrated in.
 
 ```
 /plugin marketplace add Runt9-Productions/runt9-claude-harness

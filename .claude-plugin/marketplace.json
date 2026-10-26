@@ -4,5 +4,11 @@
   "owner": {
     "name": "Runt9 Productions"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "teammate-delivery",
+      "source": "./plugins/teammate-delivery",
+      "description": "Delivers a message to a busy teammate at its next model request, instead of when its whole turn ends"
+    }
+  ]
 }

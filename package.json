@@ -1,0 +1,9 @@
+{
+  "name": "runt9-claude-harness",
+  "private": true,
+  "devDependencies": {
+    "oxlint": "1.86.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2"
+  }
+}

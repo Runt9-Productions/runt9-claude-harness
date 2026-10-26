@@ -13,6 +13,8 @@ nothing from an employer, a private project or a specific machine goes in, in co
   user picks into `~/.claude`; it does not exist yet.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
+- `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
+  `.oxlintrc.json`).
 
 ## Releasing
 
@@ -30,6 +32,13 @@ with synthetic content only, live in `plugins/<name>/local.example/`, or beside 
 
 Start a separate session with `claude --plugin-dir plugins/<name>`. It replaces the installed copy of that plugin
 for that session only.
+
+To check a mod, run `npm ci` once at the root, then load the mod as above, which writes the types `tsc` needs into
+the plugin. Then run `npx tsc -p plugins/<name>`, `npx oxlint -c .oxlintrc.json plugins/<name>` and
+`claude plugin test plugins/<name>`.
+
+The `min-release-age` cooldown in `.npmrc` applies only when npm resolves versions (`npm install` adding or changing a
+dependency, `npm update`), and only on npm 11.10 or newer. `npm ci` installs the lockfile as written and skips it.
 
 ## Writing here
 
