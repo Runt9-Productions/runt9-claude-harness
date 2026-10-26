@@ -5,7 +5,7 @@ Run it from a clone of this repository, in your own shell rather than a Claude C
 
     python3 bootstrap.py                       ask about each component in turn
     python3 bootstrap.py githooks plugin:<name>
-    python3 bootstrap.py hooks-path --repo ~/src/project --repo ~/src/other
+    python3 bootstrap.py hooks-path --repo <repo> --repo <other-repo>
     python3 bootstrap.py --list                list the components
 
 Files are copied into ~/.claude/harness/, never linked, with the commit they came from in its SOURCE_COMMIT, so
