@@ -47,5 +47,5 @@ touches.
 
 Engine behaviour the types do not settle is an open question that names the measurement that would settle it.
 
-Critical when the mod breaks a session or another plugin under normal use. High for a contract changed on one side,
-or a partner left without its version rise. Normal for avoidable per-session cost.
+Critical when the mod breaks a session or another plugin under normal use. Normal for avoidable per-session cost.
+For everything else, use the profile's "Severity calibration".

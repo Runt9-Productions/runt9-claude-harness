@@ -42,5 +42,4 @@ One read to confirm each finding: open the doc, mirror or companion and check th
 
 ## Severity
 
-Take it from "Severity calibration". A missing version rise on a contract partner is High; a stale README line or a
-leftover debug call is Normal.
+Take it from "Severity calibration".

@@ -1,15 +1,19 @@
 import type { AgentInfo, ApiMessage, EngineInterface, Register, TurnCompleteReason } from 'claude-code'
 
+// The stored text blocks of one diverted row.
+type Row = readonly string[]
+
 type Turn = {
   id: string
-  // Stored text of each diverted row that no model request has carried yet.
-  rows: string[]
+  // Diverted rows that no model request has carried yet.
+  rows: Row[]
   // Set the moment the turn closes; an append still in flight reads it.
   ending?: TurnCompleteReason
   recipient?: string
 }
 
-const LEAD = 'team-lead'
+// The engine's name for the lead in an idle teammate's mailbox; a diverted row must name it the same way.
+const LEAD_NAME = 'team-lead'
 
 const WAKE_UP =
   'A message reached you while you were working and was added to your conversation, ' +
@@ -17,10 +21,13 @@ const WAKE_UP =
 
 const LINE_BREAK = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/
 
-// A tag name holding `-`, `_` or `:` is the shape of the engine's envelope tags. An opening `<` right after a
-// word character starts a generic (`Result<io_error>`), not a tag; a closing one always ends a tag.
+// A tag name holding `-`, `_` or `:` is the shape of the engine's envelope tags. One glued to a word is escaped too,
+// generics such as `Result<io_error>` included, because a model reads `text<envelope-tag>` as a tag all the same.
 const TAG_NAME = String.raw`[a-z][\w.:-]*[-_:][\w.:-]*(?:[\s/>]|$)`
-const ENVELOPE_LIKE_TAG = new RegExp(String.raw`(?<!\w)<(?=${TAG_NAME})|<(?=\/${TAG_NAME})`, 'gi')
+const ENVELOPE_LIKE_TAG = new RegExp(String.raw`<(?=\/?${TAG_NAME})`, 'gi')
+
+// Separates text blocks when matching, so a row matches whole blocks and never the start of a longer one.
+const BLOCK_SEPARATOR = '\u0000'
 
 function escapeTags(text: string): string {
   return text.replace(ENVELOPE_LIKE_TAG, '<\\')
@@ -33,18 +40,24 @@ function composeRow(sender: string, body: string): string {
   return [`Message from ${sender}, delivered during your turn:`, ...quoted].join('\n')
 }
 
-function textOf(content: readonly { type: string; text?: unknown }[]): string {
-  return content.flatMap(block => (block.type === 'text' && typeof block.text === 'string' ? [block.text] : [])).join('\n')
+function textBlocks(content: readonly { type: string; text?: unknown }[]): string[] {
+  return content.flatMap(block => (block.type === 'text' && typeof block.text === 'string' ? [block.text] : []))
+}
+
+function bounded(blocks: readonly string[]): string {
+  return BLOCK_SEPARATOR + blocks.join(BLOCK_SEPARATOR) + BLOCK_SEPARATOR
 }
 
 // Marks each row found in `messages`, a repeated row needing a repeated occurrence.
-function heldRows(rows: readonly string[], messages: readonly ApiMessage[]): boolean[] {
-  const haystack = messages.map(message => textOf(message.content)).join('\u0000')
+function heldRows(rows: readonly Row[], messages: readonly ApiMessage[]): boolean[] {
+  const haystack = bounded(messages.flatMap(message => textBlocks(message.content)))
   const searchFrom = new Map<string, number>()
   return rows.map(row => {
-    const at = haystack.indexOf(row, searchFrom.get(row) ?? 0)
+    const needle = bounded(row)
+    const at = haystack.indexOf(needle, searchFrom.get(needle) ?? 0)
     if (at === -1) return false
-    searchFrom.set(row, at + row.length)
+    // The closing separator is the next block's opening one.
+    searchFrom.set(needle, at + needle.length - 1)
     return true
   })
 }
@@ -63,7 +76,7 @@ async function settle(
   agentId: string,
   recipient: string,
   ending: TurnCompleteReason,
-  rows: readonly string[],
+  rows: readonly Row[],
 ): Promise<void> {
   if (rows.length === 0) return
   if (ending !== 'answer') {
@@ -78,7 +91,7 @@ async function settle(
     await mail($, agentId, recipient, WAKE_UP)
     return
   }
-  for (const row of missing) await mail($, agentId, recipient, row)
+  for (const row of missing) await mail($, agentId, recipient, row.join('\n'))
 }
 
 async function safely($: EngineInterface, work: () => Promise<void>): Promise<void> {
@@ -110,21 +123,22 @@ export const register: Register = on => {
     const agentId = e.agentId
     // A step also reopens a turn whose start went unheard, as after a reload.
     const turn = agentId === undefined ? undefined : openTurn(agentId, e.turnId)
-    const result = yield* next(e)
-    if (agentId === undefined || turn === undefined || turn.rows.length === 0) return result
-    await safely($, async () => {
-      const messages = await $.session.messages({ agentId, as: 'api' })
-      if (!Array.isArray(messages)) return
-      const carried = turn.rows.slice()
-      const held = heldRows(carried, messages.slice(0, e.messageCount))
-      // Removes by position in the live list, which a turn end may have emptied during the await.
-      for (const [i, row] of carried.entries()) {
-        if (!held[i]) continue
-        const at = turn.rows.indexOf(row)
-        if (at !== -1) turn.rows.splice(at, 1)
-      }
-    })
-    return result
+    // Checked before `next`: a row stored while the request streams can merge into the messages it carried. Only
+    // rows stored before the read are candidates, so one stored during it stays.
+    if (agentId !== undefined && turn !== undefined && turn.rows.length > 0) {
+      const candidates = turn.rows.slice()
+      await safely($, async () => {
+        const messages = await $.session.messages({ agentId, as: 'api' })
+        if (!Array.isArray(messages)) return
+        const held = heldRows(candidates, messages.slice(0, e.messageCount))
+        // Removes from the live list, which a turn end may have emptied during the await.
+        for (const [i, row] of candidates.entries()) {
+          const at = held[i] ? turn.rows.indexOf(row) : -1
+          if (at !== -1) turn.rows.splice(at, 1)
+        }
+      })
+    }
+    return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -154,16 +168,16 @@ export const register: Register = on => {
     if (target?.teammateId === undefined || target.status !== 'running' || turn === undefined) return next(e)
 
     const sender =
-      e.agentId === undefined ? LEAD : (agents.find(agent => agent.id === e.agentId)?.name ?? e.agentId)
+      e.agentId === undefined ? LEAD_NAME : (agents.find(agent => agent.id === e.agentId)?.name ?? e.agentId)
     const recipient = target.name ?? target.id
-    let row: string
+    let row: Row
     try {
       const stored = await $.session.append({
         message: { type: 'user', content: [{ type: 'text', text: composeRow(sender, e.text) }] },
         agentId: target.id,
       })
       if (stored.deny !== undefined) return next(e)
-      row = textOf(stored.message.content)
+      row = textBlocks(stored.message.content)
     } catch {
       return next(e)
     }

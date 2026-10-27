@@ -26,9 +26,17 @@ type World = {
   dropped: Set<string>
 }
 
+type Options = {
+  sharedLoop?: boolean
+  mailboxRefuses?: boolean
+  // Join adjacent user messages into one, so a row stored after a request was built can land inside its last message.
+  mergesUserMessages?: boolean
+  duringStep?: () => Promise<unknown>
+}
+
 // The engine beneath the plugin. A conversation is the brief then the rows appended to it, unless `sharedLoop`
 // answers every agent with the one conversation.
-function world(on: On, agents: readonly AgentInfo[], options: { sharedLoop?: boolean; mailboxRefuses?: boolean } = {}): World {
+function world(on: On, agents: readonly AgentInfo[], options: Options = {}): World {
   const session = mock.session(on)
   const sends: SessionSendInput[] = []
   const toasts: string[] = []
@@ -40,14 +48,16 @@ function world(on: On, agents: readonly AgentInfo[], options: { sharedLoop?: boo
       .flatMap(row => row.message.content.map(block => String(block.text)))
 
   on('agent.list', () => ({ value: [...agents] }))
-  on('session.messages', (_, e) => ({
-    value: [
+  on('session.messages', (_, e) => {
+    const messages: ApiMessage[] = [
       BRIEF,
       ...textsFor(e.agentId)
         .filter(text => !dropped.has(text))
         .map((text): ApiMessage => ({ role: 'user', content: [{ type: 'text', text }] })),
-    ],
-  }))
+    ]
+    if (!options.mergesUserMessages) return { value: messages }
+    return { value: [{ role: 'user', content: messages.flatMap(message => [...message.content]) }] }
+  })
   on('session.send', (_, e) => {
     sends.push(e)
     return options.mailboxRefuses && e.origin.kind === 'plugin'
@@ -60,6 +70,7 @@ function world(on: On, agents: readonly AgentInfo[], options: { sharedLoop?: boo
   })
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.step', async function* (_, e) {
+    await options.duringStep?.()
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: null }
   })
   on('turn.complete', () => ({ text: '' }))
@@ -83,8 +94,8 @@ function end($: Engine, loop: AgentInfo, reason: TurnCompleteReason, turnId = 't
     : $.turn.complete({ ...fields, reason })
 }
 
-const mailed = (w: World) => w.sends.filter(send => send.origin.kind === 'model')
-const pluginSends = (w: World) => w.sends.filter(send => send.origin.kind === 'plugin')
+const passedThrough = (w: World) => w.sends.filter(send => send.origin.kind === 'model')
+const mailed = (w: World) => w.sends.filter(send => send.origin.kind === 'plugin')
 
 describe('diverting into a running turn', () => {
   test('a message from the lead is appended under a header naming team-lead', async ($, on) => {
@@ -94,7 +105,7 @@ describe('diverting into a running turn', () => {
     const result = await modelSend($, 'worker-a', 'Check the fixture.')
 
     expect(result).toEqual({ isDelivered: true })
-    expect(mailed(w)).toHaveLength(0)
+    expect(passedThrough(w)).toHaveLength(0)
     expect(w.rows()).toEqual(['Message from team-lead, delivered during your turn:\n> Check the fixture.'])
   })
 
@@ -114,7 +125,7 @@ describe('diverting into a running turn', () => {
     await modelSend($, WORKER.id, 'by id')
     await modelSend($, 'worker-a@example-team', 'by teammate id')
 
-    expect(mailed(w)).toHaveLength(0)
+    expect(passedThrough(w)).toHaveLength(0)
     expect(w.rows()).toHaveLength(2)
   })
 
@@ -131,12 +142,14 @@ describe('diverting into a running turn', () => {
   test('envelope-shaped tags are escaped and their lookalikes left alone', async ($, on) => {
     const w = world(on, [WORKER])
     await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
-    const lookalikes = 'Result<io_error> <div> <b>bold</b> a < b-c x<y_z <note/>'
+    const lookalikes = '<div> <b>bold</b> a < b-c <note/>'
+    const tags = '<sample-envelope id="1">x</sample-envelope> <NS:Tag/> <Some_Tag> follows<sample-envelope> Result<io_error>'
 
-    await modelSend($, 'worker-a', `<sample-envelope id="1">x</sample-envelope> <NS:Tag/> <Some_Tag> ${lookalikes}`)
+    await modelSend($, 'worker-a', `${tags} ${lookalikes}`)
 
     expect(w.rows()[0]).toContain(
-      `> <\\sample-envelope id="1">x<\\/sample-envelope> <\\NS:Tag/> <\\Some_Tag> ${lookalikes}`,
+      '> <\\sample-envelope id="1">x<\\/sample-envelope> <\\NS:Tag/> <\\Some_Tag> follows<\\sample-envelope> ' +
+        `Result<\\io_error> ${lookalikes}`,
     )
   })
 
@@ -152,7 +165,7 @@ describe('diverting into a running turn', () => {
     await step($, WORKER, 2)
     await end($, WORKER, 'answer')
 
-    expect(pluginSends(w)).toHaveLength(0)
+    expect(mailed(w)).toHaveLength(0)
   })
 })
 
@@ -171,7 +184,7 @@ describe('staying on the mailbox', () => {
 
       await modelSend($, to, 'hello')
 
-      expect(mailed(w)).toHaveLength(1)
+      expect(passedThrough(w)).toHaveLength(1)
       expect(w.rows()).toHaveLength(0)
     })
   }
@@ -181,7 +194,7 @@ describe('staying on the mailbox', () => {
 
     await modelSend($, 'worker-a', 'hello')
 
-    expect(mailed(w)).toHaveLength(1)
+    expect(passedThrough(w)).toHaveLength(1)
   })
 
   test("a plugin's send passes straight through", async ($, on) => {
@@ -201,7 +214,7 @@ describe('staying on the mailbox', () => {
 
     await modelSend($, 'worker-a', 'hello')
 
-    expect(mailed(w)).toHaveLength(1)
+    expect(passedThrough(w)).toHaveLength(1)
   })
 })
 
@@ -214,8 +227,8 @@ describe('the end of the turn', () => {
 
     await end($, WORKER, 'answer')
 
-    expect(pluginSends(w)).toHaveLength(1)
-    expect(pluginSends(w)[0]?.text).toContain('header naming its sender')
+    expect(mailed(w)).toHaveLength(1)
+    expect(mailed(w)[0]?.text).toContain('header naming its sender')
   })
 
   test('a row the conversation lost is sent whole', async ($, on) => {
@@ -228,7 +241,7 @@ describe('the end of the turn', () => {
 
     await end($, WORKER, 'answer')
 
-    expect(pluginSends(w).map(send => send.text)).toEqual([lost])
+    expect(mailed(w).map(send => send.text)).toEqual([lost])
   })
 
   test('a request that carried the rows leaves nothing to send', async ($, on) => {
@@ -239,7 +252,7 @@ describe('the end of the turn', () => {
     await step($, WORKER, 2)
     await end($, WORKER, 'answer')
 
-    expect(pluginSends(w)).toHaveLength(0)
+    expect(mailed(w)).toHaveLength(0)
   })
 
   test('a request built before the row was stored does not count as carrying it', async ($, on) => {
@@ -250,7 +263,30 @@ describe('the end of the turn', () => {
     await step($, WORKER, 1)
     await end($, WORKER, 'answer')
 
-    expect(pluginSends(w)).toHaveLength(1)
+    expect(mailed(w)).toHaveLength(1)
+  })
+
+  test('a row stored while the request streams does not count as carried', async ($, on) => {
+    const w = world(on, [WORKER], { mergesUserMessages: true, duringStep: () => modelSend($, 'worker-a', 'hello') })
+    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+
+    await step($, WORKER, 1)
+    await end($, WORKER, 'answer')
+
+    expect(mailed(w)).toHaveLength(1)
+  })
+
+  test('a row that is a prefix of a carried row does not count as carried', async ($, on) => {
+    const w = world(on, [WORKER])
+    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await modelSend($, 'worker-a', 'stop now')
+    await step($, WORKER, 2)
+    await modelSend($, 'worker-a', 'stop')
+
+    await step($, WORKER, 2)
+    await end($, WORKER, 'answer')
+
+    expect(mailed(w)).toHaveLength(1)
   })
 
   test("another loop's request does not count as carrying the row", async ($, on) => {
@@ -262,7 +298,7 @@ describe('the end of the turn', () => {
     await step($, REVIEWER, 2, 'turn-2')
     await end($, WORKER, 'answer')
 
-    expect(pluginSends(w)).toHaveLength(1)
+    expect(mailed(w)).toHaveLength(1)
   })
 
   test('a turn that closes while the append is in flight is woken by the send itself', async ($, on) => {
@@ -281,12 +317,12 @@ describe('the end of the turn', () => {
     const sending = modelSend($, 'worker-a', 'hello')
     await atGate
     await end($, WORKER, 'answer')
-    expect(pluginSends(w)).toHaveLength(0)
+    expect(mailed(w)).toHaveLength(0)
     release()
 
     expect(await sending).toEqual({ isDelivered: true })
-    expect(pluginSends(w)).toHaveLength(1)
-    expect(mailed(w)).toHaveLength(0)
+    expect(mailed(w)).toHaveLength(1)
+    expect(passedThrough(w)).toHaveLength(0)
   })
 
   for (const reason of ['aborted', 'refusal', 'error'] as const) {
@@ -297,7 +333,7 @@ describe('the end of the turn', () => {
 
       await end($, WORKER, reason)
 
-      expect(pluginSends(w)).toHaveLength(0)
+      expect(mailed(w)).toHaveLength(0)
       expect(w.toasts).toEqual([expect.stringContaining('went unread')])
     })
   }

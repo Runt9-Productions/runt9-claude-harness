@@ -35,7 +35,6 @@ Build the bypass rather than describing a worry. Try:
 - **CI.** Triggers, permissions and secrets in workflows: who can start a job, what it can write, what it runs from
   the PR. zizmor already audits workflows, so report only what it would miss.
 - **Supply chain.** Unpinned actions or packages, install scripts, and what a lockfile change pulls in.
-- **The profile's guard entries.**
 
 ## Out of scope
 

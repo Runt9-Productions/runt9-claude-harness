@@ -137,7 +137,8 @@ If it fails, stop and report the error; a review placed from a wrong index puts 
 
 Match the manifest's paths, and the kind of code they hold, against the profile's routing table.
 
-- **No panel argument**: dispatch nothing. End with a proposal: one or two sentences on what the diff touches; each
+- **Deep pass** (`--` given): the profile's deep-pass reviewer alone, dispatched without a proposal.
+- **No panel argument and no `--`**: dispatch nothing. End with a proposal: one or two sentences on what the diff touches; each
   reviewer you would pick, with one reason and its frontmatter model; each reviewer you would leave out, with why;
   and the exact command that runs your pick. Any size of panel is fine.
 - **`default`**: the profile's always-on reviewers. Still run the routing match, and list in the report every row that
@@ -204,21 +205,24 @@ ran, and says what the panel did not cover; never write it as if a small panel s
 Follow the profile's "Delivery" section.
 
 Whether a finding goes inline is a lookup, not a judgment. A finding goes inline only when its line falls inside a
-span listed for its path in `hunks.txt`; every other finding stays in the body alone. Check each one with:
+span listed for its path in `hunks.txt`; every other finding stays in the body alone.
+
+Never type a path into a command: paths come from the diff, and a file name can carry shell syntax. Instead, use
+Write to create `$dir/locations.tsv` with one line per finding: its line number, a tab, then its path exactly as
+`hunks.txt` gives it. Then run this, which prints each of those lines prefixed with `inline` or `body`:
 
 ```bash
 dir='<run directory>'
-# Exit 0 when line $LINE of $FILE lies inside one of its hunks. The values travel through the environment because
-# awk -v would rewrite backslashes in a path.
-FILE='path/from/finding' LINE=42 awk -F'\t' '
-    BEGIN { want = ENVIRON["FILE"]; line = ENVIRON["LINE"] + 0 }
+awk -F'\t' '
     { path = $0; sub(/^[^\t]*\t/, "", path) }
-    path == want {
-        n = split($1, span, ",")
+    FNR == NR { if ($1 != "-") spans[path] = $1; next }
+    {
+        line = $1 + 0; hit = 0
+        n = split(spans[path], span, ",")
         for (i = 1; i <= n; i++) if (split(span[i], b, "-") == 2 && line >= b[1] + 0 && line <= b[2] + 0) hit = 1
+        print (hit ? "inline" : "body") "\t" $0
     }
-    END { exit !hit }
-' "$dir/hunks.txt"
+' "$dir/hunks.txt" "$dir/locations.tsv"
 ```
 
 Check any JSON you write with `jq empty <file>` before ending.

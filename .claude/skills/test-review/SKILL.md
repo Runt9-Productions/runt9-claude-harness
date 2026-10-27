@@ -27,22 +27,19 @@ Read `.claude/test-review-profile.md`. If it does not exist, stop and say so.
 - **No paths**: every test file changed against the merge base with the profile's default branch, plus every
   uncommitted one, untracked files included one by one.
 
-For no paths, with this repo's default branch and test patterns:
+For no paths, fill in the profile's default branch and every pattern in its test kinds' Files column, then run:
 
 ```bash
 set -euo pipefail
-base=$(git merge-base HEAD main)
-is_test() { [[ $1 == *.bats || ( $1 == plugins/* && ( $1 == *.test.ts || $1 == *.test.tsx ) ) ]]; }
+branch='<default branch>'
+patterns=(':(glob)<pattern>')   # one entry per pattern, each prefixed with :(glob)
+base=$(git merge-base HEAD "$branch")
 {
     # Committed, staged and unstaged changes against the merge base; deleted files have nothing to review.
-    git diff -z --name-only --diff-filter=d "$base"
-    # -uall lists each file inside an untracked directory instead of the directory.
-    git status -z --porcelain -uall | while IFS= read -r -d '' entry; do
-        if [[ $entry == '?? '* ]]; then printf '%s\0' "${entry:3}"; fi
-    done
-} | sort -zu | while IFS= read -r -d '' path; do
-    if is_test "$path"; then printf '%s\n' "$path"; fi
-done
+    git diff -z --name-only --diff-filter=d "$base" -- "${patterns[@]}"
+    # Untracked files one by one, including each file inside an untracked directory.
+    git ls-files -z --others --exclude-standard -- "${patterns[@]}"
+} | sort -zu | tr '\0' '\n'
 ```
 
 An empty scope ends the run with that message.
@@ -64,7 +61,7 @@ List production files with uncommitted changes:
 git status --porcelain -uall
 ```
 
-Any entry that is not a test file or `helpers.bash` is production. The reviewer breaks production code on purpose
+Any entry that is neither a test file nor one of the profile's helpers is production. The reviewer breaks production code on purpose
 and has to restore it. For a clean file `git checkout` restores it; for a dirty one that would destroy uncommitted
 work, so the reviewer must copy it aside first and restore from the copy.
 

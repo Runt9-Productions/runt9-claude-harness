@@ -22,8 +22,9 @@ so no line of the body can pass for a header.
 
 Inside the body, a `<` that opens or closes a tag whose name contains `-`, `_` or `:` gets a `\` inserted after
 it, the same escape the engine's mailbox applies to its envelope tags: `<example-tag>` becomes `<\example-tag>`.
-Generics such as `Result<io_error>`, plain HTML such as `<div>`, comparisons and one-word tags are left alone.
-Case does not matter.
+That holds even when the tag follows a word with no space, so a generic whose type name has one of those characters
+is escaped too (`Result<io_error>` becomes `Result<\io_error>`). Plain HTML such as `<div>`, comparisons and
+one-word tags are left alone. Case does not matter.
 
 ## When it applies
 
@@ -36,7 +37,8 @@ goes to the mailbox instead.
 Teammates hosted in their own terminal pane (tmux, iTerm2) run in another process and are not affected.
 
 After the plugin reloads, it has forgotten which turns are open, so sends use the mailbox until each teammate
-makes its next model request.
+makes its next model request. It has also forgotten the messages it added before the reload: if the teammate's turn
+then ends without another model request, those messages get neither the wake-up nor a resend described below.
 
 ## When the turn ends
 

@@ -45,6 +45,5 @@ dependency, `npm update`), and only on npm 11.10 or newer. `npm ci` installs the
 - Comments state the mechanism, never the incident that motivated it.
 - Docs and skills give the rule and a one-line reason, not the story behind it.
 - Tests are few, at the boundaries, with obviously synthetic fixtures.
-- Nothing is copied in from another project. Write from what the file has to achieve, without the other source
-  open, so nothing private comes along with it.
+- Nothing is copied in from another project. Write from what the file has to achieve.
 - Changes to `.github/`, this file and tool configs need the owner's review.
