@@ -9,8 +9,12 @@ nothing from an employer, a private project or a specific machine goes in, in co
 - `harness/`: what a plugin cannot carry (status line, settings fragments, git hooks, `CLAUDE.md` template and
   fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`) and `leak-scan/` (the scan that gate and CI
-  run, with its allowlist in `.leak-scan.toml`). A `bootstrap.py` at the root will copy the parts a
-  user picks into `~/.claude`; it does not exist yet.
+  run, with its allowlist in `.leak-scan.toml`).
+- `bootstrap.py`: installs the harness parts a user picks into `~/.claude/harness/`, sets `core.hooksPath` in the
+  repositories named, and installs plugins from the marketplace. A new installable part under `harness/` registers a
+  component in its `HARNESS_COMPONENTS`. Its tests are `test_bootstrap.py` beside it.
+- `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
+  needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
@@ -36,6 +40,14 @@ for that session only.
 To check a mod, run `npm ci` once at the root, then load the mod as above, which writes the types `tsc` needs into
 the plugin. Then run `npx tsc -p plugins/<name>`, `npx oxlint -c .oxlintrc.json plugins/<name>` and
 `claude plugin test plugins/<name>`.
+
+To check Python, install the pinned tools into a virtual environment once, then run the checks from the root. CI adds flags that keep a config file a PR adds from changing them.
+
+```
+python3 -m venv <venv>
+<venv>/bin/pip install --no-deps --only-binary :all: -r requirements-dev.txt
+<venv>/bin/ruff check . && <venv>/bin/ruff format --check . && <venv>/bin/python -m pytest -p no:cacheprovider
+```
 
 The `min-release-age` cooldown in `.npmrc` applies only when npm resolves versions (`npm install` adding or changing a
 dependency, `npm update`), and only on npm 11.10 or newer. `npm ci` installs the lockfile as written and skips it.

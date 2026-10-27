@@ -41,7 +41,7 @@ Routing, added when the diff matches:
 
 | Reviewer | Matches |
 |---|---|
-| `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `harness/`; `package.json`; `package-lock.json`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
+| `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `harness/`; `package.json`; `package-lock.json`; `requirements-dev.txt`; `ruff.toml`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
 | `mod-contract` | `plugins/*/hooks/*.ts`; any `*.tsx`; anything under `plugins/*/types/`; a change to `dependencies` or `types` in a `plugin.json` |
 
 Deep pass: `principal-review`. An open question the panel could not settle goes to it, scoped to that question.
@@ -67,6 +67,10 @@ The scale is Critical (Must Fix), High (Should Fix), Normal (Could Fix). Referen
   channel it reads; a channel added without a planted hit is unverified.
 - Type-aware oxlint passes without types. A CI step checks that Claude Code wrote `tsconfig.json` and
   `.claude-plugin/types/`; weakening that step makes lint vacuous.
+- The `python` job's flags are what keep a PR from changing its own checks: `-P`, `-c /dev/null`, `--noconftest` and
+  the `norecursedirs` override for pytest, `--config ruff.toml` and `--no-respect-gitignore` for ruff. Dropping one
+  lets an added file switch a check off while CI stays green. With no config file only default discovery applies, so
+  a test file not named `test_*.py` never runs. A run that collects no tests exits 5 and fails the job.
 - The version check runs per plugin. Nothing checks that both partners of a contract rose together.
 - A marketplace entry holds only `name`, `source` and `description`; CI enforces that.
 - In a plugin's `settings.json`, every key other than `agent` and `subagentStatusLine` is dropped without a warning.
@@ -108,6 +112,8 @@ A new plugin with a contract adds its rows here.
 
 - A new plugin brings a marketplace entry, a README, `author`, `version` and tests at its boundaries.
 - A change to what a plugin ships brings a `version` rise, and so does every contract partner it touches.
+- A new installable part under `harness/` brings a component in `HARNESS_COMPONENTS` in `bootstrap.py`, or users
+  never get it.
 - A new contract brings a row under "Plugin contracts" and, where one plugin cannot work without the other loaded, a
   `dependencies` entry.
 
@@ -141,6 +147,8 @@ something the ruling did not account for.
 - Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
   common mistakes only. (2026-10-25)
 - CI reviewing a PR with that PR's own `.claude/` and `CLAUDE.md`. (2026-10-25)
+- `bootstrap.py githooks` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
+  (2026-10-27)
 
 ## Delivery
 

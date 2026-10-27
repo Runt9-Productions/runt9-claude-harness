@@ -12,15 +12,17 @@ Facts about this repository's tests that `/test-review` and the `test-reviewer` 
 |---|---|---|---|---|
 | bats | `**/*.bats` | `.github/scripts/tests/helpers.bash` | `bats <file>`, or one test with `bats -f '<regex>' <file>` | TAP: `1..N`, then one `ok` or `not ok` line per test |
 | mod kit | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | none | `claude plugin test plugins/<name>` | one `(pass)` or `(fail)` line per test, then `N pass` and `N fail` |
+| pytest | `**/test_*.py` | none | `python -m pytest -p no:cacheprovider -v <file>`, or one test with `-k '<name>'`, using the packages `requirements-dev.txt` pins | one `PASSED` or `FAILED` line per test, then `N passed` and `N failed` |
 
 Production code is every file that is neither a test nor a helper listed above.
 
 ## Checks on every scoped file
 
 - **It has tests.** bats passes a file with no tests in it, so count the per-test lines rather than trusting the exit
-  status.
+  status. pytest counts each parametrized case as a test, so count cases, not functions.
 - **CI runs it.** `.github/workflows/ci.yml` must pick the file up. A test CI never runs protects nothing.
-- **Lint.** shellcheck runs over bats files and their helpers, so a fix must pass it.
+- **Lint.** shellcheck runs over bats files and their helpers, and ruff (`ruff check` and `ruff format --check`) over
+  Python tests, so a fix must pass both.
 - **Requirements.** A test file's header comment names every tool it needs beyond bash and git.
 
 ## Reference files
@@ -29,6 +31,7 @@ Production code is every file that is neither a test nor a helper listed above.
 |---|---|
 | bats | `.claude/agents/references/test-review-shell.md` |
 | mod kit | `.claude/agents/references/test-review-mod-kit.md` |
+| pytest | `.claude/agents/references/test-review-pytest.md` |
 
 ## Suite policy
 
