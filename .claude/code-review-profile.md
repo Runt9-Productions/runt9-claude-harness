@@ -1,167 +1,171 @@
-# Code review profile: runt9-claude-harness
+# Code review profile
 
-Read by the `/code-review` skill and by every reviewer on its panel.
+Facts about this repository that `/code-review` and its panel need. The skill reads every section; each reviewer
+reads the sections its own file names. The pre-push hook hands a copy of this file, named `code-review-profile.md`,
+to the `public-leak` review it runs.
 
-**What ships from here.** A public, MIT-licensed Claude Code plugin marketplace plus harness pieces that users copy
-into `~/.claude`. Users install them to shape and constrain an agent running with their own credentials, so a wrong
-guard, a broken mod or a leaked private detail reaches everyone who installed or cloned it, and the repository's git
-history keeps whatever was pushed. A plugin change reaches users only when its version rises and they update.
+## What ships, and why a defect is expensive
 
-## 1. Diff fetch
+This is a public, MIT-licensed Claude Code plugin marketplace (`runt9`), plus harness parts that users copy into
+their own `~/.claude`. Those parts exist to hold back an agent that is running with its user's credentials, so a guard
+that quietly lets something through fails the one job it has. Everything merged here is public, and git history keeps
+whatever was pushed even after a later commit removes it. A plugin change reaches a user only once its `version` has
+risen and they run an update, so a fix that skips the version rise never arrives.
 
-- Working tree: `git diff HEAD > <review-dir>/diff.patch` (against `HEAD`: work is staged as it is written)
-- Staged only: `git diff --staged > <review-dir>/diff.patch`
-- Single commit: `git show <sha> > <review-dir>/diff.patch`
-- Range: `git diff <a>..<b> > <review-dir>/diff.patch`
-- Pull request: `gh pr diff <n> > <review-dir>/diff.patch`; commit messages with `gh pr view <n> --json commits`,
-  the description with `gh pr view <n> --json body`. `gh` reads its token from `GH_TOKEN`; in CI that token can only read.
-- Default branch: `main`
-- Paths excluded from review: none. `package-lock.json` stays in the diff for `guard-security` and `public-leak`;
-  other reviewers skip it.
-- Review output root: `$CODE_REVIEW_OUTPUT` when that variable is set, otherwise `.claude/output/code-review/`.
-  Under `--permission-mode dontAsk`, as in CI, writes inside `.claude/` are refused whatever the allow rules say.
-- Inline the diff in prompts when under: 300 lines
+## Fetching the diff
 
-## 2. Reviewer routing table
-
-| Reviewer id | Include when the diff... |
+| Target | Command |
 |---|---|
-| `guard-security` | touches `.github/**`, any `hooks/` directory, `bootstrap.py`, `harness/**`, `package.json`, `package-lock.json`, or any code that refuses, rewrites or parses a tool call, a command, a path or PR content |
-| `mod-contract` | touches `plugins/*/hooks/*.ts`, `*.tsx`, `plugins/*/types/**`, or a `plugin.json` `dependencies` or `types` field |
+| Working tree | `git diff HEAD` (staged and unstaged changes, and new files once staged) |
+| Commit | `git show <sha>` |
+| Range | `git diff <a>..<b>` |
+| Pull request | `gh pr diff <n>`, then `gh pr view <n> --json commits,body` for the commit messages and the description |
 
-- **Always-on reviewers:** `principal-review`, `code-health`, `staleness-and-debris`, `public-leak`. Also what
-  `/code-review <target> default` runs.
-- **Auto floor:** `public-leak`, on every `/code-review <target> auto` panel, because whatever a diff carries goes
-  public when it merges.
-- **Deep-pass reviewer:** `principal-review`, scoped to the open question.
+- `gh` authenticates with `GH_TOKEN`. In CI that token can only read.
+- Default branch: `main`.
+- No path is excluded from review. `package-lock.json` is relevant only to `guard-security` and `public-leak`;
+  other reviewers may skip it.
 
-## 3. Known-fragile patterns
+## Output
 
-- **A required check that never reports.** `gate` is the required check. A `paths`/`paths-ignore` filter or a
-  trigger change that stops the workflow starting on some PR leaves `gate` unreported, and the PR waits forever.
-  Silent because nothing fails. Check when the diff touches `.github/workflows/`.
-- **A needed job that is skipped passes.** `gate` runs with `if: always()` and fails on `failure` or `cancelled`; a
-  new job must be in its `needs`. Silent because a job outside `needs` can fail and `gate` still passes.
-- **A check that passes on nothing.** bats passes with no test files, so the `bats` step counts them first; the
-  leak scan's `self_check` plants an address in every channel it reads and stops if one goes unreported. Removing
-  either lets a broken run pass.
-- **Type-aware oxlint without types exits 0.** The mod check fails only because a step tests that Claude Code wrote
-  `tsconfig.json` and `.claude-plugin/types/`. Removing or reordering that step makes lint pass on nothing.
-- **A plugin changed without its version rising reaches nobody.** CI checks one plugin at a time; plugins with a
-  contract between them (section 4) must rise together, which CI does not check.
-- **Marketplace entries carry only `name`, `source` and `description`.** Anything else ships behaviour no plugin
-  version covers. CI enforces the keys.
-- **A plugin's `settings.json` can carry only `agent` and `subagentStatusLine`.** Other keys are ignored silently.
-- **`CLAUDE_PLUGIN_DATA` is deleted on uninstall.** State a user would want to keep does not belong there.
-- **A guard that fails open.** A hook or mod guard whose error path (missing interpreter, unparsable input, a
-  thrown exception) lets the call through looks fine in every test of the happy path.
-- **Comments citing a gitignored path** (`.claude/output/`, `.claude/settings.local.json`). The pointer is dead on
-  every other machine and reads as authoritative until then.
+- Root: `$CODE_REVIEW_OUTPUT` when it is set, otherwise `.claude/output/code-review/`. CI sets it, because under
+  `--permission-mode dontAsk` every write inside `.claude/` is refused.
+- Inline threshold: a diff under 300 lines goes into the reviewer prompts; at 300 or more, reviewers read it from disk.
 
-## 4. Contracts between plugins
+## Panel
 
-| Contract | Sides |
+Always-on: `principal-review`, `code-health`, `staleness-and-debris`, `public-leak`. This is the `default` panel and
+the starting point of `auto`. `public-leak` is among them because every merged line becomes public.
+
+Routing, added when the diff matches:
+
+| Reviewer | Matches |
 |---|---|
-| teammate-delivery redirects only sends whose origin is the model; a plugin's `session.send` keeps its own framing and timing | `plugins/teammate-delivery/hooks/register.ts` and any plugin that sends to a teammate |
-| An idle teammate receives a delivered message as from `team-lead`, the engine's name for the main session | `plugins/teammate-delivery/hooks/register.ts` `LEAD_NAME` and any tool text that tells a teammate who a message is from |
-| teammate-delivery answers a model's send to a running teammate `{ isDelivered: true }` without `next`, so a `session.send` hook beneath it never sees that send, no `session.receive` hook sees it arrive, and the receiver has no harness-verified `origin.teammate`, only the sender's name in the row's header | `plugins/teammate-delivery/hooks/register.ts` and any plugin with a `session.send` or `session.receive` hook |
+| `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `harness/`; `package.json`; `package-lock.json`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
+| `mod-contract` | `plugins/*/hooks/*.ts`; any `*.tsx`; anything under `plugins/*/types/`; a change to `dependencies` or `types` in a `plugin.json` |
 
-## 5. Living docs that go stale
+Deep pass: `principal-review`. An open question the panel could not settle goes to it, scoped to that question.
 
-| Doc | Should be updated when the diff... |
+## Severity calibration
+
+The scale is Critical (Must Fix), High (Should Fix), Normal (Could Fix). Reference points for this repo:
+
+- **Critical**: a guard that an honest change or a common mistake gets past; private information anywhere in the
+  diff, its messages or its file names; a CI check that runs and checks nothing.
+- **High**: a contract changed on one side only; a plugin README that misdescribes what the plugin does; a contract
+  partner left without its version rise.
+- **Normal**: leftover debug output; history or incident narrative in a comment; a README missing a line for a new
+  setting or need.
+
+## Fragile spots CI does not catch
+
+- `gate` in `ci.yml` is the only required check. A path filter or a trigger change that stops the workflow starting
+  means `gate` never reports, and the PR waits forever.
+- `gate` runs under `if: always()` and goes red when a job it needs failed or was cancelled. A new job that is not in
+  its `needs` list can fail without blocking a merge.
+- bats passes when given no files, so the CI step counts them first. The leak scan's `self_check` plants a hit in each
+  channel it reads; a channel added without a planted hit is unverified.
+- Type-aware oxlint passes without types. A CI step checks that Claude Code wrote `tsconfig.json` and
+  `.claude-plugin/types/`; weakening that step makes lint vacuous.
+- The version check runs per plugin. Nothing checks that both partners of a contract rose together.
+- A marketplace entry holds only `name`, `source` and `description`; CI enforces that.
+- In a plugin's `settings.json`, every key other than `agent` and `subagentStatusLine` is dropped without a warning.
+- `CLAUDE_PLUGIN_DATA` is deleted when the plugin is uninstalled, so nothing that must outlive the plugin belongs there.
+- A guard whose error path allows the call it was meant to judge.
+- A comment that points readers at a gitignored path (`.claude/output/`, `.claude/settings.local.json`), which no
+  other clone has.
+
+## Plugin contracts
+
+Behaviour other plugins or the engine rely on. A change to either side of a row is reviewed against the other side.
+
+| Plugin | Contract |
 |---|---|
-| `CLAUDE.md` | changes the layout, how releases work, where local layers live, or a rule under "Writing here" |
-| `README.md` | changes how the marketplace is added, installed or updated |
-| `plugins/<name>/README.md` | changes what that plugin does, its settings, or what it needs |
-| `.claude/code-review-profile.md` | adds a plugin contract (section 4), a CI check with a silent failure (section 3), or a decided non-finding (section 10) |
+| `teammate-delivery` | Diverts only sends whose origin is the model; sends a plugin makes are left alone. |
+| `teammate-delivery` | An idle receiver sees the lead under the name `team-lead`, which must equal `LEAD_NAME` in the module. |
+| `teammate-delivery` | A diverted send returns `{ isDelivered: true }` and never calls `next`. Lower `session.send` hooks and every `session.receive` hook therefore never see it, and the receiver knows the sender only by the name in the row's header, never by a verified `origin.teammate`. |
 
-## 6. Maintained mirrors
+A new plugin with a contract adds its rows here.
 
-| Mirror | Mirrors what | Regenerated by |
+## Living docs
+
+| Doc | Must change when |
+|---|---|
+| `CLAUDE.md` | layout, releasing, machine-local layers or the "Writing here" rules change |
+| `README.md` | adding, installing or updating a plugin works differently |
+| `plugins/<name>/README.md` | that plugin's behaviour, settings or requirements change |
+| this profile | a contract appears, a CI check is found to fail silently, or something is ruled not to be a finding |
+
+## Mirrors
+
+| Copy | Source | Kept in step by |
 |---|---|---|
-| `.claude-plugin/marketplace.json` entry `description` | `plugins/<name>/.claude-plugin/plugin.json` `description` | hand-edited |
-| Version pins in `.github/workflows/*.yml` comments (`# v7.0.1`) | the pinned commit SHA beside them | Dependabot |
-| "tuned on" version in `harness/leak-scan/README.md` | `version` in `.github/scripts/install-betterleaks.sh` | hand-edited |
+| a marketplace entry's `description` | the plugin's `plugin.json` `description` | hand |
+| a `# vX` comment beside a pinned action | the SHA it annotates | Dependabot |
+| the "tuned on" version in `harness/leak-scan/README.md` | `version` in `install-betterleaks.sh` | hand |
 
-## 7. Companion-artifact rules
+## Companions
 
-- A new `plugins/<name>/` requires a marketplace entry, a `README.md`, `author` and `version` in its `plugin.json`,
-  and tests at its boundaries.
-- A change to what a plugin ships requires its `version` to rise (CI checks), and the version of every plugin it has
-  a contract with when the contract changes.
-- A new contract between plugins requires a row in section 4 and a `dependencies` entry where one plugin needs the
-  other loaded.
+- A new plugin brings a marketplace entry, a README, `author`, `version` and tests at its boundaries.
+- A change to what a plugin ships brings a `version` rise, and so does every contract partner it touches.
+- A new contract brings a row under "Plugin contracts" and, where one plugin cannot work without the other loaded, a
+  `dependencies` entry.
 
-## 8. Test-quality traps
+## Test-quality traps
 
-- **Stand-ins for another plugin.** A kit test that copies another plugin's result text or behaviour keeps passing
-  after the real plugin changes. Flag a copied string with no test that compares it to the real source.
-- **Kit stubs that answer everything.** A stubbed engine call returning a default indistinguishable from a real
-  answer lets a test pass with the code under test removed. Ask whether the assertion could still pass if the change
-  were reverted.
+- A test that copies a stand-in for another plugin instead of loading it. The copy keeps passing after the real
+  plugin changes.
+- A mod kit stub whose default answer would also satisfy the test if the change under test were removed.
 
-## 9. Leftover-debris patterns
+## Debris
 
-- `console.log` or a `$.ui.toast` added for debugging
-- `test.only`, `test.skip`, or a focused `describe`
-- A literal home path, session id or machine name in a fixture
-- Commented-out code; a TODO or FIXME added in passing
+- `console.log` or `$.ui.toast` left in for debugging.
+- A focused or skipped test.
+- A real home directory, session id or machine name in a fixture.
+- Commented-out code.
+- A TODO or FIXME added in passing, unrelated to the change.
 
-## 10. Severity calibration
+## Rulings that are not findings
 
-- **Critical here looks like:** a guard that an honest change or a common mistake gets past; a personal, employer or private-project
-  detail in any file or commit message; a CI check that passes without checking anything.
-- **High here looks like:** a contract changed on one side; a doc now wrong about what a plugin does; a version not
-  raised for a contract partner.
-- **Normal here looks like:** leftover debug output; a comment narrating history; a missing README line.
+Each was decided by the owner, on the date shown where one was recorded. Report one only when the diff brings
+something the ruling did not account for.
 
-**Explicitly NOT a finding in this repository:**
+- The GitHub org and repository names, the publisher name "Runt9 Productions" (every plugin's `author.name`), the
+  `runt9` marketplace name, the `runt9-claude-bot[bot]` name, and the GitHub noreply addresses that go with them.
+- The owner's own email address as a commit author or committer, in its entry in `.leak-scan.toml` and in its case in
+  `harness/leak-scan/test_scan.bats`. Anywhere else it is a finding. (2026-10-25)
+- Runners pinned to `ubuntu-24.04`, until Ubuntu 26 runners exist. (2026-10-24)
+- The required `gate` check not being pinned to a source app: the bot has no permission to write statuses or checks.
+- CI installing `claude-code@latest` outside the lockfile. (2026-10-24)
+- The invisible-character check flagging emoji variation selectors.
+- Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
+  common mistakes only. (2026-10-25)
+- CI reviewing a PR with that PR's own `.claude/` and `CLAUDE.md`. (2026-10-25)
 
-- The names Runt9 Productions and runt9-claude-harness, the `runt9` marketplace name, the bot identity
-  `runt9-claude-bot[bot]`, and GitHub noreply addresses: published on purpose.
-- The owner's own address as a commit author or committer, and in the `.leak-scan.toml` entry and the
-  `harness/leak-scan/test_scan.bats` case that allow it there: decided 2026-10-25. Anywhere else, in a file or a
-  commit message, it is still a finding.
-- Runners pinned to `ubuntu-24.04`: decided 2026-10-24, until the runners move to Ubuntu 26.
-- `gate`'s source is not pinned to GitHub Actions: the bot holds neither statuses nor checks write, so nothing but
-  Actions and the owner can report it.
-- `@anthropic-ai/claude-code@latest` installed outside the lockfile in CI: decided 2026-10-24, so CI runs the
-  version auto-updating users run.
-- The invisible-character check failing on emoji with a variation selector: accepted.
-- A deliberate attack on the repository's own guards: decided 2026-10-25. The guards keep honest agents honest and
-  stop common mistakes. An agent working to defeat them as the same OS user (pushing a ref that names a blob,
-  rewriting a guard script or an installer in its PR, steering git through its environment, hiding text from the
-  scan's shape rules) is out of scope: it holds the bot's key and could push without git, and the owner's review
-  of the diff before merge is the control. Raise a gap only when an honest change or a common mistake gets through.
-- The CI review loading the PR's own `.claude/` and `CLAUDE.md` while it holds the Claude token:
-  decided 2026-10-25, so a reviewer fix is reviewed by the fixed reviewer. A PR that rewrites its own reviewers is
-  for the human review to catch.
+## Delivery
 
-## 11. Report delivery
+- **The report.** Write the complete report to `<review-dir>/review.md` and nowhere else. Subagent writes to files
+  named `REPORT*`, `SUMMARY*`, `FINDINGS*` or `ANALYSIS*` are refused. A run that writes no report says why in its
+  final message; CI prints the first 4000 characters of that message.
+- **PR targets** also write `<review-dir>/review-payload.json`:
+  - `commit_id`: the 40-hex head SHA the diff was fetched at. If it is missing or malformed, CI uses the event's head.
+  - `body`: the review summary. It keeps all three severity headings, and a finding placed inline appears there as a
+    one-line pointer to its comment.
+  - `comments[]`: each with `path`, `line`, `side: "RIGHT"` and `body`, carrying one whole finding. `line` is the
+    new-side line number counted from the hunk header. CI drops every other field.
+- **Body cap.** Keep `body` under 60,000 characters, below GitHub's 65,536-character limit for a review. When the full
+  body would pass that, shorten every finding in it to one line with its location, and say that the full text is in
+  the inline comments and in `review.md`.
+- **Fallback.** GitHub rejects the whole review when one comment does not land on the diff. CI then posts only
+  `review.md`, cut to 60,000 bytes, so `review.md` holds every finding in full, inline or not.
+- **CI flow.** Adding the `code-review-requested` label to a same-repo PR runs `/code-review <n> auto`. The reviewing
+  job never writes to GitHub. A separate job, the only one holding write permission, posts the result as a COMMENT
+  review on the head commit and removes the label. Bots that push add the label; the owner adds it again to rerun.
+  It comes before human review and never blocks a merge.
 
-Write the full report to `<review-dir>/review.md` and return it to the caller; deliver it nowhere else. Not
-`report.md`: Claude Code refuses a subagent's write to any `REPORT*`, `SUMMARY*`, `FINDINGS*` or `ANALYSIS*` `.md`
-file, and this skill runs forked.
+## Standing instructions
 
-When the target is a pull request number, also write `<review-dir>/review-payload.json`, the review as GitHub posts
-it: `{"commit_id": "<the PR head the diff was fetched at>", "body": "<markdown>", "comments": [{"path":
-"<repo-relative path>", "line": 42, "side": "RIGHT", "body": "<one finding>"}]}`.
-
-- **Inline comments only on lines inside the diff:** an added or context line of a hunk, numbered from the `+` side of
-  its hunk header, not the file on disk. GitHub rejects the whole review if one comment misses, and CI then posts
-  `review.md` alone as the body. A finding on a line the PR did not touch goes in the body.
-- **The body is the report**, with every severity header. A finding posted inline appears there as a one-line
-  pointer, so the counts per severity still read in one place. Each comment carries one finding: severity, claim,
-  consequence, evidence and the reviewer that found it.
-
-In CI, the `code-review-requested` label on a pull request runs `/code-review <n> auto`, and a separate job posts
-the payload, or `review.md` without one, as a comment-type review on the PR's head commit and removes the label, so
-the reviewing agent never holds a token that can write to GitHub. A bot that pushes adds the label to request a
-review, then addresses the findings; the owner adds it for another round. The review precedes a human review and
-never blocks a merge.
-
-## 12. Standing reviewer instructions
-
-The standards `code-health` judges against: the repository's `CLAUDE.md` ("Writing here"), and where present on the
-machine running the review, `~/.claude/code-style-principles.md`, `~/.claude/comment-style-guide.md` and the
-language's guide (`~/.claude/python-style-guide.md` for Python).
+`code-health` judges the change against the "Writing here" rules in `CLAUDE.md`, and also against each of these that
+exists on the machine running the review: `~/.claude/code-style-principles.md`, `~/.claude/comment-style-guide.md`, and
+the guide for the language in the diff (`~/.claude/python-style-guide.md` for Python). A missing file is skipped
+without comment.
