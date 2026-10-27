@@ -75,6 +75,15 @@ if [[ -n $pr ]]; then
             break
         fi
     done
+    # Reviewers read files on disk, so a checkout of another commit puts their line numbers on the wrong text. In a
+    # merge checkout the PR head is HEAD^2.
+    if [[ -s $dir/head-sha ]]; then
+        head=$(< "$dir/head-sha")
+        if [[ $(git rev-parse HEAD) != "$head" && $(git rev-parse -q --verify 'HEAD^2' || true) != "$head" ]]; then
+            echo "the checkout is not the PR head $head"
+            exit 4
+        fi
+    fi
     gh pr view "$pr" --json commits,body > "$dir/pr.json"
 else
     fetch > "$dir/patch.diff"
@@ -83,7 +92,8 @@ fi
 echo "$dir"
 ```
 
-The root line is this repo's; use the output root the profile names. An empty diff ends the run with that message.
+The root line is this repo's; use the output root the profile names. An empty diff ends the run with that message,
+and so does a checkout that is not the PR's head: check out the head, or its merge, and run again.
 Every later block runs in a new shell, so start each by setting `dir` to the path this one printed. When a pull
 request has no `head-sha`, it kept moving; leave `commit_id` out of the payload.
 
