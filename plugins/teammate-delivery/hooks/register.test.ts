@@ -71,6 +71,8 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
     return { value: undefined }
   })
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  // A stream hook's handler has to be a generator, and this step streams no chunks.
+  // oxlint-disable-next-line require-yield
   on('turn.step', async function* (_, e) {
     await options.duringStep?.()
     const stopReason = options.requestFails ? null : ('end_turn' as const)
