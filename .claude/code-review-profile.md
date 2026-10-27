@@ -34,8 +34,9 @@ risen and they run an update, so a fix that skips the version rise never arrives
 
 ## Panel
 
-Always-on: `principal-review`, `code-health`, `staleness-and-debris`, `public-leak`. This is the `default` panel and
-the starting point of `auto`. `public-leak` is among them because every merged line becomes public.
+Always-on: `principal-review`, `code-health`, `simplification`, `staleness-and-debris`, `public-leak`. This is the
+`default` panel and the starting point of `auto`. `public-leak` is among them because every merged line becomes
+public, and `simplification` because every review otherwise only adds code.
 
 Routing, added when the diff matches:
 
@@ -56,6 +57,11 @@ The scale is Critical (Must Fix), High (Should Fix), Normal (Could Fix). Referen
   partner left without its version rise.
 - **Normal**: leftover debug output; history or incident narrative in a comment; a README missing a line for a new
   setting or need.
+
+Adding code is not free. Code has to earn its place, and Normal after Normal that guards against ever less likely
+cases makes code unreadable, unmaintainable and cumbersome. So a Normal is optional: the author may decline one with a
+one-line reason. A finding whose only fix is a guard for a case no honest change or common mistake reaches is not
+reported at all. A finding that removes code is worth as much as one that adds it.
 
 ## Fragile spots CI does not catch
 
@@ -173,6 +179,7 @@ something the ruling did not account for.
 
 ## Standing instructions
 
-`code-health` judges the change against the "Writing here" rules in `CLAUDE.md` and the style-guide skills in this
-checkout: `harness/skills/code-style/SKILL.md`, `harness/skills/comment-style/SKILL.md`, and the skill for the
-language in the diff (`python-style`, `kotlin-style` or `typescript-style` under `harness/skills/`).
+`code-health` and `simplification` judge the change against the "Writing here" rules in `CLAUDE.md` and the
+style-guide skills in this checkout: `harness/skills/code-style/SKILL.md`, `harness/skills/comment-style/SKILL.md`,
+and the skill for the language in the diff (`python-style`, `kotlin-style` or `typescript-style` under
+`harness/skills/`).
