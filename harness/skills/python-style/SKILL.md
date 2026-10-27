@@ -30,7 +30,7 @@ follow at once is better than a clever one-liner they have to decode.
 
 ```python
 def main() -> None:
-    ...
+    export_reports(Path("reports"))
 
 
 if __name__ == "__main__":
