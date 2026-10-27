@@ -1,93 +1,101 @@
 ---
 name: test-review
-description: Reviews existing tests for whether they are worth having (the name matches the assertions, the scenario is reachable, the test can actually fail, and it catches something no other test does), then fixes the tests and reports what it changed. Runs in a forked subagent and hands the review to a cold reviewer agent. Distinct from /code-review, which hunts bugs in production code. Use when the user says "/test-review", "review my tests", "are these tests any good", "do we have too many tests", or asks whether a suite is meaningful or redundant.
+description: Judges whether existing tests earn their place (each name claims only what it asserts, the scenario can really happen, a wrong implementation would fail it, no other test already catches the same defect), proves each verdict by breaking the code under test, fixes the tests and reports what changed. Use for "/test-review", "review my tests", "are these tests any good", "are these tests meaningful", "do we have too many tests", "are any of these redundant".
+argument-hint: "[<test file or directory>...]"
 context: fork
 allowed-tools: Bash, Read, Agent
-argument-hint: "[path ...]"
 ---
 
-# Test review
+# /test-review
 
-Answers one question per test: *if the behavior it claims to protect broke, would this test tell us, and would it be
-the only one to?* Most bad tests pass forever, so a green suite is not evidence.
+Arguments: `$ARGUMENTS`
 
-**This is not `/code-review`.** That skill hunts for bugs in production code. This one takes the production code as
-it is and asks whether the tests are worth having. Run both; they do not overlap.
+This complements `/code-review`. That skill looks for defects in production code; this one takes production code as
+given and asks whether the tests over it are worth having.
 
-**This skill runs in a forked subagent (`context: fork`).** The caller is usually the agent that wrote the tests, and
-relaying a review means choosing what to say about it; done in the author's context, that choice is filtered by what
-the author meant. The fork starts with this file and its arguments, cannot ask the caller anything, and its final
-message goes to the main session.
+It runs in a forked context because the caller usually wrote the tests, and a verdict reached in the author's session
+inherits the author's view of them. Only your final message leaves the fork, so put the whole result in it.
 
-The review itself runs in a **cold agent**, `test-reviewer`, whose model and effort live in its own frontmatter. Never
-pass a `model` parameter when spawning it. An author knows what a test was *meant* to check, so a test that encodes
-the intention badly still reads correctly to them.
+## 1. Read the profile
 
-Two inputs come from the repository:
+Read `.claude/test-review-profile.md`. If it does not exist, stop and say so.
 
-- **`.claude/test-review-profile.md`**: what counts as a test file, how each kind runs and how to read its real
-  results, the reference file for each kind, and the repository's policy on which tests it wants at all.
-- **The reference files the profile names**: the failure modes and rules specific to that kind of test in that
-  repository. The generic criteria live in the reviewer's own definition.
+## 2. Find the scope
 
-Arguments for this run (empty means none): `$ARGUMENTS`
+- **Paths given**: each file as given, and for each directory the test files under it, matched against the profile's
+  test kinds.
+- **No paths**: every test file changed against the merge base with the profile's default branch, plus every
+  uncommitted one, untracked files included one by one.
 
-## Step 0: Read the profile
+For no paths, with this repo's default branch and test patterns:
 
-Read `.claude/test-review-profile.md`. If it does not exist, stop and say so: without it there is no way to run the
-tests, read their results or know what the repository wants from them.
+```bash
+set -euo pipefail
+base=$(git merge-base HEAD main)
+is_test() { [[ $1 == *.bats || ( $1 == plugins/* && ( $1 == *.test.ts || $1 == *.test.tsx ) ) ]]; }
+{
+    # Committed, staged and unstaged changes against the merge base; deleted files have nothing to review.
+    git diff -z --name-only --diff-filter=d "$base"
+    # -uall lists each file inside an untracked directory instead of the directory.
+    git status -z --porcelain -uall | while IFS= read -r -d '' entry; do
+        if [[ $entry == '?? '* ]]; then printf '%s\0' "${entry:3}"; fi
+    done
+} | sort -zu | while IFS= read -r -d '' path; do
+    if is_test "$path"; then printf '%s\n' "$path"; fi
+done
+```
 
-## Step 1: Determine scope
+An empty scope ends the run with that message.
 
-- **No argument:** every test file changed on this branch, including uncommitted work: `git status --porcelain` plus
-  `git diff --name-only <default branch>...HEAD`, filtered by the profile's test-file patterns.
-- **One or more paths:** exactly those files, or the test files under those directories.
+## 3. Match references
 
-If the scope holds no test files, stop and say so.
+Map each scoped file to a reference file through the profile's reference table, and confirm each reference exists
+with `test -f`. Do not read them; that is the reviewer's job, and reading them here would put their contents in your
+judgment instead of its.
 
-## Step 2: Resolve references
+A scoped file that matches no reference is still reviewed, and the report lists it as a gap. If no file matches any
+reference, the patterns are more likely wrong than the files; check them against the profile before going on.
 
-Match each scoped file against the profile's reference table, collect the distinct reference paths, and confirm each
-file exists. Do not read them for the review: the reviewer reads them itself.
+## 4. Check the tree
 
-**A scoped file with no matching reference is a coverage gap, not a reason to skip it.** Review it on the generic
-criteria and report the gap prominently, so a reference can be written. If no scoped file matched any reference,
-check the profile's patterns before going on: that is far more often a resolution mistake than a real gap.
+List production files with uncommitted changes:
 
-## Step 3: Spawn the reviewer
+```bash
+git status --porcelain -uall
+```
 
-One `test-reviewer` (Agent tool, `subagent_type: test-reviewer`, `run_in_background: false`). Its prompt carries:
+Any entry that is not a test file or `helpers.bash` is production. The reviewer breaks production code on purpose
+and has to restore it. For a clean file `git checkout` restores it; for a dirty one that would destroy uncommitted
+work, so the reviewer must copy it aside first and restore from the copy.
 
-- The scoped test files.
-- The reference paths it must read before reviewing, and the profile's path, whose suite policy it applies as
-  criterion 4's scope rule.
-- For each kind of test in scope, the profile's run command and how to read real counts from its output.
-- Whether the working tree is clean. If any production file has uncommitted changes, name it and tell the reviewer to
-  back it up and restore from the backup, since `git checkout -- <path>` would discard that work along with the
-  forced failure.
-- That it fixes test defects itself, reports production defects without touching them, and must end with no
-  production file modified.
+## 5. Spawn the reviewer
 
-Nothing else. No account of what the tests are for, which ones are known to be fine, or what to focus on: each of
-those tells the reviewer what not to question.
+Spawn one `test-reviewer` with `run_in_background: false`, and without `model`. Split the scope across more than one
+only when the production code behind it is too much for one reviewer to read whole.
 
-Split into more than one reviewer only when the scope is too large for one to read all the production code behind
-it. Coherence beats parallelism here, because a weak pattern recurs across a file, and criterion 4 compares tests
-with each other, which one reviewer seeing the whole scope does best.
+The prompt holds only:
 
-## Step 4: Relay
+- the scoped files;
+- the reference files they map to, and the profile's path;
+- for each test kind in scope, the run command and how to read its result, from the profile;
+- the dirty production files from step 4, with the instruction to back each up before changing it and restore it from
+  the backup;
+- the rule: fix the tests, report production defects without fixing them, and leave production code exactly as it was
+  found.
 
-End the run with:
+Add nothing about what you expect it to find.
 
-- **A verdict per test:** keep, fixed, relabeled or deleted, with the criterion behind every change.
-- **Every finding:** the test, the criterion it failed, and what was done.
-- **The forced-failure experiments and the failure text each produced.** This is the evidence the review was real
-  rather than a read-through.
-- **Judgment calls**, each stated so it can be vetoed; every deletion is one.
-- **Real test counts** before and after, from actual runs.
-- **Production defects** the reviewer found and left alone.
-- **Scoped files with no reference.**
-- **`git status --short`** after the run, showing which files the reviewer changed.
+## 6. Report
 
-Do not soften findings. A review that reports nothing must say what it checked and why it is confident, since "no
-findings" is otherwise indistinguishable from a shallow pass.
+Relay the reviewer's result, keeping:
+
+- each test's verdict, with the criteria it met or failed;
+- the findings;
+- the forced-failure output each verdict rests on;
+- every judgment call, including each deletion and why;
+- the real test counts before and after, from actual runs;
+- production defects found and left alone;
+- scoped files that matched no reference;
+- the output of `git status --short` at the end.
+
+A result with no findings still shows what was checked: which tests, which breaks, which runs.
