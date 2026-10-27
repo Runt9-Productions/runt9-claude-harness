@@ -1,88 +1,113 @@
 ---
 name: kotlin-style
-description: What the code-style principles mean in Kotlin, plus the rules only Kotlin needs: one guard per line and early returns, expression bodies, standard-library idioms and scope functions, extension functions, integer division, failing fast with first, getValue and error(), and KDoc syntax. Use it before writing, changing or reviewing any Kotlin file or test, and whenever someone says "write this in Kotlin", "add a test", "fix this Kotlin", "review this .kt", "clean up this class" or "write the KDoc". Load code-style beside it and comment-style for comments.
+description: Kotlin rules for writing and reviewing Kotlin code, covering guard density, expression bodies, standard library idioms, integer division, fail-fast lookups and KDoc. Use it whenever writing, editing or reviewing a .kt or .kts file, including Gradle Kotlin build scripts, and when someone asks to "write this in Kotlin", "review this Kotlin", "make this idiomatic Kotlin" or "add KDoc". Loads together with code-style, which it applies to Kotlin.
 allowed-tools: Read(~/.claude/local/kotlin-style/**)
 ---
 
 # Kotlin style
 
-What the code-style skill's principles mean in Kotlin, plus the rules only Kotlin needs. Load both before
-writing Kotlin, and again before handing it over. A repository's own style guide adds its layout, tooling and
-architecture, and wins where the two differ.
+This skill applies code-style to Kotlin. Both load together; principle numbers below refer to code-style. A
+repository's own style guide wins wherever it differs.
 
----
+## Density
 
-## One thing per line, in Kotlin
+Principle 8, in Kotlin terms: guards go one per line, each returning early. Inside a lambda, return early with
+`return@label`.
 
-Principle 8 applied. Guards go one per line and return early; inside a lambda, each is a `return@label` line.
+Avoid:
 
 ```kotlin
-// Avoid: three conditions and a query in one expression body
-fun shouldNotify(order: Order) = order.isPaid && !order.isArchived && customers.getValue(order.customerId).wantsEmail
-
-// Prefer
-fun shouldNotify(order: Order): Boolean {
-    if (!order.isPaid) return false
-    if (order.isArchived) return false
-    val customer = customers.getValue(order.customerId)
-    return customer.wantsEmail
+fun refund(order: Order): Refund? {
+    if (order.status == Status.PAID && order.lines.isNotEmpty() && !order.locked) {
+        return Refund(order.id, order.lines.sumOf { it.price * it.quantity })
+    }
+    return null
 }
 ```
 
-Helpers widen as usage widens (principle 10): a local `fun` or local extension, then a private member, then
-file-level, then a themed shared file once more than one place uses it.
+Prefer:
 
-## Expression bodies only for genuine one-liners
+```kotlin
+fun refund(order: Order): Refund? {
+    if (order.status != Status.PAID) return null
+    if (order.lines.isEmpty()) return null
+    if (order.locked) return null
 
-Use `=` bodies for pure delegation, property getters, a single call taking a trailing lambda, and an `if`/`when`
-that returns a value. Anything with more than one statement or a branch gets a block body.
+    val amount = order.lines.sumOf { it.price * it.quantity }
+    return Refund(order.id, amount)
+}
+```
 
-## Idiomatic Kotlin is welcome
+Principle 10, in Kotlin terms: a helper starts as a local function or a private extension, then becomes a private
+member, then moves to file level, then to a shared file, widening only as its callers do.
 
-Use the standard library as intended: `map`, `fold`, `zip`, `buildList`, `groupBy`, the scope functions
-(`apply`, `also`, `let`, `run`, `with`), extension functions and properties. Building a list imperatively where
-one of these fits is not a style to copy. Choose the idiom that reads most plainly for the case, and keep
-principle 8: an idiom that packs three steps into one line still breaks it.
+## Expression bodies
 
-- Extension properties and functions over free functions: `order.total`, not `totalOf(order)`.
-- `Unit`, not `Nothing`, for a function that returns normally with no value.
-- No explicit type arguments the compiler infers (`listOf<Foo>()` where the type is obvious).
-- An exhaustive `when` whose branches all just `error()` collapses into `else`.
-- Non-null types by default; nullability only where absence means something.
-- Tunable numbers get a named `val` (principle 7).
+Use `=` only for a true one-liner:
 
-## Never divide two integers
+- delegation to another function
+- a getter
+- a single call with a trailing lambda
+- an `if` or `when` that produces a value
 
-Principle 14 in Kotlin: `Int / Int` truncates silently. Divide as `Double` and round explicitly:
-`ceil(itemCount / pageSize.toDouble()).toInt()`, or `roundToInt()` when the rule rounds to nearest. The same
-holds for `%` used to round, and for integer division hidden in a helper.
+Anything else gets a block body.
 
-## Fail fast, in Kotlin
+## Standard library idioms
 
-Principle 16 in Kotlin: `first`, `getValue` and `error()` over `firstOrNull`, `getOrDefault` and a quiet
-fallback, wherever absence is a defect rather than a case.
+- Use collection operations, builders (`buildList`, `buildMap`, `buildString`), scope functions and extensions rather
+  than building lists by hand. Pick whichever reads plainest, and keep one step per line in a chain.
+- Prefer an extension to a free function that takes the receiver as its first argument.
+- Return `Unit` for functions that produce no value.
+- Omit type arguments the compiler can infer.
+- Types are non-null by default. A nullable type needs a reason.
+- Tunables are named `val`s (principle 7).
+- In an exhaustive `when`, fold the branches that only throw into one `else`:
+
+```kotlin
+val rate = when (currency) {
+    Currency.EUR -> euroRate
+    Currency.USD -> dollarRate
+    else -> error("No exchange rate for $currency")
+}
+```
+
+## Integer division
+
+Principle 14, in Kotlin terms: `/` and `%` on integers truncate toward zero without warning, so `7 / 2` is `3` and
+`-7 / 2` is `-3`. Convert to `Double`, divide, then round explicitly with `ceil`, `floor` or `roundToInt`. That applies
+inside helpers too, where the truncation is easiest to miss.
+
+```kotlin
+val exactPages = itemCount.toDouble() / pageSize
+val pages = ceil(exactPages).toInt()
+```
+
+## Fail fast
+
+Principle 16, in Kotlin terms: wherever absence is a bug, use the throwing form (`first`, `single`, `getValue`,
+`error()`, `requireNotNull`) over the defaulting one (`firstOrNull`, `getOrDefault`, `?: fallback`).
 
 ## KDoc
 
-KDoc is valuable where a caller could get something wrong, and not required elsewhere (the comment-style skill
-decides which). Editors show it on hover, so a fact scoped to one declaration belongs in its KDoc rather than in a
-separate document, where it cannot drift from the code.
+- Write KDoc where a caller could go wrong; comment-style decides where that is.
+- KDoc is markdown. Link with brackets (`[Invoice.total]`), mark code with backticks, and separate paragraphs with a
+  blank line. Use plain `@param`, `@return` and `@throws`. Javadoc tags such as `{@link}` and HTML such as `<p>` show up
+  as literal noise.
+- Open with `/**`. Write the summary, a blank line, then the tags with no blank lines between them.
+- A fact about one declaration belongs in its KDoc, beside the code, not in a separate document that drifts from it.
 
-KDoc is markdown. Javadoc syntax is not an error; it renders literally as visible noise, the same silent failure
-as opening with `/*` instead of `/**`.
-
-| Use | Not |
-|---|---|
-| `[Type]` and `[Type.member]` | `{@link Type}` |
-| backticks | `{@code x}` |
-| a blank line | `<p>` |
-| `@param` / `@return` / `@throws` | the HTML-wrapped forms |
-
-Still true from javadoc: open with `/**`, never `/*`. Summary sentence, blank line, then a **contiguous** tag block
-with no blank lines between tags.
+```kotlin
+/**
+ * Splits [order] into one shipment per warehouse.
+ *
+ * @param order must already be paid.
+ * @return shipments in the order their warehouses appear in [Order.lines].
+ * @throws IllegalStateException if a line names a warehouse that no longer exists.
+ */
+```
 
 ## Local additions
 
-Kotlin rules added on this machine. Where one conflicts with a rule above, the addition wins.
+Rules added on this machine win over the rules above where they conflict.
 
 !`cat ~/.claude/local/kotlin-style/additions.md 2>/dev/null || echo "(none)"`

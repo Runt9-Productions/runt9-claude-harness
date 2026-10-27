@@ -1,208 +1,170 @@
 ---
 name: code-style
-description: Language-neutral principles for writing and reviewing code: change the existing code instead of routing around it, make every piece earn its place, keep tests from shaping production code, one owner per piece of logic, one thing per line, fail fast, explicit rounding, domain names. Use it before writing, changing or reviewing code in any language, when planning a design, and whenever someone says "implement this", "refactor", "clean this up", "review this code", "is this the right shape", "simplify" or "fix this properly". Load the language's own skill beside it (python-style for Python, kotlin-style for Kotlin, typescript-style for TypeScript) and comment-style for comments.
+description: How to write and judge code whatever the language, covering where logic lives, naming, density, failure handling, rounding, tests and what to delete. Use it before writing or changing code in any language, when reviewing a diff, and whenever someone asks to "check this against the style guide", "review my code", "clean this up", "is this the right approach" or "refactor this". The python-style, kotlin-style and typescript-style skills build on it and load together with it.
 allowed-tools: Read(~/.claude/local/code-style/**)
 ---
 
-# Code style principles
+# Code style
 
-How code should be written, whatever the language. A language skill adds what these mean in that language
-(python-style for Python, kotlin-style for Kotlin, typescript-style for TypeScript). A repository's own style
-guide, such as `.claude/code-style-guide.md`, adds its architecture and wins where the two differ. A codebase with
-established conventions of its own follows those.
+These principles apply to code in any language. A language skill (python-style, kotlin-style, typescript-style)
+narrows them for that language and loads alongside this one. Where a repository has a style guide of its own, that guide
+decides any conflict, and a project with settled habits of its own keeps them.
 
-Read this before writing code, and again before handing it over. Reviewers check code against it.
+Read the principles for what they protect, not as a checklist. The bullets are samples: a violation they never
+mention is a violation all the same.
 
-**The principles govern; the text does not bound them.** Each rule states a principle and why it holds. Code
-that breaks a principle in a way the text does not describe still breaks it, and a reviewer who finds such a case
-raises it.
+## Scope of a change
 
-**These rules override Claude Code's built-in default against refactoring beyond the task.** When the right fix
-is to change existing code, that change is part of the task, not scope creep. What stays out of scope is
-unrelated cleanup: propose it rather than do it. Proposing means offering it for this change, not arguing to
-defer it; a yes puts it in the same change.
+- When changing existing code is the right fix, the change is part of the task. That overrides the usual reluctance to
+  refactor beyond what was asked.
+- Cleanup unrelated to the change is offered to the user as a separate suggestion, not slipped into the diff.
+- Existing code that breaks a rule is debt to pay down, not a precedent to copy.
 
-Older code that breaks a rule here is debt, not precedent.
+Everything below holds for build scripts and pipeline definitions too.
 
----
+## Principles
 
-## Change the right thing
+Language skills refer to these by number.
 
-### 1. Change the existing code; do not route around it
+### 1. Change what exists before building beside it
 
-The first design is usually the one that adds beside what exists: a mirror type, a wrapper, an adapter, a side
-channel, a new file that avoids touching an old one. It feels safe because it changes nothing. It is almost
-always the worse design, because two things now need maintaining and someone has to find and undo it in review.
+A parallel type, an adapter, a wrapper or a side channel looks safe because it touches nothing, but it doubles what
+has to be maintained and leaves two shapes to keep in step. Before adding a type, file or layer, weigh what changing
+the existing code would cost, then say which you chose and why.
 
-Instance: a second record type written to mirror an existing one minus one field. A constructor parameter on the
-existing type, set by the one caller that wanted less, does the same job with nothing new to keep in step.
+Avoid: adding `InvoiceView` that copies six fields from `Invoice` so a report can show a due date.
+Prefer: adding the due date to `Invoice` and having the report read it.
 
-**Check before adding a type, file, layer or mechanism:** what would changing the existing thing cost? Report
-that split rather than quietly writing the addition.
+### 2. Nothing stays without a job
 
-### 2. Every piece of code has to earn its existence
+Dead parameters, calls that do nothing, wrappers that only forward, and extension points nobody extends all go.
+Removing code is the largest maintainability gain available. Safeguards against failures that have never happened are
+cost too. Security checks are the exception: a breach rarely announces itself, so waiting to see one is too late.
 
-Unused parameters, no-op calls, a function wrapping one call, a filter with no filters, a configurable hook
-nothing configures: delete them. Removing code is the best thing a change can do for maintainability; not
-writing it is the second best.
+Before deleting, find out what the code protects: read its callers and its history. Something that looks dead may
+guard a case the tests never reach.
 
-This covers safeguards too. A check against a problem nobody has observed (a client-side gate repeating the
-server's, a second uncaught-exception handler, a test that only proves two hand-kept lists agree) is code that has
-not earned its place, because it costs maintenance now for a failure that may never come. Security boundaries
-are the exception: they guard against a problem that is invisible until it has already happened.
+### 3. Production code is never shaped for tests
 
-The other direction matters as much: before deleting code, find what it protects. A defensive copy that keeps a
-caller from mutating live state looks redundant and is not. Read the callers and the history (blame) first.
+If only a test wants a constructor, a setter or a visibility change, change the test instead.
 
-### 3. Tests never shape production code
+### 4. One home for each piece of logic
 
-A test is the first consumer of code, not its designer. When production code has a shape only a test wants
-(a return type chosen for an assertion, a field only a test reads, a seam only a test uses), change the test.
+Every caller goes through the same implementation, because copies drift apart. A small pattern repeated across files
+becomes a shared function. Build the abstraction early when a shape repeats or is plainly general, and pull general
+tools out of one project's code early so others can use them. Configuration nobody sets is still dead weight (rule 2).
 
-### 4. One owner per piece of logic
+### 5. Units register themselves
 
-Logic lives in one place and every caller uses it, because two copies of a check diverge. Repeated three-line
-patterns across files become one shared function.
+When a system has many interchangeable units (payment methods, export formats, report types), give each one the
+means to announce itself, keep the announced ones in a single lookup, and have callers ask that lookup. A new unit is
+then one new file and no edits elsewhere.
 
-**Favor the abstraction.** In greenfield feature work and in framework code, build it as soon as the shape
-repeats or is obviously general; do not wait for a third copy. A general tool living inside one project's code
-is a framework piece waiting to be extracted, so extract it early. What waits for real need is configuration: a
-knob nothing sets is rule 2's problem, not this rule's.
+Discovery by the framework or a build step is best; readable reflection is acceptable; a list maintained by hand is
+the last resort. Avoid a branch per unit (`if format == "csv" ... elif format == "pdf"`) and callers that name
+units directly.
 
-### 5. Registration: the unit registers itself, the registry holds units, callers go through the registry
+### 6. Shape APIs and configuration for their real consumer
 
-A unit (a definition, a controller, a screen, a handler, a command) must be registerable on its own; a registry
-holds the registered units; callers use the registry generically rather than naming units one by one. Adding a
-unit then touches only that unit.
+Anything loaded from a file is plain, serialisable data, not objects with behaviour. When the cases are known, model
+them as concrete types rather than one generic bag of optional settings.
 
-Prefer automatic registration. Reflection is acceptable when it stays readable. A manual list is the fallback
-when nothing automatic works. A hand-written branch over every unit, or a caller that knows each unit by name,
-is the thing to avoid.
+### 7. Name repeated and meaningful values
 
-### 6. Design for the real consumer
+- Give a literal a name as soon as a second site needs it; two copies of `30` or `"pending"` drift apart.
+- Tunables (retry counts, page sizes, timeouts) are named constants.
+- When the possible values are fixed and known, make them an enum: a misspelled member fails to compile or load,
+  where a misspelled string just never matches.
+- A bare number or boolean whose meaning is invisible at the call site gets a named type or a named function.
 
-Shape an API or config for how it will actually be used. A config read from a file needs concrete, serializable
-types, because a lambda has no form in that file. Concrete subclasses beat a generic parameter bag when the cases
-are known.
+Avoid: `ship(order, true, 3)`.
+Prefer: `ship(order, Priority.EXPRESS, maxAttempts = 3)` or `shipExpress(order)`.
 
-### 7. A value or string used in more than one place gets one name
+### 8. One action per line
 
-Repeated literals drift apart one edit at a time. Tunable numbers get a named constant, so tuning is one edit.
+A long line is fine; a dense one is not.
 
-Where the set of values is closed, use an enum, not a raw string, so a typo fails to compile or load instead of
-matching nothing. A bare number or boolean in a callback signature says nothing about what it means; give it a
-named type or pass a named function.
+- A condition has at most two boolean terms. More than that becomes a named variable or function.
+- Guards go one per line, each returning early.
+- No call nested inside another call on the same line. Chain the calls or name the intermediate value.
+- Wrap at 160 columns unless a configured formatter decides.
 
----
+Avoid: `send(render(load(path), template), recipient)`.
+Prefer: load the order into a named value, render it into another, then send that.
 
-## Write it to be read
+### 9. Functions are short and focused by default
 
-Build scripts and CI configuration are code, and every rule here applies to them. They are where a line that looks
-removable and is not is most common.
+Logic that is genuinely coupled may run longer, laid out in named phases (validate, compute, persist). Length alone
+is no reason to pull out a helper; reuse or generality is.
 
-### 8. One thing per line
+### 10. Helpers live next to their use
 
-Long lines are fine; dense lines are not. A 150-character line that logs one message is readable. A line that
-branches, nests calls, or combines several conditions is not.
+A helper starts as close to its caller as the language allows and widens its scope only as its callers widen: local,
+then file, then a shared file grouped by theme.
 
-- At most two boolean terms in one condition. Past that, split into separate guards or named variables.
-- Guards go one per line, returning early.
-- No calls nested inside calls on one line; chain them, or name the intermediate.
-- Hard wrap at 160 characters, unless a configured formatter sets the length.
+### 11. A file is built around one main piece
 
-The shape to avoid is a one-line expression holding three conditions and a query. It is shorter and slower to
-read. The language skills show what this means for their idioms.
+Small satellites may share the file: the unit's own enum, private support types, or a family of tiny declarations that
+belong together. Split a file that stacks unrelated units, and give a package that keeps growing subpackages.
 
-### 9. Functions short and single-focused by default
+### 12. Generated text shows its result
 
-Keep functions small and doing one thing. A longer function is acceptable where the logic is genuinely coupled;
-then split it into phases with blank lines and name each intermediate. Do not extract a helper only to make a
-function shorter; extract it when it is reused or genuinely general.
+Code that assembles human-readable text (an email body, a report, a help message) carries a comment with a sample of
+the finished output, builds it from named parts, and keeps a paragraph of prose in one multiline literal instead of
+gluing pieces together.
 
-### 10. Put a helper as close to its use as possible
+### 13. Names carry the domain meaning
 
-Start inside the one function that needs it, then widen only as usage widens: private to the file, then a themed
-shared file once more than one place uses it.
-
-### 11. One substantial unit per file
-
-A file holds one class or one cohesive set of functions that does real work. Small satellites may share it: an
-enum only that unit uses, a private support type, a family of one-line declarations. A file stacking many
-unrelated units gets split. A package that grows meaty gets subpackages.
-
-### 12. Show the finished output above code that builds it
-
-A function that builds a string for a person to read carries an example of the finished result in its comment,
-because the result is hard to picture from the code that assembles it. Build the string from named parts rather
-than one template with every variable smashed together. Prose and help text use the language's multiline
-strings, not concatenated fragments.
-
-### 13. Names say what the thing is in the domain
-
-No one-letter names, no names that describe the mechanism instead of the meaning. A type holding why an order was
-put on hold is `HoldReason`, not `OrderStateFlag`. Rename when a name describes what the code did two changes ago.
-
-- Prefer the plain word to the textbook one.
-- A pattern's role goes in the type name (`...Policy`, `...Repository`, `...Dto`), so the kind of thing is
-  visible at every use.
-- Do not reuse an existing domain term for a new concept.
+- Name by domain meaning, not by mechanism: `overdueInvoices`, not `filteredList`.
+- No single-letter names.
+- Rename when a name stops being true.
+- Plain words over jargon.
+- A pattern's role appears in the type name (`InvoiceRepository`, `ExportRegistry`).
+- Never reuse an existing domain term for something new; two meanings for one word guarantees confusion.
 
 ### 14. Rounding is explicit
 
-A rounding rule never hides inside an operator that does not look like one, because a reader cannot see a rule
-the operator applies silently. Divide exactly, then round with a named function whose rule is visible. Each
-language skill says where its operators truncate or round.
+Get the exact quotient first and apply the rounding rule by name (floor, ceiling, half up). If an operator rounds for
+you, nobody reading the line can tell whether that rule was chosen or an accident. Each language skill lists how its own operators behave.
 
----
+### 15. Tests check intended behaviour
 
-## Tests and failure
+- Write tests from the use case, not by reading the implementation, which only bakes its bugs into the assertions.
+  When the code and the intended behaviour disagree, fix the code or ask.
+- Fixtures go through the real lifecycle (create, load, save) rather than being assembled by hand in a state the system
+  could never produce. If the real path is awkward to exercise from a test, report that awkwardness; it says something
+  about the design.
+- No test-only code in production (rule 3).
+- Do not test what the language or a library already guarantees.
+- Add tests as the work proceeds. Test-first is welcome as long as an early test is rewritten when the design shifts,
+  rather than holding it in place.
 
-### 15. Tests assert what the code should do, not what it does
+### 16. Bad input fails at once
 
-Write a test from the use case. A test written by reading the current code pins whatever that code does,
-defects included. When the intended behavior and the code disagree, fix the code, or ask which one is right; do
-not encode the defect.
+Fail immediately and loudly, naming the offending value, never with a silent default, so a defect surfaces where it
+starts instead of three calls later. Wherever absence is a bug, use the lookup that throws over the one that falls
+back.
 
-- **Fixtures run the real path.** A fixture that sets a field directly instead of going through the lifecycle
-  the code uses makes the test pass rather than making the fixture right. If the real path is hard to drive from
-  a test, that is a finding.
-- **Test-only code never goes in production**, and production shape never bends for a test (rule 3).
-- **No tests for what the language or a library guarantees**, such as a serializer round-tripping a record.
-- **Keep adding tests as you go.** They catch mistakes while the code is being written. Writing them first is
-  fine; do not let an early test anchor a design that is still moving.
+Avoid: `rate = rates.get(currency, 1.0)` when every supported currency must have a rate.
+Prefer: the throwing lookup, with an error that names the currency.
 
-### 16. Fail fast on bad input
+### 17. No new TODOs and no commented-out code
 
-Bad input is a crash, not a silent default, so a defect shows up where it starts instead of far downstream. An
-unknown config key, a missing registration, a `NaN` or a lookup that finds nothing where something must exist all
-fail at the point they are detected, with a message naming the value. Use the lookup that fails over the one that
-falls back, wherever absence is a defect rather than a case.
+A TODO becomes an issue in the tracker; commented-out code is already in version control. A review raises every
+new one; keeping it is the author's argument to make.
 
----
+### 18. Log what a debugger needs
 
-## Hygiene
+No logging of routine steps ("starting export", "export done"). Log the facts someone diagnosing a failure would need:
+the input that was rejected, the state that was unexpected.
 
-### 17. No new TODOs or commented-out code
+### 19. Comments follow comment-style
 
-Open an issue instead of writing a TODO, and delete code rather than commenting it out; version control keeps it.
-Reviewers flag every new TODO and every block of commented-out code without judging whether it is justified, and
-the author dismisses the ones that are.
-
-### 18. No noise logging
-
-A log line that fires on every routine lifecycle step ("Disposing") says nothing. Log what someone debugging
-would need.
-
-### 19. Comments
-
-The comment-style skill governs. Doc comments are valuable where a caller could get something wrong, and not
-required elsewhere.
-
----
+Doc comments are worth writing where a caller could misuse something and optional elsewhere. The comment-style skill
+decides the rest.
 
 ## Local additions
 
-Rules added on this machine, such as a guide for a language no skill covers. Where one conflicts with a rule
-above, the addition wins.
+Rules added on this machine win over the rules above where they conflict.
 
 !`cat ~/.claude/local/code-style/additions.md 2>/dev/null || echo "(none)"`

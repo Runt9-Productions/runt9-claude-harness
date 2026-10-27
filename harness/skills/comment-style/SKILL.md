@@ -1,184 +1,190 @@
 ---
 name: comment-style
-description: How to write code comments, docstrings and doc comments. A comment goes only where a reader could get the code wrong, is as long as the surprise and no longer, and says what breaks if the code changes rather than how it came to be. Ends with a per-comment sweep. Use it before writing or editing any comment, before handing code over, and whenever someone says "sweep the comments", "check these comments", "is this comment needed", "tighten the docstrings" or "review the comments on this diff". Use it even when the task is about code and the comments are incidental, since that is when noise comments get written.
+description: Rules for when a code comment earns its place and how it should read, with worked bad and good examples and a sweep to run over every added or changed comment before handing work over. Use it whenever writing, editing or reviewing comments, docstrings, KDoc or JSDoc in any language, and when someone asks to "sweep the comments", "check these comments", "tighten the comments", "is this comment needed" or "add documentation to this function".
 allowed-tools: Read(~/.claude/local/comment-style/**)
 ---
 
 # Comment style
 
-Read this before writing any comment, and again before handing code over.
+## The test
 
-## The one test
+A comment belongs only where a reader would otherwise misunderstand the code. It is not documentation for its own
+sake, and it is not a record of the effort that went into the code.
 
-**Write a comment where a reader could get it wrong, and nowhere else.**
+Echoing the code is not free. Every such line pads the file, hides the few lines worth reading, and teaches readers
+that comments here can be skipped.
 
-Not "is this documented". Not "did this take effort to work out". The question is always: *would someone
-reading this be surprised by something, and is that thing written down?* If no, leave it off. The name, the
-types and the call already said it.
+## Length
 
-A comment that restates the code is not neutral. It lengthens the file, buries the comments that matter, and
-teaches the next reader to skip all of them.
+- Size a comment by how unexpected its fact is. The hours spent finding the fact do not count.
+- Usually one clause is enough to prevent the mistake.
+- Five lines of comment over two lines of code is a smell; it needs a fact that big.
 
-## Length tracks surprise, not effort
+## Consequences, not history
 
-Three lines explaining something that behaves exactly as it reads is noise even when every sentence is true.
+Tell the next editor the damage a change would do, not the road the code took to get here. A sentence like "this used to call
+the tax service directly" is a signal: rewrite it as "calling the tax service here bypasses the rate cache", or delete
+it if the consequence is obvious.
 
-The effort spent discovering something is not a reason to narrate it. You just worked it out, so it feels
-significant. It is not significant to someone arriving cold at code that now looks ordinary. Write the one
-clause that stops them breaking it and drop the rest.
+History is allowed only when the code would otherwise look like an error to a careful reader, such as a check that
+appears to repeat another or two calls that appear safe to swap.
 
-Prefer one line to a paragraph. A comment longer than the code it describes needs a specific justification.
+Design rationale aimed at reviewers ("I chose a map over a list because...") goes in a pull request comment, where the
+reviewer reads it, not in the code, where every later reader pays for it.
 
-## Explain the future, not the history
+## Worth writing down
 
-A useful comment tells the next reader **what breaks if they change this**.
+- a precondition or guarantee the types cannot express
+- a parameter the function changes in place
+- an empty, `null` or sentinel result with a specific meaning
+- a failure the caller must catch or check for
+- steps whose order cannot be changed
+- the reason this overload or variant, and not its near twin
+- code that stops working if "tidied" the obvious way
+- a trap that would take a newcomer a long debugging session to find
 
-"Before this was fixed, X happened" is the tell. Rewrite it as "if you change this, Y breaks", and if that
-sentence turns out to be obvious, delete it.
+## A comment that explains a name
 
-History earns a comment only when the code's *shape* is surprising because of it: a guard that looks redundant,
-an ordering that looks arbitrary, a workaround that looks like a mistake. A `try`/`catch` stopping a loop dying
-is what anyone competent would write anyway; that it was missing for years is a fact about the author, not the
-code.
+When the comment is the only place that says what a function does, the fix is a better name, after which the comment
+can go.
 
-Design justification is also history. "We chose X over Y because Z" is aimed at a reviewer, not at a future
-editor, so it goes in a comment on the pull request, not in the code.
+Bad:
 
-## What earns a comment
+```python
+# Returns invoices past their due date that have not been paid.
+def get_invoices(account):
+```
 
-- A contract the signature does not imply
-- An argument that gets mutated
-- A null or empty return that *means* something
-- An exception the caller has to handle
-- Ordering that is load-bearing
-- A reason to prefer one overload over another
-- A declaration that silently stops working if "simplified" the obvious way
-- A gotcha that cost someone an hour
+Good:
 
-## Prefer naming over commenting
+```python
+def unpaid_overdue_invoices(account):
+```
 
-If a comment explains what a function does, the function is misnamed. Rename it and delete the comment. A
-private helper called `run` needing a line to say it stops at the first consumer should be called
-`runUntilConsumed`.
+## Pointing at code and files
 
-## Point at symbols, never at line numbers
+- Refer to code by symbol name, never by line number. Line numbers drift silently as the file changes, and the
+  reference keeps looking correct. A document that checks its own references for staleness may cite lines.
+- Never point at an untracked or scratch file from code, tests or a lasting document. On any other machine or checkout
+  the file is gone, while the pointer still reads as authoritative. Inline the fact, or cite a tracked file.
 
-A comment that refers to other code names the symbol: `OrderService.submit`, `Invoice.total`. Never a line
-number, bare (`OrderService.kt:282`) or beside the symbol. Line numbers drift with every edit to the cited file,
-nothing flags the drift, and a stale number points confidently at the wrong line. A symbol survives edits around
-it, and an editor finds it in one step.
+## Libraries and frameworks
 
-This is a rule for code and test comments, which nothing checks for drift. A document with its own staleness
-check may cite lines.
-
-## Never cite an untracked path
-
-Code, tests and durable docs never point at a gitignored or scratch file. The reader who follows the pointer on
-another machine, or after the file is gone, finds nothing, and the comment reads as authoritative until then.
-Carry the fact itself, or cite something tracked.
-
-## A library's comments never name its consumers
-
-A comment in a library or framework names no application that uses it, and takes its examples from the library's
-own domain. A comment that names a consumer is wrong once a second one exists. A fact that can only be explained
-through one consumer is usage, and belongs in that consumer's code.
+A library cannot know who will call it, so its comments mention no particular caller and illustrate with the
+library's own concepts. Anything true for only one caller is documented where that caller lives.
 
 ## Voice
 
-Comments are prose, held to the same rules as any other writing:
-
-- Say it once. Do not preview, state, then recap.
-- No dash constructions, whatever the glyph (`—`, `--`, `–`, a spaced hyphen). Use a comma, a colon,
-  parentheses, or a new sentence. A clause spliced in with a dash is usually a second thought the sentence was
-  not built to hold.
-- No hedging, no throat-clearing, no narrating what you are about to explain.
-- Plain assertions over qualified ones. "This must run first" beats "it's worth noting that this should probably
-  run first".
+- State each thing once.
+- No dash constructions of any kind (em dash, en dash, double hyphen, or a hyphen with spaces around it used to break
+  a clause). Restructure instead: split the sentence, or join the parts with punctuation that is not a dash.
+- No hedging and no preamble ("Note that", "It is worth mentioning"). Assert the fact directly.
 
 ## Worked examples
 
-**Restates the signature.**
+### Restating the signature
 
-```
-// Bad
-// Returns the user's ID.
-fun userId(): String
+Bad:
 
-// Good
-// (nothing)
-fun userId(): String
-```
+```python
+def apply_discount(order: Order, percent: float) -> Order:
+    """Apply a discount to an order.
 
-**Verbose, and the surprise is buried.**
+    Args:
+        order: The order.
+        percent: The discount percent.
 
-```
-// Bad
-// This method retries the operation. It will attempt the operation up to maxAttempts times. Between each
-// attempt it waits, and the wait grows each time so as not to overwhelm the downstream service. If all
-// attempts fail then the last exception encountered is thrown to the caller so they can handle it.
-fun retry(maxAttempts: Int, op: () -> T): T
-
-// Good
-// Throws the LAST failure, not the first. Callers matching on exception type get the final attempt's.
-fun retry(maxAttempts: Int, op: () -> T): T
+    Returns:
+        The order.
+    """
 ```
 
-**Irrelevant history.**
+Good:
 
-```
-// Bad
-// We used to sort this list before returning it, but that turned out to be slow on large inputs so it was
-// removed in the 3.2 refactor after profiling showed it dominating the call.
-fun activeUsers(): List<User>
-
-// Good
-// Unordered. Sort at the call site if you need it; a caller that assumes an order breaks silently.
-fun activeUsers(): List<User>
+```python
+def apply_discount(order: Order, percent: float) -> Order:
+    """Mutates and returns order; percent is 0 to 100, not 0 to 1."""
 ```
 
-**Hard to understand, because it explains the mechanism instead of the consequence.**
+The signature already says what the arguments are. The two facts a caller could get wrong (the mutation and the scale
+of `percent`) were missing.
 
+### Burying the surprise
+
+Bad:
+
+```python
+# Here we go through each line on the invoice and add up the amounts so that we can
+# work out the total. We use Decimal for the amounts, and the currency is taken from
+# the first line, which works because every line on an invoice shares a currency.
 ```
-// Bad
-// The cache uses a weak reference map keyed on the session object, which the GC may collect between the
-// containsKey check and the get call depending on collection timing and heap pressure.
-fun cached(session: Session): Result?
 
-// Good
-// May return null immediately after containsKey said true: entries are weakly held and can vanish between
-// the two calls. Use getOrNull, never check-then-get.
-fun cached(session: Session): Result?
+Good:
+
+```python
+# Currency comes from the first line; mixed-currency invoices are rejected upstream in parse_invoice.
 ```
 
-**Design justification aimed at a reviewer.**
+The only surprise was where the currency comes from and what guarantees it is safe. It is now the whole comment.
 
-```
-// Bad
-// We considered putting this on the controller instead, but that would duplicate the declaration and force
-// every consumer to name the action twice, so it lives here.
-val registrations: List<Registration>
+### Irrelevant history
 
-// Good
-// Order is precedence: of two entries matching one input, the earlier wins.
-val registrations: List<Registration>
+Bad:
+
+```python
+# Originally this read the config with a hand-written parser, which was replaced by
+# tomllib after the parser mishandled quoted keys.
+settings = tomllib.loads(text)
 ```
+
+Good: no comment. The code is ordinary, and nothing about its shape needs explaining.
+
+### Mechanism instead of consequence
+
+Bad:
+
+```python
+# Sort by creation time before writing.
+rows.sort(key=lambda row: row.created_at)
+```
+
+Good:
+
+```python
+# The importer replays rows in file order, so an unsorted file applies refunds before their payments.
+rows.sort(key=lambda row: row.created_at)
+```
+
+The code already shows the sort. The comment now says what breaks without it.
+
+### An argument meant for the pull request
+
+Bad:
+
+```python
+# I went with a dict here instead of a list because lookups by order id happen on every
+# request and the list version was slower in my testing.
+orders_by_id = {order.id: order for order in orders}
+```
+
+Good: no comment in the code. If the choice needs defending, say it in the pull request.
 
 ## The sweep
 
-Do this as a distinct pass, after the code is written and before handing it over. Not a vague "check your
-comments", but a per-comment test:
+Run this as its own pass over every comment you added or changed, before handing the work over. It is separate from
+writing the code because a comment written alongside the code reads as necessary to its author.
 
-1. Read every comment you added or changed, one at a time.
-2. For each, **name the reader who would get it wrong without it, and what they would do wrong.**
-3. If you cannot name one, delete the comment.
-4. If you can, check it is the shortest phrasing that still prevents that mistake.
+For each comment:
 
-Step 2 is the whole thing. History comments fail it immediately: there is no such reader, only a reviewer
-being told a story.
+1. Picture a specific future editor and the concrete mistake they would make if this comment were missing.
+2. If you cannot picture both, remove the comment.
+3. If you can, trim it until it says just enough to stop that mistake.
+
+Step 1 decides everything. A comment that narrates the past fails it at once: no editor makes a mistake for want of
+the story.
 
 ## Local additions
 
-Rules added on this machine, such as a language's doc-comment syntax or one project's conventions. Where one
-conflicts with a rule above, the addition wins.
+Rules added on this machine win over the rules above where they conflict.
 
 !`cat ~/.claude/local/comment-style/additions.md 2>/dev/null || echo "(none)"`
