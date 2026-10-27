@@ -21,7 +21,11 @@ git clone https://github.com/Runt9-Productions/runt9-claude-harness.git
 cd runt9-claude-harness
 python3 bootstrap.py --list
 python3 bootstrap.py githooks hooks-path --repo <path>
+python3 bootstrap.py skills
 ```
+
+`skills` copies each skill in `harness/skills/` into `~/.claude/skills/<name>/`. An installed copy is yours to edit:
+when it differs from the clone's, `bootstrap.py` shows the diff and asks before replacing it.
 
 With no component named it asks about each one. `python3 bootstrap.py --help` lists what each component does and what
 each check refuses.
