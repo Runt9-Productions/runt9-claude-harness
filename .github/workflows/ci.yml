@@ -97,7 +97,8 @@ jobs:
           fi
           bats "${tests[@]}"
 
-  # ruff and pytest over every Python file, at the versions requirements-dev.txt pins.
+  # ruff and pytest over every Python file outside dependency and build directories, at the versions
+  # requirements-dev.txt pins.
   python:
     needs: zizmor
     runs-on: ubuntu-24.04
@@ -129,9 +130,10 @@ jobs:
         run: ruff format --check --no-cache --config ruff.toml --no-respect-gitignore .
 
       # pytest exits 5 when it collects no tests, so a run that finds none fails. -P keeps the checkout off sys.path, so
-      # a pytest.py in it cannot stand in for pytest.
+      # a pytest.py in it cannot stand in for pytest. The default norecursedirs skips every hidden directory, .github
+      # included, so the override keeps only .git and node_modules out.
       - name: pytest
-        run: python -P -m pytest -p no:cacheprovider -c /dev/null --rootdir . --noconftest
+        run: python -P -m pytest -p no:cacheprovider -c /dev/null --rootdir . --noconftest -o 'norecursedirs=.git node_modules'
 
   leak-scan:
     needs: zizmor
