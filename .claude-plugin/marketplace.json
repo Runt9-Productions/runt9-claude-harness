@@ -6,6 +6,11 @@
   },
   "plugins": [
     {
+      "name": "reference-kb",
+      "source": "./plugins/reference-kb",
+      "description": "A reference knowledge base in .claude/reference/: the shared format, its validator and templates, and a writer agent"
+    },
+    {
       "name": "teammate-delivery",
       "source": "./plugins/teammate-delivery",
       "description": "Delivers a message to a busy teammate at its next model request, instead of when its whole turn ends"

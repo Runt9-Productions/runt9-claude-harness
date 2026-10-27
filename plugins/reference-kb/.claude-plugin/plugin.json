@@ -1,0 +1,8 @@
+{
+  "name": "reference-kb",
+  "version": "0.1.0",
+  "description": "A reference knowledge base in .claude/reference/: the shared format, its validator and templates, and a writer agent",
+  "author": {
+    "name": "Runt9 Productions"
+  }
+}

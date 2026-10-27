@@ -1,0 +1,14 @@
+# Copy to <repo>/.claude/reference/kb.toml and keep only what differs from the shared format. Without this file a
+# knowledge base holds all three trees and adds nothing to the vocabularies.
+
+# The trees this knowledge base holds, from domains, entities and projects. A note anywhere else fails validation.
+trees = ["domains", "projects"]
+
+# Additions to the format's vocabularies, each a name and what it means. A note using a name declared in neither
+# fails validation, so adding one here is the whole cost of a new category, tag or project status.
+[categories]
+
+[tags]
+# example-tag ="What class of problem it marks, and why a reader would search for it from outside one note."
+
+[statuses]
