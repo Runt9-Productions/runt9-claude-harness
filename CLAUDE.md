@@ -14,10 +14,13 @@ nothing from an employer, a private project or a specific machine goes in, in co
   plugins through `claude plugin`. A new installable part registers a component there. Tests in `test_bootstrap.py`.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
+- `.claude/reference/`: this repo's knowledge base, in the reference-kb plugin's format. Read the note covering an
+  area before its code or platform behaviour; a question it does not answer is still open.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
   `.oxlintrc.json`).
 - `requirements-dev.txt` at the root: the pinned Python tools CI runs (pytest, and ruff with `ruff.toml`), every
-  dependency listed because CI installs them with `--no-deps`. Python here is standard library only.
+  dependency listed because CI installs them with `--no-deps`. Python here is standard library only, except PyYAML in
+  the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
 
 ## Releasing
 

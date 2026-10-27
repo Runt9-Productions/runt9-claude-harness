@@ -106,9 +106,11 @@ jobs:
       run:
         shell: bash
 
+    # Full history, because the knowledge base step reads the PR's commits back to where it forked.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       # Wheels only, so installing runs no package's build code; pip check fails if the pins stop fitting together.
@@ -129,6 +131,18 @@ jobs:
       # pytest exits 5 when it collects no tests, so a run that finds none fails.
       - name: pytest
         run: python -m pytest -p no:cacheprovider
+
+      # In the merge checkout HEAD^1 is the base and HEAD^2 the PR's head, so the range is the PR's own commits: a note
+      # fails when the PR changes its sources without moving `verified`, not for staleness it inherited. The validator
+      # exits 0 when it finds no notes, so a root that moved or emptied would pass; its summary line is checked for that.
+      - name: Knowledge base validates
+        run: |
+          python plugins/reference-kb/skills/reference-kb/scripts/validate.py --root .claude/reference \
+            --stale-in HEAD^1..HEAD^2 | tee "$RUNNER_TEMP/kb-validate.txt"
+          if grep -q '^0 notes,' "$RUNNER_TEMP/kb-validate.txt"; then
+            echo "::error::The validator found no notes under .claude/reference."
+            exit 1
+          fi
 
   leak-scan:
     needs: zizmor
