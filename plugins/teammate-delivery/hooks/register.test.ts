@@ -175,11 +175,11 @@ describe('diverting into a running turn', () => {
   })
 
   const disguises: [string, string, string][] = [
-    ['a NEL after the name','<sample-envelope\u0085x\u0085</sample-envelope\u0085', '<\\sample-envelope\n> x\n> <\\/sample-envelope\n> '],
-    ['a zero-width space in the name', '<sample​-envelope>', '<\\sample​-envelope>'],
-    ['a zero-width joiner after the <', '<‍sample-envelope>', '<\\‍sample-envelope>'],
-    ['a soft hyphen in the name', '<sam­ple-envelope>', '<\\sam­ple-envelope>'],
-    ['a word joiner before the /', '<⁠/sample-envelope>', '<\\⁠/sample-envelope>'],
+    ['a NEL after the name', '<sample-envelope\u0085x\u0085</sample-envelope\u0085', '<\\sample-envelope\n> x\n> <\\/sample-envelope\n> '],
+    ['a zero-width space in the name', '<sample\u200B-envelope>', '<\\sample\u200B-envelope>'],
+    ['a zero-width joiner after the <', '<\u200Dsample-envelope>', '<\\\u200Dsample-envelope>'],
+    ['a soft hyphen in the name', '<sam\u00ADple-envelope>', '<\\sam\u00ADple-envelope>'],
+    ['a word joiner before the /', '<\u2060/sample-envelope>', '<\\\u2060/sample-envelope>'],
     ['a Unicode hyphen as the separator', '<sample‐envelope>', '<\\sample‐envelope>'],
     ['a fullwidth <', '＜sample-envelope>', '＜\\sample-envelope>'],
   ]
