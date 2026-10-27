@@ -83,10 +83,21 @@ of the diff.
 
 ## Install
 
-**Install a copy, not the checkout.** `python3 bootstrap.py githooks hooks-path --repo <repo>` does both steps: it
-copies `githooks/` and `leak-scan/` side by side into `~/.claude/harness/`, then sets `core.hooksPath` to that copy's
-`githooks/` in each repository named with `--repo`. By hand, copy both into one directory outside the repository and
-set `git config core.hooksPath <dir>/githooks` in each repository the agent works in. The leak gate
-keeps its pass cache and working files in `<dir>/state/`, so whatever keeps the agent from writing to the installed
-copy has to cover all of `<dir>`. `core.hooksPath` replaces `.git/hooks/`, so any other hook you rely on has to move
-into the same directory. Set the authorship keys above in the same repository; without them only the leak gate runs.
+**Install a copy, not the checkout.** From your own shell, in a clone of this repository:
+
+```
+python3 bootstrap.py githooks hooks-path --repo <path> [--repo <path> ...]
+```
+
+`githooks` copies `githooks/` and `leak-scan/` from the commit checked out into `~/.claude/harness/` and records the
+commit in `~/.claude/harness/SOURCE_COMMIT`; `hooks-path` sets `core.hooksPath` to `~/.claude/harness/githooks` in
+each repository named. By hand, copy the two directories side by side into one directory outside the repository and
+run `git config core.hooksPath <dir>/githooks` in each repository the agent works in.
+
+Each `bootstrap.py githooks` run replaces `githooks/` and `leak-scan/` whole, so no other file belongs in them. The
+leak gate keeps its pass cache and working files in `<dir>/state/`, which a reinstall keeps, so whatever keeps the
+agent from writing to the installed copy has to cover all of `<dir>`. Nothing in this repository does that; it is
+your harness's job.
+
+`core.hooksPath` replaces `.git/hooks/`, so git runs only these hooks: a repository's own other hooks do not run with
+this install. Set the authorship keys above in the same repository; without them only the leak gate runs.
