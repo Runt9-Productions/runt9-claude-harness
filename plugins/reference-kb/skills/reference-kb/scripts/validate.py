@@ -10,14 +10,17 @@ The frontmatter keys of each tree and the closed vocabularies come from the mark
 The root's kb.toml may narrow the trees and add categories, tags and statuses; the rest is fixed. Paths in `sources`
 resolve against the git top level holding the root, or the current directory outside git.
 
---stale warns about each note whose sources changed in commits dated after its `verified` date, by the committer's
-own date, so a commit on the same day counts as covered. A source commit is also covered, whatever its date, when a
-later commit that moved `verified` forward descends from it. A source git does not track, or a git call that fails
-or times out, is reported as UNKNOWN.
+Both staleness modes leave merge commits out: a merge's changes are counted in the commits that made them. A source
+commit is re-verified when it, or a commit descending from it, edits the note and leaves `verified` on or after the
+source commit's date, which is always the committer's own date. `verified` need not move. Edits under the note's
+earlier paths count; a commit that only moves the note, changing at most its `permalink`, does not.
+
+--stale warns about each note whose sources changed in commits dated after its `verified` date and not re-verified.
+A commit on the same day as `verified` counts as covered, so an uncommitted re-verify still clears the warning.
+A source git does not track, or a git call that fails or times out, is reported as UNKNOWN.
 
 --stale-in A..B is the merge gate, and implies --stale. A note fails when a commit in A..B changes one of its
-sources and no commit in the range, that commit or a descendant of it, moves the note's `verified` later than it was
-before that commit (or adds it, for a note new in the range). Only order counts here, never commit dates. UNKNOWN
+sources and is not re-verified, so a source change after the note's last edit fails even on the same day. UNKNOWN
 fails, and staleness from before A never does.
 
 Exit status: 0 no errors, whatever the warnings; 1 at least one error; 2 nothing could be checked, because the root
@@ -39,6 +42,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
 from pathlib import Path
+from typing import TypeGuard
 
 import yaml
 
@@ -198,21 +202,41 @@ class Git:
             raise GitError(f"git merge-base failed: {result.stderr.strip()}")
         return result.returncode == 0
 
+    def text_at(self, commit: str, path: str) -> str | None:
+        """The file's text in that commit, or None when it is absent there."""
+        result = self.run("show", f"{commit}:{path}")
+        return result.stdout if result.returncode == 0 else None
+
     def verified_at(self, commit: str, path: str) -> datetime.date | None:
         """The note's `verified` in that commit, or None when the note or the key is absent there."""
         cache_key = (commit, path)
         if cache_key not in self.verified_cache:
-            result = self.run("show", f"{commit}:{path}")
-            frontmatter = parse_frontmatter(result.stdout) if result.returncode == 0 else None
+            text = self.text_at(commit, path)
+            frontmatter = parse_frontmatter(text) if text is not None else None
             self.verified_cache[cache_key] = as_date(frontmatter.get("verified")) if frontmatter else None
         return self.verified_cache[cache_key]
 
-    def commits(self, *args: str) -> list[tuple[str, list[str], str]]:
-        """Commits from `git log`, each as (sha, parents, committer's ISO date)."""
+    def file_history(self, revision: str, path: str) -> list[tuple[str, str, str | None]]:
+        """Commits from `git log --follow` that touch the file, merges left out, each as (sha, the file's path there,
+        the path it was moved from in that commit or None)."""
         found = []
-        for line in self.output("log", "--format=%H%x09%P%x09%cI", *args).splitlines():
-            sha, parents, date = line.split("\t")
-            found.append((sha, parents.split(), date))
+        sha = ""
+        output = self.output("log", "--no-merges", "--follow", "--name-status", "--format=%x01%H", revision, "--", path)
+        for line in output.splitlines():
+            if line.startswith("\x01"):
+                sha = line[1:]
+            elif line:
+                status, *paths = line.split("\t")
+                moved_from = paths[0] if status.startswith("R") else None
+                found.append((sha, paths[-1], moved_from))
+        return found
+
+    def commits(self, *args: str) -> list[tuple[str, datetime.date]]:
+        """Commits from `git log`, merges left out, each as (sha, the committer's own date)."""
+        found = []
+        for line in self.output("log", "--no-merges", "--format=%H%x09%cs", *args).splitlines():
+            sha, date = line.split("\t")
+            found.append((sha, datetime.date.fromisoformat(date)))
         return found
 
 
@@ -426,7 +450,7 @@ def is_inside_repository(source: str) -> bool:
     return not relative.is_absolute() and ".." not in relative.parts
 
 
-def is_string_list(value: object) -> bool:
+def is_string_list(value: object) -> TypeGuard[list[str]]:
     if not isinstance(value, list) or not value:
         return False
     return all(isinstance(item, str) and item.strip() for item in value)
@@ -712,29 +736,39 @@ def note_sources(note: Note, top: Path) -> list[str]:
     return [source for source in sources if is_inside_repository(source) and (top / source).exists()]
 
 
-def verified_changes(git: Git, path: str, *revisions: str) -> list[tuple[str, datetime.date | None, datetime.date]]:
-    """Commits from `git log` over the revisions that set the note's `verified`, as (sha, before, after)."""
-    changes = []
-    for sha, parents, _ in git.commits(*revisions, "--", path):
-        after = git.verified_at(sha, path)
-        before = git.verified_at(parents[0], path) if parents else None
-        if after is not None and after != before:
-            changes.append((sha, before, after))
-    return changes
+def without_permalink(text: str | None) -> list[str]:
+    if text is None:
+        return []
+    return [line for line in text.splitlines() if not line.startswith("permalink:")]
 
 
-def is_later(date: datetime.date, than: datetime.date | None) -> bool:
-    return than is None or date > than
+def is_only_moved(git: Git, sha: str, moved_from: str, path_there: str) -> bool:
+    """Whether the commit moved the note without changing its text beyond the `permalink` a move has to rewrite."""
+    return without_permalink(git.text_at(f"{sha}^", moved_from)) == without_permalink(git.text_at(sha, path_there))
+
+
+def note_edits(git: Git, path: str, revision: str) -> list[tuple[str, datetime.date]]:
+    """Commits that edit the note under its current or any earlier path and leave a `verified`, each with that date."""
+    edits = []
+    for sha, path_there, moved_from in git.file_history(revision, path):
+        if moved_from and is_only_moved(git, sha, moved_from, path_there):
+            continue
+        verified = git.verified_at(sha, path_there)
+        if verified is not None:
+            edits.append((sha, verified))
+    return edits
+
+
+def is_reverified(git: Git, change: str, date: datetime.date, edits: list[tuple[str, datetime.date]]) -> bool:
+    """Whether the change itself, or a commit descending from it, edits the note leaving `verified` on or after date."""
+    return any(verified >= date and git.is_ancestor(change, edit) for edit, verified in edits)
 
 
 def find_stale(git: Git, path: str, sources: list[str], verified: datetime.date) -> str | None:
-    reverified = []
-    for sha, before, after in verified_changes(git, path, "HEAD"):
-        if is_later(after, before):
-            reverified.append(sha)
+    edits = note_edits(git, path, "HEAD")
     later = []
-    for sha, _, date in git.commits("HEAD", "--not", *reverified, "--", *sources):
-        if datetime.date.fromisoformat(date[:10]) > verified:
+    for sha, date in git.commits("HEAD", "--", *sources):
+        if date > verified and not is_reverified(git, sha, date, edits):
             later.append(sha)
     if not later:
         return None
@@ -743,23 +777,17 @@ def find_stale(git: Git, path: str, sources: list[str], verified: datetime.date)
 
 
 def find_ungated(git: Git, path: str, sources: list[str], _verified: datetime.date, span: str) -> str | None:
-    changes = verified_changes(git, path, span)
+    edits = note_edits(git, path, span)
     uncovered = []
-    for sha, parents, _ in git.commits(span, "--", *sources):
-        held = git.verified_at(parents[0], path) if parents else None
-        covered = False
-        for change, _before, after in changes:
-            if is_later(after, held) and git.is_ancestor(sha, change):
-                covered = True
-                break
-        if not covered:
+    for sha, date in git.commits(span, "--", *sources):
+        if not is_reverified(git, sha, date, edits):
             uncovered.append(sha)
     if not uncovered:
         return None
     oldest = uncovered[-1][:12]
     return (
-        f"{len(uncovered)} commit(s) in the range, oldest {oldest}, change its sources and no commit after them moves "
-        "`verified` later; re-read the sources and move `verified`"
+        f"{len(uncovered)} commit(s) in the range, oldest {oldest}, change its sources and no commit after them edits "
+        "the note with `verified` on or after their date; re-read the sources, then commit the note"
     )
 
 

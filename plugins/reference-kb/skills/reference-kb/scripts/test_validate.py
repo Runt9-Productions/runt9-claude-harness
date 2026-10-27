@@ -313,7 +313,7 @@ def committed_note(repo: Repo, date: str) -> str:
     return repo.commit(date)
 
 
-def test_the_gate_fails_until_a_commit_after_the_source_change_moves_verified_forward(repo: Repo) -> None:
+def test_the_gate_fails_until_a_commit_after_the_source_change_edits_the_note(repo: Repo) -> None:
     base = committed_note(repo, "2026-01-10T12:00:00+00:00")
     repo.write_note("domains/example/topic.md", domain_note(SOURCED.replace(VERIFIED, "2026-01-11")))
     repo.commit("2026-01-11T12:00:00+00:00")
@@ -326,12 +326,14 @@ def test_the_gate_fails_until_a_commit_after_the_source_change_moves_verified_fo
     after = repo.validate("--stale-in", f"{base}..HEAD")
 
     assert before.returncode == 1
-    assert "change its sources and no commit after them moves `verified` later" in before.stdout
+    assert "change its sources and no commit after them edits the note" in before.stdout
     assert after.returncode == 0, after.stdout
 
 
-def test_a_source_change_the_same_day_as_verified_fails_the_gate_but_not_stale(repo: Repo) -> None:
+def test_a_source_change_after_the_last_edit_on_the_same_day_fails_the_gate_but_not_stale(repo: Repo) -> None:
     base = committed_note(repo, "2026-01-10T09:00:00+00:00")
+    repo.write_note("domains/example/topic.md", domain_note(SOURCED, "- [fact] The example file holds a line.\n"))
+    repo.commit("2026-01-10T10:00:00+00:00")
     repo.write("src/example.txt", "two\n")
     repo.commit("2026-01-10T15:00:00+00:00")
 
@@ -340,6 +342,30 @@ def test_a_source_change_the_same_day_as_verified_fails_the_gate_but_not_stale(r
 
     assert gate.returncode == 1, gate.stdout
     assert "0 warnings" in stale.stdout
+
+
+def test_the_gate_passes_a_same_day_edit_that_keeps_verified(repo: Repo) -> None:
+    base = committed_note(repo, "2026-01-10T09:00:00+00:00")
+    repo.write("src/example.txt", "two\n")
+    repo.commit("2026-01-10T15:00:00+00:00")
+    repo.write_note("domains/example/topic.md", domain_note(SOURCED, "- [fact] The example file holds two.\n"))
+    repo.commit("2026-01-10T16:00:00+00:00")
+
+    result = repo.validate("--stale-in", f"{base}..HEAD")
+
+    assert result.returncode == 0, result.stdout
+
+
+def test_the_gate_fails_an_edit_leaving_verified_before_the_source_change(repo: Repo) -> None:
+    base = committed_note(repo, "2026-01-10T12:00:00+00:00")
+    repo.write("src/example.txt", "two\n")
+    repo.commit("2026-01-12T12:00:00+00:00")
+    repo.write_note("domains/example/topic.md", domain_note(SOURCED.replace(VERIFIED, "2026-01-11")))
+    repo.commit("2026-01-12T13:00:00+00:00")
+
+    result = repo.validate("--stale-in", f"{base}..HEAD")
+
+    assert result.returncode == 1, result.stdout
 
 
 def test_the_gate_fails_a_source_change_merged_in_after_the_reverify(repo: Repo) -> None:
@@ -357,21 +383,64 @@ def test_the_gate_fails_a_source_change_merged_in_after_the_reverify(repo: Repo)
     assert result.returncode == 1, result.stdout
 
 
-@pytest.mark.parametrize(
-    "verified_line",
-    [f'verified: "{VERIFIED}"', f"verified:  {VERIFIED}  ", "verified: 2026-01-09"],
-    ids=["re-quoted", "whitespace", "earlier"],
-)
-def test_the_gate_does_not_count_a_verified_that_did_not_move_later(repo: Repo, verified_line: str) -> None:
+def test_a_merge_bringing_in_a_source_change_is_not_counted(repo: Repo) -> None:
+    repo.write("src/example.txt", "one\ntwo\nthree\nfour\nfive\n")
+    committed_note(repo, "2026-01-10T12:00:00+00:00")
+    repo.git("switch", "-q", "-c", "other")
+    repo.write("src/example.txt", "one\ntwo\nthree\nfour\nsix\n")
+    other = repo.commit("2026-01-11T12:00:00+00:00")
+    repo.git("switch", "-q", "main")
+    repo.write("src/example.txt", "zero\ntwo\nthree\nfour\nfive\n")
+    repo.commit("2026-01-11T13:00:00+00:00")
+    repo.write_note("domains/example/topic.md", domain_note(SOURCED.replace(VERIFIED, "2026-01-12")))
+    repo.commit("2026-01-12T12:00:00+00:00")
+    repo.git("merge", "-q", "--no-ff", "-m", "Merge the source change", "other", date="2026-01-13T12:00:00+00:00")
+
+    gate = repo.validate("--stale-in", f"{other}..HEAD")
+    stale = repo.validate("--stale")
+
+    assert gate.returncode == 0, gate.stdout
+    assert "0 warnings" in stale.stdout, stale.stdout
+
+
+def test_a_merge_whose_resolution_is_the_only_source_change_is_not_counted(repo: Repo) -> None:
     base = committed_note(repo, "2026-01-10T12:00:00+00:00")
+    repo.git("switch", "-q", "-c", "other")
+    repo.write("src/other.txt", "unrelated\n")
+    repo.commit("2026-01-11T12:00:00+00:00")
+    repo.git("switch", "-q", "main")
+    repo.write("src/another.txt", "unrelated\n")
+    repo.commit("2026-01-11T13:00:00+00:00")
+    repo.git("merge", "-q", "--no-ff", "--no-commit", "other")
     repo.write("src/example.txt", "two\n")
     repo.commit("2026-01-12T12:00:00+00:00")
-    repo.write_note("domains/example/topic.md", domain_note(SOURCED.replace(f"verified: {VERIFIED}", verified_line)))
-    repo.commit("2026-01-12T13:00:00+00:00")
+
+    gate = repo.validate("--stale-in", f"{base}..HEAD")
+    stale = repo.validate("--stale")
+
+    assert gate.returncode == 0, gate.stdout
+    assert "0 warnings" in stale.stdout, stale.stdout
+
+
+@pytest.mark.parametrize(
+    ("edited_first", "status"), [(False, 1), (True, 0)], ids=["moved only", "edited before the move"]
+)
+def test_the_gate_counts_a_moved_note_by_its_edits_under_any_path(repo: Repo, edited_first: bool, status: int) -> None:
+    base = committed_note(repo, "2026-01-10T09:00:00+00:00")
+    repo.write("src/example.txt", "two\n")
+    repo.commit("2026-01-10T15:00:00+00:00")
+    if edited_first:
+        repo.write_note("domains/example/topic.md", domain_note(SOURCED, "- [fact] The example file holds two.\n"))
+        repo.commit("2026-01-10T15:30:00+00:00")
+    moved = ROOT / "domains/example/moved.md"
+    repo.git("mv", str(ROOT / "domains/example/topic.md"), str(moved))
+    text = (repo.path / moved).read_text()
+    (repo.path / moved).write_text(text.replace("permalink: example/topic", "permalink: example/moved"))
+    repo.commit("2026-01-10T16:00:00+00:00")
 
     result = repo.validate("--stale-in", f"{base}..HEAD")
 
-    assert result.returncode == 1, result.stdout
+    assert result.returncode == status, result.stdout
 
 
 def test_the_gate_fails_an_untracked_source_as_unknown(repo: Repo) -> None:
@@ -397,21 +466,6 @@ def test_the_gate_passes_staleness_from_before_the_range_that_stale_still_report
 
     assert gate.returncode == 0, gate.stdout
     assert "1 commit(s) changed its sources after `verified` 2026-01-10" in gate.stdout
-
-
-def test_stale_counts_a_source_change_followed_by_a_reverify_as_covered_whatever_its_date(repo: Repo) -> None:
-    committed_note(repo, "2026-01-10T12:00:00+00:00")
-    repo.write("src/example.txt", "two\n")
-    # 11:00 UTC on 2026-01-11, dated the 12th by a committer at +14:00.
-    repo.commit("2026-01-12T01:00:00+14:00")
-    repo.write_note("domains/example/topic.md", domain_note(SOURCED.replace(VERIFIED, "2026-01-11")))
-    # 22:00 UTC on 2026-01-11, after the source change, by a committer at -10:00.
-    repo.commit("2026-01-11T12:00:00-10:00")
-
-    result = repo.validate("--stale")
-
-    assert result.returncode == 0, result.stdout
-    assert "0 warnings" in result.stdout
 
 
 def test_a_copy_of_the_skill_without_its_format_exits_2(tmp_path: Path, repo: Repo) -> None:

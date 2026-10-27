@@ -63,7 +63,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/scripts/validate.py" --root .
 - It checks format, not truth. Never report a clean run as verification.
 - Staleness has three outcomes: clean, stale (the commits are counted), and UNKNOWN (an untracked source or a failed
   git call). UNKNOWN is never clean.
-- `--stale-in A..B` is the merge gate, which CI runs over a pull request's own commits.
+- `--stale-in A..B` is the merge gate, which CI runs over a pull request's own commits. It fails a note when a
+  commit in the range changes a source and no commit from that one onwards edits the note with `verified` on or after
+  its date. Merge commits never count as changing a source.
 - It needs PyYAML. If the import fails, tell the user to install it; never install it yourself.
 
 ## Re-verifying a stale note
@@ -73,7 +75,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/scripts/validate.py" --root .
 3. Re-check only the claims resting on them, and correct the ones that are now wrong.
 4. Move `verified` to today, and say in the Scope line which claims were carried forward without a re-check.
 
-A frontmatter-only edit, such as rebuilding `sources`, never moves `verified`.
+A frontmatter-only edit, such as rebuilding `sources`, never moves `verified`. Any commit that edits a note counts
+as re-verifying the source changes before it whose date is on or before `verified`, so check those changes before
+committing any edit to a note.
 
 ## Starting a knowledge base
 

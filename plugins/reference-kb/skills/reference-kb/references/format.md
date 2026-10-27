@@ -273,13 +273,15 @@ python3 <skill>/scripts/validate.py --root .claude/reference [--warnings] [--sta
 - **Errors** break the format and fail the run. **Warnings** never change the exit status, so they must be read:
   links to notes that do not exist, one-way relations, and stale notes. Without `--warnings` they are only counted.
 - **It checks format, not truth.** A clean run says nothing about whether the claims are right.
-- **`--stale`** warns about each note whose sources changed in commits dated after `verified`, by the committer's own
-  date, so a commit on the same day as `verified` counts as covered. A source commit that a later commit moving
-  `verified` forward descends from also counts as covered, whatever its date. A source git does not track, and any
-  git failure, is reported as UNKNOWN, never as clean.
+- **Both staleness modes leave merge commits out.** A merge's changes are counted in the commits that made them, so
+  merging a branch never makes a note stale by itself, and neither does a change made only in a merge's resolution.
+- **A source commit is re-verified** when that commit, or a later commit descending from it, edits the note and
+  leaves `verified` on or after the source commit's date (the committer's own date, as `git log --format=%cs` shows
+  it). `verified` need not move: a same-day edit that keeps the date counts. Edits under the note's earlier paths
+  count, and a commit that only moves the note, changing at most its `permalink`, does not.
+- **`--stale`** warns about each note whose sources changed in commits dated after `verified` and not re-verified. A
+  commit on the same day as `verified` counts as covered, so an uncommitted re-verify still clears the warning. A
+  source git does not track, and any git failure, is reported as UNKNOWN, never as clean.
 - **`--stale-in A..B`** is the merge gate, and implies `--stale`. A note fails when a commit in the range changes one
-  of its sources and no commit in the range that is that commit or a descendant of it moves the note's `verified` to
-  a later date than it held before that commit (or adds it, when the note is new in the range). Commit dates play no
-  part, so same-day, backdated and rebased commits are judged by order alone. Re-quoting the same date, adding
-  whitespace or moving the date backwards does not count. UNKNOWN fails here. Staleness from before the range never
-  fails.
+  of its sources and is not re-verified. A source change after the note's last edit therefore fails even when its
+  date matches `verified`. UNKNOWN fails here. Staleness from before the range never fails.
