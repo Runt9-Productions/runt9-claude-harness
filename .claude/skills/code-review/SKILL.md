@@ -124,6 +124,11 @@ for i in "${!records[@]}"; do
     rest=${records[i]#*$'\t'}
     removed=${rest%%$'\t'*}
     path=${rest#*$'\t'}
+    # Both files hold one tab-separated record per line, so such a path could forge a record of its own.
+    if [[ $path == *[$'\t\n']* ]]; then
+        echo "index: a path holds a tab or newline, which the index cannot carry: ${path@Q}" >&2
+        exit 1
+    fi
     IFS=$'\t' read -r start end spans <<< "${sections[i]}"
     printf '%s\t%s\t%s-%s\t%s\n' "$added" "$removed" "$start" "$end" "$path" >> manifest.tsv
     printf '%s\t%s\n' "${spans:--}" "$path" >> hunks.txt

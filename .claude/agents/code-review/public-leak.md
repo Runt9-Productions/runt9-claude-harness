@@ -71,7 +71,3 @@ For each finding, say what it reveals and to whom.
 
 In that run only `Read` is available, the inputs are the files in the working directory, and the brief and profile
 arrive as copies named in the request.
-
-When editing this file: the hook loads it as an agent, so the frontmatter must begin on the first line with `---`,
-and `description`, `model` and `effort` must each be a single `key: value` line without quotes, because the hook reads
-them with `sed`. Everything below the frontmatter becomes that run's prompt.

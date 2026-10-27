@@ -21,16 +21,22 @@ const WAKE_UP =
 
 const LINE_BREAK = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/
 
-// A tag name holding `-`, `_` or `:` is the shape of the engine's envelope tags. One glued to a word is escaped too,
-// generics such as `Result<io_error>` included, because a model reads `text<envelope-tag>` as a tag all the same.
-const TAG_NAME = String.raw`[a-z][\w.:-]*[-_:][\w.:-]*(?:[\s/>]|$)`
-const ENVELOPE_LIKE_TAG = new RegExp(String.raw`<(?=\/?${TAG_NAME})`, 'gi')
+// The shape of the engine's envelope tags: a name starting with a letter and holding a hyphen, a connector such as `_`
+// or a colon. Invisible characters are read as part of the name and dashes, connectors, `<`, `/` and `:` in every
+// width, since a model sees through all of them. One glued to a word is escaped too, generics such as
+// `Result<io_error>` included, because a model reads `text<envelope-tag>` as a tag all the same.
+const INVISIBLE = String.raw`\p{Default_Ignorable_Code_Point}`
+const SEPARATOR = String.raw`\p{Pd}\p{Pc}−:︓﹕：`
+const ENVELOPE_LIKE_TAG = new RegExp(
+  String.raw`[<﹤＜](?=${INVISIBLE}*(?:[/／]${INVISIBLE}*)?\p{L}[\p{L}\p{M}\p{N}.${SEPARATOR}${INVISIBLE}]*[${SEPARATOR}])`,
+  'gu',
+)
 
 // Separates text blocks when matching, so a row matches whole blocks and never the start of a longer one.
 const BLOCK_SEPARATOR = '\u0000'
 
 function escapeTags(text: string): string {
-  return text.replace(ENVELOPE_LIKE_TAG, '<\\')
+  return text.replace(ENVELOPE_LIKE_TAG, '$&\\')
 }
 
 function composeRow(sender: string, body: string): string {
@@ -62,6 +68,12 @@ function heldRows(rows: readonly Row[], messages: readonly ApiMessage[]): boolea
   })
 }
 
+// A refused read holds nothing, so every row counts as missing from it.
+async function conversation($: EngineInterface, agentId: string): Promise<readonly ApiMessage[]> {
+  const messages = await $.session.messages({ agentId, as: 'api' })
+  return Array.isArray(messages) ? messages : []
+}
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -84,8 +96,7 @@ async function settle(
     $.ui.toast(`teammate-delivery: ${count} sent to ${recipient} mid-turn went unread; its turn ended (${ending})`)
     return
   }
-  const messages = await $.session.messages({ agentId, as: 'api' })
-  const held = Array.isArray(messages) ? heldRows(rows, messages) : rows.map(() => false)
+  const held = heldRows(rows, await conversation($, agentId))
   const missing = rows.filter((_, i) => !held[i])
   if (missing.length === 0) {
     await mail($, agentId, recipient, WAKE_UP)
@@ -123,22 +134,26 @@ export const register: Register = on => {
     const agentId = e.agentId
     // A step also reopens a turn whose start went unheard, as after a reload.
     const turn = agentId === undefined ? undefined : openTurn(agentId, e.turnId)
-    // Checked before `next`: a row stored while the request streams can merge into the messages it carried. Only
+    // Read before `next`: a row stored while the request streams can merge into the messages it carried. Only
     // rows stored before the read are candidates, so one stored during it stays.
+    let carried: Row[] = []
     if (agentId !== undefined && turn !== undefined && turn.rows.length > 0) {
       const candidates = turn.rows.slice()
       await safely($, async () => {
-        const messages = await $.session.messages({ agentId, as: 'api' })
-        if (!Array.isArray(messages)) return
-        const held = heldRows(candidates, messages.slice(0, e.messageCount))
-        // Removes from the live list, which a turn end may have emptied during the await.
-        for (const [i, row] of candidates.entries()) {
-          const at = held[i] ? turn.rows.indexOf(row) : -1
-          if (at !== -1) turn.rows.splice(at, 1)
-        }
+        const held = heldRows(candidates, (await conversation($, agentId)).slice(0, e.messageCount))
+        carried = candidates.filter((_, i) => held[i])
       })
     }
-    return yield* next(e)
+    const result = yield* next(e)
+    // A request that drew no response reached no model, so its rows wait for the turn end.
+    if (turn !== undefined && result.stopReason !== null) {
+      // Removes from the live list, which a turn end may have emptied meanwhile.
+      for (const row of carried) {
+        const at = turn.rows.indexOf(row)
+        if (at !== -1) turn.rows.splice(at, 1)
+      }
+    }
+    return result
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -182,11 +197,13 @@ export const register: Register = on => {
       return next(e)
     }
 
-    // The row is stored from here on, so falling back to the mailbox would deliver it twice.
-    if (turn.ending === undefined) {
-      turn.rows.push(row)
-      turn.recipient = recipient
-    } else {
+    // The row is stored from here on, so falling back to the mailbox would deliver it twice. Looked up again because
+    // the turn may have ended during the append, and the next one begun.
+    const live = openTurns.get(target.id)
+    if (live !== undefined) {
+      live.rows.push(row)
+      live.recipient = recipient
+    } else if (turn.ending !== undefined) {
       const ending = turn.ending
       await safely($, () => settle($, target.id, recipient, ending, [row]))
     }

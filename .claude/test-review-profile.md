@@ -13,7 +13,7 @@ Facts about this repository's tests that `/test-review` and the `test-reviewer` 
 | bats | `**/*.bats` | `.github/scripts/tests/helpers.bash` | `bats <file>`, or one test with `bats -f '<regex>' <file>` | TAP: `1..N`, then one `ok` or `not ok` line per test |
 | mod kit | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | none | `claude plugin test plugins/<name>` | one `(pass)` or `(fail)` line per test, then `N pass` and `N fail` |
 
-Production code is every file that is neither a test nor `helpers.bash`.
+Production code is every file that is neither a test nor a helper listed above.
 
 ## Checks on every scoped file
 

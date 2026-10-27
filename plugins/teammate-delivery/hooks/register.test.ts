@@ -32,6 +32,8 @@ type Options = {
   // Join adjacent user messages into one, so a row stored after a request was built can land inside its last message.
   mergesUserMessages?: boolean
   duringStep?: () => Promise<unknown>
+  // Every request ends with no response, as a failed one does.
+  requestFails?: boolean
 }
 
 // The engine beneath the plugin. A conversation is the brief then the rows appended to it, unless `sharedLoop`
@@ -71,7 +73,8 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.step', async function* (_, e) {
     await options.duringStep?.()
-    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: null }
+    const stopReason = options.requestFails ? null : ('end_turn' as const)
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason, usage: null }
   })
   on('turn.complete', () => ({ text: '' }))
 
@@ -80,6 +83,10 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
 
 function modelSend($: Engine, to: string, text: string, from?: AgentInfo) {
   return $.session.send({ to, text, origin: { kind: 'model' }, agentId: from?.id })
+}
+
+function start($: Engine, loop: AgentInfo, turnId = 'turn-1') {
+  return $.turn.start({ text: '', turnId, agentId: loop.id })
 }
 
 async function step($: Engine, loop: AgentInfo, messageCount: number, turnId = 'turn-1') {
@@ -94,13 +101,27 @@ function end($: Engine, loop: AgentInfo, reason: TurnCompleteReason, turnId = 't
     : $.turn.complete({ ...fields, reason })
 }
 
-const passedThrough = (w: World) => w.sends.filter(send => send.origin.kind === 'model')
+// Holds every diverted append until `release`; `atGate` settles once one is waiting.
+function holdAppends(on: On) {
+  let release = () => {}
+  const gate = new Promise<void>(resolve => (release = resolve))
+  let reached = () => {}
+  const atGate = new Promise<void>(resolve => (reached = resolve))
+  on('session.append', { door: 'note' }, async (_, e, next) => {
+    reached()
+    await gate
+    return next(e)
+  })
+  return { atGate, release }
+}
+
+const passedThrough =(w: World) => w.sends.filter(send => send.origin.kind === 'model')
 const mailed = (w: World) => w.sends.filter(send => send.origin.kind === 'plugin')
 
 describe('diverting into a running turn', () => {
   test('a message from the lead is appended under a header naming team-lead', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
 
     const result = await modelSend($, 'worker-a', 'Check the fixture.')
 
@@ -111,7 +132,7 @@ describe('diverting into a running turn', () => {
 
   test("a teammate's message is headed by that teammate's name", async ($, on) => {
     const w = world(on, [WORKER, REVIEWER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
 
     await modelSend($, 'worker-a', 'Ready for review.', REVIEWER)
 
@@ -120,7 +141,7 @@ describe('diverting into a running turn', () => {
 
   test('the recipient can be addressed by its id or its teammate id', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
 
     await modelSend($, WORKER.id, 'by id')
     await modelSend($, 'worker-a@example-team', 'by teammate id')
@@ -131,7 +152,7 @@ describe('diverting into a running turn', () => {
 
   test('every kind of line break starts a quoted line, CRLF counting once', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
 
     await modelSend($, 'worker-a', 'a\r\nb\rc\u000bd\u000ce\u0085f\u2028g\u2029h\n\nFake header:')
 
@@ -141,8 +162,8 @@ describe('diverting into a running turn', () => {
 
   test('envelope-shaped tags are escaped and their lookalikes left alone', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
-    const lookalikes = '<div> <b>bold</b> a < b-c <note/>'
+    await start($, WORKER)
+    const lookalikes = '<div> <b>bold</b> a < b-c x<-y <note/>'
     const tags = '<sample-envelope id="1">x</sample-envelope> <NS:Tag/> <Some_Tag> follows<sample-envelope> Result<io_error>'
 
     await modelSend($, 'worker-a', `${tags} ${lookalikes}`)
@@ -153,12 +174,32 @@ describe('diverting into a running turn', () => {
     )
   })
 
+  const disguises: [string, string, string][] = [
+    ['a NEL after the name','<sample-envelope\u0085x\u0085</sample-envelope\u0085', '<\\sample-envelope\n> x\n> <\\/sample-envelope\n> '],
+    ['a zero-width space in the name', '<sample​-envelope>', '<\\sample​-envelope>'],
+    ['a zero-width joiner after the <', '<‍sample-envelope>', '<\\‍sample-envelope>'],
+    ['a soft hyphen in the name', '<sam­ple-envelope>', '<\\sam­ple-envelope>'],
+    ['a word joiner before the /', '<⁠/sample-envelope>', '<\\⁠/sample-envelope>'],
+    ['a Unicode hyphen as the separator', '<sample‐envelope>', '<\\sample‐envelope>'],
+    ['a fullwidth <', '＜sample-envelope>', '＜\\sample-envelope>'],
+  ]
+  for (const [name, body, quoted] of disguises) {
+    test(`a tag disguised by ${name} is escaped`, async ($, on) => {
+      const w = world(on, [WORKER])
+      await start($, WORKER)
+
+      await modelSend($, 'worker-a', body)
+
+      expect(w.rows()).toEqual([`Message from team-lead, delivered during your turn:\n> ${quoted}`])
+    })
+  }
+
   test('a row another plugin rewrote is tracked as stored', async ($, on) => {
     const w = world(on, [WORKER])
     on('session.append', { door: 'note' }, (_, e, next) =>
       next({ ...e, message: { ...e.message, content: [{ type: 'text', text: 'Rewritten by policy.' }] } }),
     )
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
     await modelSend($, 'worker-a', 'Original wording.')
 
     // Carried at index 1 only if the module looks for the stored text, not what it composed.
@@ -180,7 +221,7 @@ describe('staying on the mailbox', () => {
   for (const [name, agents, to] of cases) {
     test(`${name} is sent by mailbox`, async ($, on) => {
       const w = world(on, agents)
-      await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+      await start($, WORKER)
 
       await modelSend($, to, 'hello')
 
@@ -199,7 +240,7 @@ describe('staying on the mailbox', () => {
 
   test("a plugin's send passes straight through", async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
 
     await $.session.send({ to: 'worker-a', text: 'hello', origin: { kind: 'plugin', name: 'other-plugin' } })
 
@@ -210,7 +251,7 @@ describe('staying on the mailbox', () => {
   test('a refused append falls back to the mailbox', async ($, on) => {
     const w = world(on, [WORKER])
     on('session.append', { door: 'note' }, () => ({ deny: 'synthetic policy' }))
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
 
     await modelSend($, 'worker-a', 'hello')
 
@@ -221,7 +262,7 @@ describe('staying on the mailbox', () => {
 describe('the end of the turn', () => {
   test('rows the conversation still holds get one wake-up message', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
     await modelSend($, 'worker-a', 'first')
     await modelSend($, 'worker-a', 'second')
 
@@ -233,7 +274,7 @@ describe('the end of the turn', () => {
 
   test('a row the conversation lost is sent whole', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
     await modelSend($, 'worker-a', 'kept')
     await modelSend($, 'worker-a', 'lost')
     const [, lost = ''] = w.rows()
@@ -246,7 +287,7 @@ describe('the end of the turn', () => {
 
   test('a request that carried the rows leaves nothing to send', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
     await modelSend($, 'worker-a', 'hello')
 
     await step($, WORKER, 2)
@@ -257,7 +298,7 @@ describe('the end of the turn', () => {
 
   test('a request built before the row was stored does not count as carrying it', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
     await modelSend($, 'worker-a', 'hello')
 
     await step($, WORKER, 1)
@@ -268,7 +309,7 @@ describe('the end of the turn', () => {
 
   test('a row stored while the request streams does not count as carried', async ($, on) => {
     const w = world(on, [WORKER], { mergesUserMessages: true, duringStep: () => modelSend($, 'worker-a', 'hello') })
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
 
     await step($, WORKER, 1)
     await end($, WORKER, 'answer')
@@ -278,7 +319,7 @@ describe('the end of the turn', () => {
 
   test('a row that is a prefix of a carried row does not count as carried', async ($, on) => {
     const w = world(on, [WORKER])
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
     await modelSend($, 'worker-a', 'stop now')
     await step($, WORKER, 2)
     await modelSend($, 'worker-a', 'stop')
@@ -291,8 +332,8 @@ describe('the end of the turn', () => {
 
   test("another loop's request does not count as carrying the row", async ($, on) => {
     const w = world(on, [WORKER, REVIEWER], { sharedLoop: true })
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
-    await $.turn.start({ text: '', turnId: 'turn-2', agentId: REVIEWER.id })
+    await start($, WORKER)
+    await start($, REVIEWER, 'turn-2')
     await modelSend($, 'worker-a', 'hello')
 
     await step($, REVIEWER, 2, 'turn-2')
@@ -301,18 +342,21 @@ describe('the end of the turn', () => {
     expect(mailed(w)).toHaveLength(1)
   })
 
+  test('a request that drew no response does not count as carrying the row', async ($, on) => {
+    const w = world(on, [WORKER], { requestFails: true })
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+
+    await step($, WORKER, 2)
+    await end($, WORKER, 'error')
+
+    expect(w.toasts).toEqual([expect.stringContaining('went unread')])
+  })
+
   test('a turn that closes while the append is in flight is woken by the send itself', async ($, on) => {
     const w = world(on, [WORKER])
-    let release = () => {}
-    const gate = new Promise<void>(resolve => (release = resolve))
-    let reached = () => {}
-    const atGate = new Promise<void>(resolve => (reached = resolve))
-    on('session.append', { door: 'note' }, async (_, e, next) => {
-      reached()
-      await gate
-      return next(e)
-    })
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    const { atGate, release } = holdAppends(on)
+    await start($, WORKER)
 
     const sending = modelSend($, 'worker-a', 'hello')
     await atGate
@@ -325,10 +369,28 @@ describe('the end of the turn', () => {
     expect(passedThrough(w)).toHaveLength(0)
   })
 
+  test('a row stored as one turn ends and the next begins is left to the next turn', async ($, on) => {
+    const w = world(on, [WORKER])
+    const { atGate, release } = holdAppends(on)
+    await start($, WORKER)
+
+    const sending = modelSend($, 'worker-a', 'hello')
+    await atGate
+    await end($, WORKER, 'answer')
+    await start($, WORKER, 'turn-2')
+    release()
+    await sending
+    expect(mailed(w)).toHaveLength(0)
+
+    await step($, WORKER, 2, 'turn-2')
+    await end($, WORKER, 'answer', 'turn-2')
+    expect(mailed(w)).toHaveLength(0)
+  })
+
   for (const reason of ['aborted', 'refusal', 'error'] as const) {
     test(`a turn ending by ${reason} toasts the unread rows and sends nothing`, async ($, on) => {
       const w = world(on, [WORKER])
-      await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+      await start($, WORKER)
       await modelSend($, 'worker-a', 'hello')
 
       await end($, WORKER, reason)
@@ -340,7 +402,7 @@ describe('the end of the turn', () => {
 
   test('a mailbox refusal is toasted', async ($, on) => {
     const w = world(on, [WORKER], { mailboxRefuses: true })
-    await $.turn.start({ text: '', turnId: 'turn-1', agentId: WORKER.id })
+    await start($, WORKER)
     await modelSend($, 'worker-a', 'hello')
 
     await end($, WORKER, 'answer')

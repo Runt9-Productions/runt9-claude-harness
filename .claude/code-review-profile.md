@@ -130,8 +130,8 @@ A new plugin with a contract adds its rows here.
 Each was decided by the owner, on the date shown where one was recorded. Report one only when the diff brings
 something the ruling did not account for.
 
-- The GitHub org and repository names, the `runt9` marketplace name, the `runt9-claude-bot[bot]` name, and the
-  GitHub noreply addresses that go with them.
+- The GitHub org and repository names, the publisher name "Runt9 Productions" (every plugin's `author.name`), the
+  `runt9` marketplace name, the `runt9-claude-bot[bot]` name, and the GitHub noreply addresses that go with them.
 - The owner's own email address as a commit author or committer, in its entry in `.leak-scan.toml` and in its case in
   `harness/leak-scan/test_scan.bats`. Anywhere else it is a finding. (2026-10-25)
 - Runners pinned to `ubuntu-24.04`, until Ubuntu 26 runners exist. (2026-10-24)

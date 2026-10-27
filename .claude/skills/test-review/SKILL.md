@@ -61,9 +61,9 @@ List production files with uncommitted changes:
 git status --porcelain -uall
 ```
 
-Any entry that is neither a test file nor one of the profile's helpers is production. The reviewer breaks production code on purpose
-and has to restore it. For a clean file `git checkout` restores it; for a dirty one that would destroy uncommitted
-work, so the reviewer must copy it aside first and restore from the copy.
+Any entry that is neither a test file nor one of the profile's helpers is production. The reviewer breaks production
+code on purpose and restores it afterwards, and a file it is not told is dirty gets restored from git, which would
+destroy uncommitted work.
 
 ## 5. Spawn the reviewer
 
@@ -75,8 +75,7 @@ The prompt holds only:
 - the scoped files;
 - the reference files they map to, and the profile's path;
 - for each test kind in scope, the run command and how to read its result, from the profile;
-- the dirty production files from step 4, with the instruction to back each up before changing it and restore it from
-  the backup;
+- the dirty production files from step 4, listed as dirty, which the reviewer's Restoring section then backs up;
 - the rule: fix the tests, report production defects without fixing them, and leave production code exactly as it was
   found.
 
@@ -84,15 +83,6 @@ Add nothing about what you expect it to find.
 
 ## 6. Report
 
-Relay the reviewer's result, keeping:
-
-- each test's verdict, with the criteria it met or failed;
-- the findings;
-- the forced-failure output each verdict rests on;
-- every judgment call, including each deletion and why;
-- the real test counts before and after, from actual runs;
-- production defects found and left alone;
-- scoped files that matched no reference;
-- the output of `git status --short` at the end.
-
-A result with no findings still shows what was checked: which tests, which breaks, which runs.
+Relay the reviewer's report whole, in the shape its Report section gives it; leave nothing out, a clean result's
+evidence included. Add the one thing only you know, the scoped files that matched no reference. Then run
+`git status --short` yourself and end with its output, so the report shows the tree as the reviewer left it.

@@ -43,7 +43,9 @@ Every verdict rests on a run, not on reading.
 2. Before running, write down which tests you expect to go red and which to stay green.
 3. Run the test and its neighbours, using the run command the prompt gives.
 4. Read the failure text. It should fail for the reason you broke, under a name that tells a reader what broke, show
-   the actual and expected values, and stop at the first failing assertion.
+   the actual and expected values, and stop at the first failing assertion. The assertions after that one never ran,
+   so a red run proves only the first; break each later assertion on its own before counting the test as able to
+   fail on it.
 5. Confirm the run executed your change, not a cached or installed copy.
 6. When two breaks would interact, apply one at a time.
 7. Explain every green you expected to be red before moving on; an unexplained green is a test that cannot fail.
