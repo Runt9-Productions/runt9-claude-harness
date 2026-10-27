@@ -33,6 +33,20 @@ with open({log!r}, "a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
 sys.exit(int(os.environ.get("EXAMPLE_CLAUDE_EXIT", "0")))
 """
+# Runs bootstrap.py with only the first rename onto `target` interrupted, so a rollback's rename back onto it runs.
+INTERRUPTED_RENAME = """
+import pathlib, runpy, sys
+rename = pathlib.Path.rename
+interrupted = []
+def interrupting_rename(self, target):
+    if pathlib.Path(target) == pathlib.Path({target!r}) and not interrupted:
+        interrupted.append(target)
+        raise KeyboardInterrupt
+    return rename(self, target)
+pathlib.Path.rename = interrupting_rename
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+"""
 
 
 class Sandbox:
@@ -75,9 +89,11 @@ class Sandbox:
         self.git(self.root, "init", "--quiet", "-b", "main", str(repo))
         return repo
 
-    def run(self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None):
+    def run(
+        self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None, python: tuple[str, ...] = ()
+    ):
         return subprocess.run(
-            [sys.executable, str(self.clone / "bootstrap.py"), *args],
+            [sys.executable, *python, str(self.clone / "bootstrap.py"), *args],
             cwd=self.root,
             env={**self.env, **(env or {})},
             input=stdin,
@@ -520,6 +536,21 @@ def test_failed_skill_replacement_leaves_each_skill_whole(sandbox: Sandbox) -> N
     assert (sandbox.skills / "example-alpha/SKILL.md").read_bytes() == ALPHA_SKILL
     assert (sandbox.skills / "example-beta/SKILL.md").read_bytes() == EDITED_SKILL
     assert (sandbox.skills / "example-beta/scripts/example.sh").exists()
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta"]
+
+
+def test_interrupted_skill_replacement_leaves_the_installed_skill(sandbox: Sandbox) -> None:
+    assert sandbox.run("skills").returncode == 0
+    skill = sandbox.skills / "example-alpha"
+    (skill / "SKILL.md").write_bytes(EDITED_SKILL)
+    # The interrupt lands after the installed copy has been moved aside, before the clone's is renamed in.
+    interrupt = INTERRUPTED_RENAME.format(target=str(skill.resolve()))
+
+    result = sandbox.run("skills", stdin="y\n", python=("-c", interrupt))
+
+    assert result.returncode != 0
+    assert "KeyboardInterrupt" in result.stderr
+    assert (skill / "SKILL.md").read_bytes() == EDITED_SKILL
     assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta"]
 
 

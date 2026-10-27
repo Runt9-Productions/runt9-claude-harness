@@ -217,20 +217,20 @@ def export_tree(commit: str, source: str, target: Path) -> None:
         destination.chmod(FILE_MODES[mode])
 
 
-def swap_in(staging: Path) -> None:
-    """Renames each of SWAPPED_IN from `staging` into INSTALL_DIR. Any failure, an interrupt included, renames every
-    one back, so the previous install stays whole."""
-    retired = Path(tempfile.mkdtemp(prefix=".retired-", dir=INSTALL_DIR))
+def swap_in(moves: list[tuple[Path, Path]], beside: Path) -> None:
+    """Renames each staged path in `moves` over its installed path, in order. Any failure, an interrupt included,
+    renames every one back, so the previous install stays whole. When a rename back fails, the previous install is
+    left in a directory made in `beside`, so `beside` must not be one the caller deletes."""
+    retired = Path(tempfile.mkdtemp(prefix=".retired-", dir=beside))
     # Each rename is recorded before it runs, so an interrupt between the two cannot leave one out of the rollback.
     renamed: list[tuple[Path, Path]] = []
     try:
-        for name in SWAPPED_IN:
-            current = INSTALL_DIR / name
+        for staged, current in moves:
             if current.exists():
-                renamed.append((current, retired / name))
-                current.rename(retired / name)
-            renamed.append((staging / name, current))
-            (staging / name).rename(current)
+                renamed.append((current, retired / current.name))
+                current.rename(retired / current.name)
+            renamed.append((staged, current))
+            staged.rename(current)
     except BaseException:
         try:
             for source, destination in reversed(renamed):
@@ -251,7 +251,7 @@ def install_githooks(run: Run) -> None:
         for part in HARNESS_PARTS:
             export_tree(commit, f"harness/{part}", staging / part)
         (staging / SOURCE_COMMIT).write_text(f"{commit}\n", encoding="utf-8")
-        swap_in(staging)
+        swap_in([(staging / name, INSTALL_DIR / name) for name in SWAPPED_IN], INSTALL_DIR)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     print(f"githooks: installed {' and '.join(HARNESS_PARTS)} from {commit} into {INSTALL_DIR}")
@@ -366,8 +366,7 @@ def print_skill_diff(installed: dict[str, SkillFile], clone: dict[str, SkillFile
         after = clone.get(path)
         if before == after:
             continue
-        both = before is not None and after is not None
-        if both and before.mode != after.mode:
+        if before is not None and after is not None and before.mode != after.mode:
             print(f"mode of {path}: {before.mode:o} installed, {after.mode:o} in the clone")
         lines = difflib.unified_diff(
             text_lines(before), text_lines(after), f"installed/{path}", f"clone/{path}", lineterm=""
@@ -394,18 +393,6 @@ def should_replace(name: str, target: Path, staged: Path, run: Run) -> bool:
     return False
 
 
-def replace_skill(staged: Path, target: Path, previous: Path) -> None:
-    """Renames `staged` to `target`. When that fails, the skill that was at `target` goes back."""
-    if target.exists():
-        target.rename(previous)
-    try:
-        staged.rename(target)
-    except OSError:
-        if previous.exists():
-            previous.rename(target)
-        raise
-
-
 def install_skills(run: Run) -> None:
     targets = skill_targets(run)
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)
@@ -414,13 +401,12 @@ def install_skills(run: Run) -> None:
         # Every question is answered before the first skill is replaced, so no stdin stops the run with none written.
         replacing = []
         for name, target in targets.items():
-            staged = staging / "clone" / name
+            staged = staging / name
             export_tree(run.commit, f"{SKILLS_SOURCE}/{name}", staged)
             if should_replace(name, target, staged, run):
                 replacing.append(name)
-        (staging / "previous").mkdir()
         for name in replacing:
-            replace_skill(staging / "clone" / name, targets[name], staging / "previous" / name)
+            swap_in([(staging / name, targets[name])], SKILLS_DIR)
             print(f"skills: installed {name} from {run.commit} into {targets[name]}")
     finally:
         shutil.rmtree(staging, ignore_errors=True)
