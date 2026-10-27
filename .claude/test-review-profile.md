@@ -1,43 +1,44 @@
-# Test review profile: runt9-claude-harness
+# Test review profile
 
-Read by the `/test-review` skill and by the `test-reviewer` agent it spawns.
+Facts about this repository's tests that `/test-review` and the `test-reviewer` agent need.
 
-## 1. Test kinds
+## Default branch
 
-| Kind | Files | Run | Real results |
-|---|---|---|---|
-| bats | `**/*.bats`, with shared helpers in `.github/scripts/tests/helpers.bash` | `bats <file>`, or `bats -f '<name regex>' <file>` for one test | TAP: `1..N`, then an `ok` or `not ok` line per test |
-| mod kit | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | `claude plugin test plugins/<name>` | a `(pass)` or `(fail)` line per test, then `N pass` and `N fail` |
+`main`. With no paths given, the skill reviews test files changed against the merge base with it.
 
-- A bats file with no tests passes. Count the per-test lines against the tests in the file.
-- A test CI does not run protects nothing between manual runs. Check in `.github/workflows/ci.yml` that each scoped
-  file is one a CI step picks up, and report it if not. CI also runs shellcheck over tracked shell files, tests
-  included, so a fix to a shell test must stay shellcheck-clean.
-- Each test file's header comment names the tools it needs beyond bash and git.
-- Production code is everything that is not a test file or `helpers.bash`.
+## Test kinds
 
-## 2. References
+| Kind | Files | Helpers | Run | Reading the result |
+|---|---|---|---|---|
+| bats | `**/*.bats` | `.github/scripts/tests/helpers.bash` | `bats <file>`, or one test with `bats -f '<regex>' <file>` | TAP: `1..N`, then one `ok` or `not ok` line per test |
+| mod kit | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | none | `claude plugin test plugins/<name>` | one `(pass)` or `(fail)` line per test, then `N pass` and `N fail` |
 
-| Files | Reference |
+Production code is every file that is neither a test nor a helper listed above.
+
+## Checks on every scoped file
+
+- **It has tests.** bats passes a file with no tests in it, so count the per-test lines rather than trusting the exit
+  status.
+- **CI runs it.** `.github/workflows/ci.yml` must pick the file up. A test CI never runs protects nothing.
+- **Lint.** shellcheck runs over bats files and their helpers, so a fix must pass it.
+- **Requirements.** A test file's header comment names every tool it needs beyond bash and git.
+
+## Reference files
+
+| Kind | Reference |
 |---|---|
-| `**/*.bats` | `.claude/agents/references/test-review-shell.md` |
-| `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | `.claude/agents/references/test-review-mod-kit.md` |
+| bats | `.claude/agents/references/test-review-shell.md` |
+| mod kit | `.claude/agents/references/test-review-mod-kit.md` |
 
-## 3. Suite policy
+## Suite policy
 
-`CLAUDE.md`: "Tests are few, at the boundaries, with obviously synthetic fixtures." Applied as criterion 4's scope
-rule:
+From the "Writing here" rule in `CLAUDE.md` that tests are few, at the boundaries, with obviously synthetic fixtures.
+Criterion 4 judges each test against it:
 
-- **At the boundaries.** A test drives a shipped entry point the way its real caller does: a CI script as the
-  workflow runs it, a git hook as git runs it, a scan as the hook calls it, a mod through the engine events it
-  registers on. It asserts what crosses back out: the exit status and its reason, what a stubbed tool received, output
-  a consumer reads. A test of a function inside a script, or of an intermediate file nobody else reads, is outside
-  the policy.
-- **Few.** One test per distinct decision the entry point can make: each reason it refuses, the path where it allows,
-  and each error path that must fail closed. A second test of the same decision is redundant under criterion 4 even
-  when its input differs.
-- **Fail-closed paths are not optional.** Most of what ships here refuses something. A guard with no test showing it
-  refuses when its input is unreadable, or a tool it needs is missing, is a coverage gap to report, and the policy
-  never argues for deleting one.
-- **Obviously synthetic fixtures.** `example.com`, `test` identities, temporary directories; never a real home path,
-  host, person or organization. The repository is public, so fixtures ship too.
+- **Boundaries.** Drive a shipped entry point the way its real caller does (a hook through its stdin and arguments, a
+  mod through engine events) and assert on what comes back out.
+- **One test per decision.** Each distinct decision the code makes gets one test. A second test of the same decision
+  is redundant.
+- **Fail-closed paths.** A test that proves a guard refuses when something goes wrong is always wanted and never
+  deleted as redundant.
+- **Fake fixtures.** Test data ships publicly, so it is plainly synthetic: `example.com`, `PROJ-123`, made-up names.

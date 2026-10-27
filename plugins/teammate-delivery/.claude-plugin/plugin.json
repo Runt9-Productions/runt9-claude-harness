@@ -1,7 +1,7 @@
 {
   "name": "teammate-delivery",
-  "version": "0.1.0",
-  "description": "Delivers a message to a busy teammate at its next model request, instead of when its whole turn ends",
+  "version": "0.1.1",
+  "description": "Lets a teammate that is mid-turn read a message on its next model request, not after the turn is over",
   "author": {
     "name": "Runt9 Productions"
   }

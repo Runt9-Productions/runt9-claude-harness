@@ -243,7 +243,8 @@ if [[ $(head -n 1 "$agent_file") != --- ]]; then
     echo "pre-push: public-leak.md on the default branch of $url does not start with frontmatter, push refused" >&2
     exit 1
 fi
-# frontmatter_field <key>: the value of `key: value` between the agent file's opening `---` and the next one.
+# frontmatter_field <key>: the value of `key: value` between the agent file's opening `---` and the next one. It reads
+# one line and keeps any quotes, so public-leak.md must give `description`, `model` and `effort` as single unquoted lines.
 frontmatter_field() {
     sed -n "2,/^---\$/s/^$1: //p" "$agent_file"
 }
