@@ -15,8 +15,8 @@ nothing from an employer, a private project or a specific machine goes in, in co
   `~/.claude/skills/`, sets `core.hooksPath` in the repositories named, and installs plugins from the marketplace. A
   new installable part under `harness/` registers a component in its `HARNESS_COMPONENTS`. Its tests are
   `test_bootstrap.py` beside it.
-- `requirements-dev.txt`: the pinned Python tools CI runs (ruff, and pytest with every package it needs, since CI
-  installs with `--no-deps`). Python that ships here uses the standard library only.
+- `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
+  needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
@@ -44,7 +44,7 @@ To check a mod, run `npm ci` once at the root, then load the mod as above, which
 the plugin. Then run `npx tsc -p plugins/<name>`, `npx oxlint -c .oxlintrc.json plugins/<name>` and
 `claude plugin test plugins/<name>`.
 
-To check Python, install the pinned tools into a virtual environment once, then run what CI runs from the root:
+To check Python, install the pinned tools into a virtual environment once, then run the checks from the root. CI adds flags that keep a config file a PR adds from changing them.
 
 ```
 python3 -m venv <venv>
