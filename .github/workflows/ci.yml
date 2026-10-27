@@ -120,15 +120,18 @@ jobs:
           "$RUNNER_TEMP/venv/bin/pip" check
           echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
 
+      # A config file, ignore file or conftest.py that a PR adds could switch a check off and still pass, so ruff reads
+      # only ruff.toml and pytest reads no config file and no conftest.py. A shared fixture cannot live in conftest.py.
       - name: ruff check
-        run: ruff check --no-cache .
+        run: ruff check --no-cache --config ruff.toml --no-respect-gitignore .
 
       - name: ruff format
-        run: ruff format --check --no-cache .
+        run: ruff format --check --no-cache --config ruff.toml --no-respect-gitignore .
 
-      # pytest exits 5 when it collects no tests, so a run that finds none fails.
+      # pytest exits 5 when it collects no tests, so a run that finds none fails. -P keeps the checkout off sys.path, so
+      # a pytest.py in it cannot stand in for pytest.
       - name: pytest
-        run: python -m pytest -p no:cacheprovider
+        run: python -P -m pytest -p no:cacheprovider -c /dev/null --rootdir . --noconftest
 
   leak-scan:
     needs: zizmor

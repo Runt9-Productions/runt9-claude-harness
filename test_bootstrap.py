@@ -170,6 +170,28 @@ def test_failed_reinstall_leaves_the_previous_install(sandbox: Sandbox) -> None:
     assert sorted(path.name for path in sandbox.install.iterdir()) == ["SOURCE_COMMIT", "githooks", "leak-scan"]
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root renames a directory it cannot write")
+def test_reinstall_failing_at_source_commit_puts_both_parts_back(sandbox: Sandbox) -> None:
+    assert sandbox.run("githooks").returncode == 0
+    sandbox.write("harness/githooks/pre-push", b"#!/bin/sh\necho example second\n", 0o755)
+    sandbox.commit("Change the example hook")
+    # SOURCE_COMMIT is swapped in last, and a directory without write permission cannot move to another directory.
+    source_commit = sandbox.install / "SOURCE_COMMIT"
+    source_commit.unlink()
+    source_commit.mkdir(mode=0o555)
+    try:
+        result = sandbox.run("githooks")
+    finally:
+        source_commit.chmod(0o755)
+
+    assert result.returncode == 1
+    assert "githooks failed:" in result.stderr
+    assert (sandbox.install / "githooks/pre-push").read_bytes() == PRE_PUSH
+    assert (sandbox.install / "leak-scan/scan.sh").exists()
+    assert source_commit.is_dir()
+    assert sorted(path.name for path in sandbox.install.iterdir()) == ["SOURCE_COMMIT", "githooks", "leak-scan"]
+
+
 def test_symlink_in_a_part_stops_githooks(sandbox: Sandbox) -> None:
     (sandbox.clone / "harness/leak-scan/example-link").symlink_to("scan.sh")
     head = sandbox.commit("Add an example symlink")
@@ -208,6 +230,21 @@ def test_uncommitted_tracked_change_does_not_refuse_a_plugin_only_run(sandbox: S
 
     assert result.returncode == 0, result.stderr
     assert sandbox.claude_calls() == [MARKETPLACE_ADD, ["plugin", "install", "example-one@example-market"]]
+
+
+def test_older_python_stops_with_one_line(sandbox: Sandbox) -> None:
+    older = "import runpy, sys; sys.version_info = (3, 11, 9); runpy.run_path(sys.argv[1], run_name='__main__')"
+
+    result = subprocess.run(
+        [sys.executable, "-c", older, str(sandbox.clone / "bootstrap.py")],
+        env=sandbox.env,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stderr == "bootstrap: needs Python 3.12 or newer, and this is 3.11.9\n"
 
 
 @pytest.mark.parametrize("variable", ["CLAUDE_CODE_SESSION_ID", "CLAUDECODE"])
@@ -265,19 +302,60 @@ def test_hooks_path_refuses_before_githooks_is_installed(sandbox: Sandbox) -> No
     assert sandbox.hooks_path(repo) is None
 
 
-def test_hooks_path_prints_a_different_previous_value(sandbox: Sandbox) -> None:
+@pytest.mark.parametrize(
+    ("config_file", "restore"),
+    [
+        ("example-repo/.git/config", "config core.hooksPath '/example/old hooks'"),
+        ("example-global.gitconfig", "config --unset core.hooksPath"),
+    ],
+    ids=["local", "global"],
+)
+def test_hooks_path_prints_a_different_previous_value(sandbox: Sandbox, config_file: str, restore: str) -> None:
     repo = sandbox.new_repo("example-repo")
-    sandbox.git(repo, "config", "core.hooksPath", "/example/hooks")
-    assert sandbox.run("githooks").returncode == 0
+    global_config = sandbox.root / "example-global.gitconfig"
+    global_config.touch()
+    previous_in = sandbox.root / config_file
+    sandbox.git(sandbox.root, "config", "--file", str(previous_in), "core.hooksPath", "/example/old hooks")
+    env = {"GIT_CONFIG_GLOBAL": str(global_config)}
+    assert sandbox.run("githooks", env=env).returncode == 0
 
-    replaced = sandbox.run("hooks-path", "--repo", str(repo))
-    repeated = sandbox.run("hooks-path", "--repo", str(repo))
+    replaced = sandbox.run("hooks-path", "--repo", str(repo), env=env)
+    repeated = sandbox.run("hooks-path", "--repo", str(repo), env=env)
 
     assert replaced.returncode == 0, replaced.stderr
-    assert f"{repo} had core.hooksPath /example/hooks" in replaced.stdout
+    assert f"{repo} had core.hooksPath /example/old hooks" in replaced.stdout
+    assert f"to restore it: git -C {repo} {restore}\n" in replaced.stdout
     assert sandbox.hooks_path(repo) == str(sandbox.install / "githooks")
     assert repeated.returncode == 0, repeated.stderr
     assert "had core.hooksPath" not in repeated.stdout
+
+
+def test_hooks_path_names_the_repository_hooks_that_stop_running(sandbox: Sandbox) -> None:
+    repo = sandbox.new_repo("example-repo")
+    hooks_dir = repo / ".git/hooks"
+    hooks_dir.mkdir(exist_ok=True)
+    for name in ("pre-commit", "pre-push.sample"):
+        (hooks_dir / name).write_text("#!/bin/sh\n")
+        (hooks_dir / name).chmod(0o755)
+    assert sandbox.run("githooks").returncode == 0
+
+    result = sandbox.run("hooks-path", "--repo", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert f"warning: {repo} stops running pre-commit from {hooks_dir}\n" in result.stderr
+    assert "pre-push.sample" not in result.stderr
+
+
+def test_hooks_path_ignores_a_git_dir_in_the_environment(sandbox: Sandbox) -> None:
+    repo = sandbox.new_repo("example-repo")
+    other = sandbox.new_repo("example-other")
+    assert sandbox.run("githooks").returncode == 0
+
+    result = sandbox.run("hooks-path", "--repo", str(repo), env={"GIT_DIR": str(other / ".git")})
+
+    assert result.returncode == 0, result.stderr
+    assert sandbox.hooks_path(repo) == str(sandbox.install / "githooks")
+    assert sandbox.hooks_path(other) is None
 
 
 def test_hooks_path_refuses_a_directory_inside_a_repository(sandbox: Sandbox) -> None:
@@ -356,8 +434,8 @@ def make_plugin_dir(parent: Path, directory: str, manifest_name: str | None) -> 
     return str(path)
 
 
-@pytest.mark.parametrize("source", ["shell", "settings"])
-def test_plugin_dirs_warning_names_the_loaded_plugin(sandbox: Sandbox, source: str) -> None:
+@pytest.mark.parametrize("in_settings", [False, True], ids=["shell", "settings"])
+def test_plugin_dirs_warning_names_the_loaded_plugin(sandbox: Sandbox, in_settings: bool) -> None:
     parent = sandbox.root / "example-plugin-dirs"
     entries = [
         make_plugin_dir(parent, "example-one", "example-renamed"),
@@ -365,10 +443,9 @@ def test_plugin_dirs_warning_names_the_loaded_plugin(sandbox: Sandbox, source: s
         make_plugin_dir(parent, "example-three", None),
     ]
     value = os.pathsep.join(entries)
-    env = {}
-    if source == "shell":
-        env["CLAUDE_CODE_PLUGIN_DIRS"] = value
-    else:
+    env = {"CLAUDE_CODE_PLUGIN_DIRS": value}
+    if in_settings:
+        env = {}
         (sandbox.home / ".claude").mkdir()
         (sandbox.home / ".claude/settings.json").write_text(json.dumps({"env": {"CLAUDE_CODE_PLUGIN_DIRS": value}}))
 
@@ -378,36 +455,36 @@ def test_plugin_dirs_warning_names_the_loaded_plugin(sandbox: Sandbox, source: s
     assert f"loads example-two from {entries[1]}" in result.stderr
     assert f"loads example-three from {entries[2]}" in result.stderr
     assert "loads example-one from" not in result.stderr
-    assert len(sandbox.claude_calls()) == 4
+    assert sandbox.claude_calls() == [
+        MARKETPLACE_ADD,
+        ["plugin", "install", "example-one@example-market"],
+        ["plugin", "install", "example-two@example-market"],
+        ["plugin", "install", "example-three@example-market"],
+    ]
 
 
+# A `content` of None makes `broken` a directory, which cannot be read as a file.
 @pytest.mark.parametrize(
-    ("broken", "reason"),
+    ("broken", "content", "reason"),
     [
-        ("manifest", "is not a JSON object"),
-        ("manifest-syntax", "is not valid JSON"),
-        ("manifest-directory", "cannot read {path}: Is a directory"),
-        ("settings", "is not a JSON object"),
+        ("example-plugin/.claude-plugin/plugin.json", "[]", "is not a JSON object"),
+        ("example-plugin/.claude-plugin/plugin.json", "{", "is not valid JSON"),
+        ("example-plugin/.claude-plugin/plugin.json", None, "cannot read {path}: Is a directory"),
+        ("home/.claude/settings.json", "[]", "is not a JSON object"),
     ],
     ids=["manifest-not-object", "manifest-not-json", "manifest-unreadable", "settings-not-object"],
 )
-def test_bad_json_stops_before_any_claude_call(sandbox: Sandbox, broken: str, reason: str) -> None:
+def test_bad_json_stops_before_any_claude_call(sandbox: Sandbox, broken: str, content: str | None, reason: str) -> None:
     plugin_dir = sandbox.root / "example-plugin"
     (plugin_dir / ".claude-plugin").mkdir(parents=True)
-    manifest = plugin_dir / ".claude-plugin/plugin.json"
     settings = sandbox.home / ".claude/settings.json"
     settings.parent.mkdir()
     settings.write_text(json.dumps({"env": {"CLAUDE_CODE_PLUGIN_DIRS": str(plugin_dir)}}))
-    path = manifest
-    if broken == "manifest":
-        manifest.write_text("[]")
-    elif broken == "manifest-syntax":
-        manifest.write_text("{")
-    elif broken == "manifest-directory":
-        manifest.mkdir()
+    path = sandbox.root / broken
+    if content is None:
+        path.mkdir()
     else:
-        path = settings
-        settings.write_text("[]")
+        path.write_text(content)
 
     result = sandbox.run("plugin:example-one")
 

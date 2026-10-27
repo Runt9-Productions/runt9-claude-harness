@@ -27,17 +27,21 @@ Checks:
     under either directory. Warns, and installs anyway, when HEAD is not reachable from origin/main as of the last
     fetch. A failed install leaves the previous one in place.
   - hooks-path: refuses, before changing any repository, when githooks is not installed, when no --repo is given,
-    or when a --repo is not the top level of a git repository. Prints a different core.hooksPath it replaces, so
-    you can restore it. Fails when the value git reads back differs, because a config.worktree or an include sets
+    or when a --repo is not the top level of a git repository. Prints a different core.hooksPath it replaces,
+    whichever config sets it, and the command that restores it. Warns about each hook of the repository's own that
+    stops running. Fails when the value git reads back differs, because a config.worktree or an include sets
     another. Notes each repository without claude.botEmail, where the hooks run only the leak gate.
   - plugin:<name>: warns when CLAUDE_CODE_PLUGIN_DIRS, in the shell or in the env block of ~/.claude/settings.json,
     also loads the plugin, since a session then runs that copy instead. Stops before running claude when a
     plugin.json there or the settings file cannot be read or is not a JSON object.
 
+Git runs without GIT_DIR, GIT_WORK_TREE and the other variables that point it at another repository or add config
+to it, so the repository read and changed is always the one named.
+
 Nothing here keeps an agent from writing to ~/.claude/harness/; that is your harness's job.
 
-Updating: for githooks, check out main, pull and run `python3 bootstrap.py githooks` again. For a plugin, run
-`claude plugin update <name>@runt9`; running this script again does not update a plugin already installed.
+Updating: for the harness parts, check out main, pull and run `python3 bootstrap.py githooks` again. For a plugin,
+run `claude plugin update <name>@runt9`; running this script again does not update a plugin already installed.
 
 Exits 0 when everything picked installed, otherwise 1 with one line naming the reason. A component installed before
 a later one failed stays installed, and that line says which.
@@ -47,6 +51,7 @@ import argparse
 import functools
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -54,6 +59,11 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Above every definition: on an older interpreter their annotations raise at import, before main could say why.
+if sys.version_info < (3, 12):  # noqa: UP036 (ruff assumes the target version, and this check is for older ones)
+    running = ".".join(str(part) for part in sys.version_info[:3])
+    sys.exit(f"bootstrap: needs Python 3.12 or newer, and this is {running}")
 
 CLONE = Path(__file__).resolve().parent
 MARKETPLACE_FILE = CLONE / ".claude-plugin" / "marketplace.json"
@@ -64,6 +74,8 @@ INSTALL_DIR = Path.home() / ".claude" / "harness"
 SOURCE_COMMIT = "SOURCE_COMMIT"
 # Installed side by side, because pre-push finds the scanner at ../leak-scan.
 HARNESS_PARTS = ("githooks", "leak-scan")
+# Swapped in this order: SOURCE_COMMIT last, so it is never in place before both parts are.
+SWAPPED_IN = (*HARNESS_PARTS, SOURCE_COMMIT)
 FILE_MODES = {"100644": 0o644, "100755": 0o755}
 
 SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
@@ -80,23 +92,6 @@ class Run:
     repos: list[Path]
     installed: list[str] = field(default_factory=list)
     marketplace_added: bool = False
-
-    @functools.cached_property
-    def plugins_from_dirs(self) -> dict[str, str]:
-        """Maps each plugin name CLAUDE_CODE_PLUGIN_DIRS loads to the entry that loads it."""
-        loaded = {}
-        for entry in plugin_dirs_entries():
-            directory = Path(entry).expanduser()
-            # Claude Code skips a relative entry, and an archive entry is not read here.
-            if not directory.is_absolute() or not directory.is_dir():
-                continue
-            manifest = directory / ".claude-plugin" / "plugin.json"
-            name = directory.name
-            if manifest.exists():
-                name = read_json_object(manifest).get("name")
-            if isinstance(name, str):
-                loaded[name] = entry
-        return loaded
 
 
 @dataclass(frozen=True)
@@ -116,16 +111,31 @@ def warn(message: str) -> None:
     print(f"bootstrap: warning: {message}", file=sys.stderr)
 
 
+@functools.cache
+def git_environment() -> dict[str, str]:
+    """The caller's environment without the variables that point git at another repository or add config to it, so
+    each call acts on the directory it names."""
+    listed = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True)
+    if listed.returncode != 0:
+        raise Stop(f"git rev-parse --local-env-vars exited {listed.returncode}")
+    redirecting = set(listed.stdout.split())
+    return {name: value for name, value in os.environ.items() if name not in redirecting}
+
+
 def run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True)
+    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, env=git_environment())
+
+
+def git_failure(cwd: Path, args: tuple[str, ...], result: subprocess.CompletedProcess[bytes]) -> Stop:
+    lines = result.stderr.decode(errors="replace").strip().splitlines()
+    reason = lines[-1] if lines else f"exit {result.returncode}"
+    return Stop(f"git {' '.join(args)} failed in {cwd}: {reason}")
 
 
 def git(cwd: Path, *args: str) -> bytes:
     result = run_git(cwd, *args)
     if result.returncode != 0:
-        lines = result.stderr.decode(errors="replace").strip().splitlines()
-        reason = lines[-1] if lines else f"exit {result.returncode}"
-        raise Stop(f"git {' '.join(args)} failed in {cwd}: {reason}")
+        raise git_failure(cwd, args, result)
     return result.stdout
 
 
@@ -135,8 +145,8 @@ def git_config(repo: Path, *args: str) -> str | None:
     if result.returncode == 1:
         return None
     if result.returncode != 0:
-        raise Stop(f"git config {' '.join(args)} failed in {repo}: {result.stderr.decode(errors='replace').strip()}")
-    return result.stdout.decode().strip()
+        raise git_failure(repo, ("config", *args), result)
+    return os.fsdecode(result.stdout).strip()
 
 
 def read_json_object(path: Path) -> dict:
@@ -160,11 +170,12 @@ def check_checkout() -> None:
     if run_git(CLONE, "rev-parse", "--verify", "--quiet", f"refs/remotes/{UPSTREAM}^{{commit}}").returncode != 0:
         warn(f"there is no {UPSTREAM} to compare HEAD with; installing HEAD anyway")
         return
-    reachable = run_git(CLONE, "merge-base", "--is-ancestor", "HEAD", UPSTREAM)
+    ancestry = ("merge-base", "--is-ancestor", "HEAD", UPSTREAM)
+    reachable = run_git(CLONE, *ancestry)
     if reachable.returncode == 1:
         warn(f"HEAD is not on {UPSTREAM} as of the last fetch; installing HEAD anyway")
     elif reachable.returncode != 0:
-        raise Stop(f"git merge-base --is-ancestor HEAD {UPSTREAM} failed: {reachable.stderr.decode().strip()}")
+        raise git_failure(CLONE, ancestry, reachable)
 
 
 def export_tree(commit: str, source: str, target: Path) -> None:
@@ -186,25 +197,29 @@ def export_tree(commit: str, source: str, target: Path) -> None:
 
 
 def swap_in(staging: Path) -> None:
-    """Renames each part from `staging` into INSTALL_DIR. When a rename fails, every part goes back as it was."""
-    retired = staging / ".retired"
-    retired.mkdir()
-    swapped = []
+    """Renames each of SWAPPED_IN from `staging` into INSTALL_DIR. Any failure, an interrupt included, renames every
+    one back, so the previous install stays whole."""
+    retired = Path(tempfile.mkdtemp(prefix=".retired-", dir=INSTALL_DIR))
+    # Each rename is recorded before it runs, so an interrupt between the two cannot leave one out of the rollback.
+    renamed: list[tuple[Path, Path]] = []
     try:
-        for part in HARNESS_PARTS:
-            current = INSTALL_DIR / part
+        for name in SWAPPED_IN:
+            current = INSTALL_DIR / name
             if current.exists():
-                current.rename(retired / part)
-            (staging / part).rename(current)
-            swapped.append(part)
-    except OSError:
-        for part in reversed(HARNESS_PARTS):
-            current = INSTALL_DIR / part
-            if part in swapped:
-                current.rename(staging / part)
-            if (retired / part).exists():
-                (retired / part).rename(current)
+                renamed.append((current, retired / name))
+                current.rename(retired / name)
+            renamed.append((staging / name, current))
+            (staging / name).rename(current)
+    except BaseException:
+        try:
+            for source, destination in reversed(renamed):
+                if destination.exists():
+                    destination.rename(source)
+        except OSError as error:
+            raise Stop(f"could not put the previous install back; it is in {retired}: {error}") from error
+        retired.rmdir()
         raise
+    shutil.rmtree(retired, ignore_errors=True)
 
 
 def install_githooks(run: Run) -> None:
@@ -214,11 +229,8 @@ def install_githooks(run: Run) -> None:
     try:
         for part in HARNESS_PARTS:
             export_tree(commit, f"harness/{part}", staging / part)
+        (staging / SOURCE_COMMIT).write_text(f"{commit}\n", encoding="utf-8")
         swap_in(staging)
-        # Written only once the swap has succeeded, so it never names a commit that is not installed.
-        pending = staging / SOURCE_COMMIT
-        pending.write_text(f"{commit}\n", encoding="utf-8")
-        pending.replace(INSTALL_DIR / SOURCE_COMMIT)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     print(f"githooks: installed {' and '.join(HARNESS_PARTS)} from {commit} into {INSTALL_DIR}")
@@ -231,23 +243,51 @@ def check_hooks_path(run: Run) -> None:
         result = run_git(repo, "rev-parse", "--show-toplevel")
         if result.returncode != 0:
             raise Stop(f"{repo} is not a git repository")
-        top_level = Path(result.stdout.decode().strip())
+        top_level = Path(os.fsdecode(result.stdout).strip())
         if not top_level.samefile(repo):
             raise Stop(f"{repo} is inside the repository {top_level}, not its top level")
 
 
+def report_replaced_hooks(repo: Path, hooks: str) -> None:
+    """Says what setting core.hooksPath to `hooks` turns off in `repo`: the value git uses now, from whichever
+    scope, and each hook in the directory git runs hooks from now."""
+    current = git_config(repo, "--show-scope", "--get", "core.hooksPath")
+    if current is None:
+        hooks_dir = repo / os.fsdecode(git(repo, "rev-parse", "--git-path", "hooks")).strip()
+    else:
+        scope, previous = current.split("\t", 1)
+        if previous == hooks:
+            return
+        # A relative core.hooksPath is relative to the top level, which check_hooks_path made sure `repo` is.
+        hooks_dir = repo / Path(previous).expanduser()
+        if scope == "local":
+            restore = ["git", "-C", str(repo), "config", "core.hooksPath", previous]
+        else:
+            # A value from another scope applies again once the repository's own is gone.
+            restore = ["git", "-C", str(repo), "config", "--unset", "core.hooksPath"]
+        print(f"hooks-path: {repo} had core.hooksPath {previous} from its {scope} config")
+        print(f"hooks-path: to restore it: {shlex.join(restore)}")
+    if not hooks_dir.is_dir():
+        return
+    disabled = []
+    for path in sorted(hooks_dir.iterdir()):
+        if path.suffix == ".sample":
+            continue
+        if path.is_file() and os.access(path, os.X_OK):
+            disabled.append(path.name)
+    if disabled:
+        warn(f"{repo} stops running {', '.join(disabled)} from {hooks_dir}")
+
+
 def install_hooks_path(run: Run) -> None:
-    hooks = INSTALL_DIR / "githooks"
+    hooks = str(INSTALL_DIR / "githooks")
     if not (INSTALL_DIR / SOURCE_COMMIT).is_file():
         raise Stop(f"githooks is not installed in {INSTALL_DIR}; install it first")
     for repo in run.repos:
-        previous = git_config(repo, "--local", "--get", "core.hooksPath")
-        if previous is not None and previous != str(hooks):
-            restore = f"git -C {repo} config core.hooksPath {previous}"
-            print(f"hooks-path: {repo} had core.hooksPath {previous}; to restore it: {restore}")
-        git(repo, "config", "--local", "core.hooksPath", str(hooks))
+        report_replaced_hooks(repo, hooks)
+        git(repo, "config", "--local", "core.hooksPath", hooks)
         effective = git_config(repo, "--get", "core.hooksPath")
-        if effective != str(hooks):
+        if effective != hooks:
             raise Stop(f"{repo} reads core.hooksPath as {effective}, not {hooks}; a config.worktree or include sets it")
         print(f"hooks-path: {repo} uses {hooks}")
         if not git_config(repo, "--get", "claude.botEmail"):
@@ -268,10 +308,28 @@ def plugin_dirs_entries() -> list[str]:
     return entries
 
 
+@functools.cache
+def plugins_from_dirs() -> dict[str, str]:
+    """Maps each plugin name CLAUDE_CODE_PLUGIN_DIRS loads to the entry that loads it."""
+    loaded = {}
+    for entry in plugin_dirs_entries():
+        directory = Path(entry).expanduser()
+        # Claude Code skips a relative entry, and an archive entry is not read here.
+        if not directory.is_absolute() or not directory.is_dir():
+            continue
+        manifest = directory / ".claude-plugin" / "plugin.json"
+        name = directory.name
+        if manifest.exists():
+            name = read_json_object(manifest).get("name")
+        if isinstance(name, str):
+            loaded[name] = entry
+    return loaded
+
+
 def check_plugin(name: str, run: Run) -> None:
     if shutil.which("claude") is None:
         raise Stop("claude is not on PATH, and plugin components run it")
-    entry = run.plugins_from_dirs.get(name)
+    entry = plugins_from_dirs().get(name)
     if entry is not None:
         warn(f"{PLUGIN_DIRS_VARIABLE} also loads {name} from {entry}, and a session runs that copy instead")
 

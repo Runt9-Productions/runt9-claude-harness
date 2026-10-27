@@ -91,8 +91,9 @@ python3 bootstrap.py githooks hooks-path --repo <path> [--repo <path> ...]
 
 `githooks` copies `githooks/` and `leak-scan/` from the commit checked out into `~/.claude/harness/` and records the
 commit in `~/.claude/harness/SOURCE_COMMIT`; `hooks-path` sets `core.hooksPath` to `~/.claude/harness/githooks` in
-each repository named. By hand, copy the two directories side by side into one directory outside the repository and
-run `git config core.hooksPath <dir>/githooks` in each repository the agent works in.
+each repository named. By hand, copy the two directories side by side into one directory `<dir>` outside the
+repository and run `git config core.hooksPath <dir>/githooks` in each repository the agent works in. With
+`bootstrap.py`, `<dir>` is `~/.claude/harness`.
 
 Each `bootstrap.py githooks` run replaces `githooks/` and `leak-scan/` whole, so no other file belongs in them. The
 leak gate keeps its pass cache and working files in `<dir>/state/`, which a reinstall keeps, so whatever keeps the
@@ -100,4 +101,5 @@ agent from writing to the installed copy has to cover all of `<dir>`. Nothing in
 your harness's job.
 
 `core.hooksPath` replaces `.git/hooks/`, so git runs only these hooks: a repository's own other hooks do not run with
-this install. Set the authorship keys above in the same repository; without them only the leak gate runs.
+this install. A tool that rewrites `core.hooksPath`, such as husky, undoes the install in that repository. Set the
+authorship keys above in the same repository; without them only the leak gate runs.
