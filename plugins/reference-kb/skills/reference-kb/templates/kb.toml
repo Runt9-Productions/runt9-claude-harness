@@ -1,14 +1,13 @@
-# Copy to <repo>/.claude/reference/kb.toml and keep only what differs from the shared format. Without this file a
-# knowledge base holds all three trees and adds nothing to the vocabularies.
+# What this knowledge base adds to the reference-kb format. Keep only the trees in use, and delete any table that
+# adds nothing.
 
-# The trees this knowledge base holds, from domains, entities and projects. A note anywhere else fails validation.
-trees = ["domains", "projects"]
+trees = ["domains", "entities", "projects"]
 
-# Additions to the format's vocabularies, each a name and what it means. A note using a name declared in neither
-# fails validation, so adding one here is the whole cost of a new category, tag or project status.
 [categories]
+"{{name}}" = "{{what an observation in this category records}}"
 
 [tags]
-# example-tag ="What class of problem it marks, and why a reader would search for it from outside one note."
+"{{name}}" = "{{what a line with this tag has in common with others}}"
 
 [statuses]
+"{{name}}" = "{{what a project in this status is doing}}"

@@ -1,102 +1,87 @@
 ---
 name: reference-kb
-description: How to read, search, write and validate a repository's reference knowledge base in `.claude/reference/` (notes under domains/, entities/ and projects/, indexed by Basic Memory). Use before answering a question the knowledge base might cover, before writing or updating a note, when running or reading `validate.py`, `--stale` or `--stale-in`, when setting a knowledge base up in a new repository, or when the user says "check the KB", "write this up in the KB", "update the KB", "the KB is stale" or "add a note for X".
+description: How to read, search, write, re-verify and validate a reference knowledge base, the Markdown notes under .claude/reference/ that are read before the code or platform behaviour they cover. Use before answering a question the knowledge base might cover, before writing or updating a note, when running or reading the validator or its --stale and --stale-in modes, and when setting a knowledge base up in a repository. Triggers on "check the KB", "update the KB", "the KB is stale", "add a note for X", "is there a note on", "what does the reference say", "validate the notes".
 ---
 
 # Reference knowledge base
 
-A repository's `.claude/reference/` holds notes written for an agent to read before the code, so it arrives knowing
-the traps. The format is `references/format.md`; this file says how to use it. A repository's
-`.claude/reference/README.md` lists its entry points and conventions of its own, and its `kb.toml` what it adds to
-the shared vocabularies.
+The format, `${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/references/format.md`, holds every rule about what a note is.
+The templates are in `${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/templates/`. This skill says how to use them. The
+root is `.claude/reference/` unless a repository says otherwise, and its README may add local conventions.
 
 ## Reading
 
-**Silence is not an answer.** Notes record what someone investigated, not what exists, so a question the knowledge
-base does not answer is still open. Never conclude that something does not exist, or works the obvious way, from
-the knowledge base alone. A note that covers an area covers part of it; its Scope line says which part.
+- **Silence is no information.** A subject the knowledge base does not mention is not "no" and not "it works the
+  obvious way". Answer it from the code.
+- **Pointed at a note, read the file** with `Read`: it gives line numbers, and `read_note` does not.
+- **A question in words:** search by meaning with Basic Memory, below.
+- **A search that comes back empty or off target** is not an answer. Go to the root README's entry points, then the
+  area's `overview.md`, then a text search scoped to the root.
+- **Before trusting a note**, look at `verified` and run the validator with `--stale`. A stale or UNKNOWN note is a
+  list of files to read, not an answer. A `measured_on` fact holds for the version it names.
 
-- **A note you were pointed at:** `Read` it. It returns line numbers, which Basic Memory's `read_note` does not.
-- **A question in words:** Basic Memory's `search_notes`. It matches meaning, so it finds a note that never uses the
-  question's words. Pass `search_all_projects: true` to cover every knowledge base on the machine.
-- **Keep `output_format: text`.** `json` returns each note's whole body.
-- **Results do not name their project,** and two knowledge bases can hold the same permalink (`readme`). Pass
-  `project` when reading one.
-- **`build_context` follows relations.** Raise `max_related` above the default 10 on a hub note, or its inbound links
-  crowd out its outbound ones.
-- **An empty or off-target search is not proof of absence.** Fall back to the README's entry points, the hub note
-  for the area, or a text search scoped to `.claude/reference/`.
-- **Check the date.** `verified` says when the claims were last read against the code; `--stale` below says whether
-  the code has moved since.
+## Basic Memory
 
-Basic Memory indexes the directory registered for a project, which is usually the main checkout. A session in a
-worktree or on another branch searches that checkout's notes, not its own branch's.
+Optional: without it, read the files and search the text.
+
+- `search_notes` with `query` and `search_all_projects: true` covers every registered knowledge base; `project` pins
+  one. Keep `output_format: "text"`, the default, for compact results.
+- Permalinks come from paths, so two knowledge bases can share one. Before relying on a hit from an all-projects
+  search, confirm which knowledge base it came from.
+- `build_context` on `memory://<permalink>` follows relations. Raise `max_related` (default 10) on a hub note, or
+  inbound links crowd out its outbound ones.
+- `write_note` takes `title`, `content` and `directory`; `edit_note` takes `identifier` (the exact title or
+  permalink), `operation` and `content`.
+- **Its index covers one registered path per project**, normally the main checkout. A session on another branch or
+  in a worktree gets results from that path, never from its own branch, so a hit can disagree with the file in front
+  of it. The file wins.
 
 ## Writing
 
-Read `references/format.md` first, every time: it changes, and the validator holds you to the current version. Then
-copy the matching template from `${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/templates/` rather than writing
-frontmatter from memory:
+1. Read the format before every write.
+2. Search for a note on the topic before creating one, and extend it if it exists.
+3. Start a new note from its template, and go through the template's checklist before deleting it.
+4. Write with `Write` and `Edit` inside the tree the session works in, so the change is on its branch. When that
+   tree is itself the registered path, write with `write_note` and `edit_note` instead: Basic Memory's file watcher
+   can miss a change made while it is indexing, and its own tools index as they write.
+5. If Basic Memory's server is unreachable when a write needs it, say so and ask for a reconnect. Do not write around
+   it.
+6. Delegate a note that needs a lot of reading to the `reference-kb:kb-writer` agent.
 
-| Writing | Template |
-|---|---|
-| a `domains/` note | `domain.md` |
-| an `entities/` note | `entity.md` |
-| a `projects/<slug>/` directory | `project-overview.md`, `project-checklist.md`, `project-decisions.md` |
-| a new knowledge base's `kb.toml` | `kb.toml` |
-
-Before creating a note, `search_notes` for one on the same topic: a second note on one subject splits its readers
-and its backlinks.
-
-**Write with `Edit` and `Write` in your own working tree,** so the change lands on your branch and reaches review.
-Basic Memory's `write_note` and `edit_note` write into the registered checkout, which is not your branch when you
-work in a worktree.
-
-**When your working tree is the registered checkout,** write notes there with Basic Memory's tools instead: its
-watcher drops changes that arrive while it is indexing, so direct writes can leave search answering from the old
-text, and the tools index as part of the write.
-
-- **Edit** with `edit_note`, passing the project and the note's permalink as the identifier.
-- **Create** with `write_note`: the template's frontmatter in `content`, and as `title` the filename without `.md`
-  (`release-notes` gives `release-notes.md`, with Basic Memory's `kebab_filenames` on or off). The tool's title overwrites the
-  frontmatter one, so follow with an `edit_note` `find_replace` on the `title:` line.
-- **The MCP server is down:** say so and ask for a reconnect before writing there.
-
-A note that takes reading many files is worth delegating to the `reference-kb:kb-writer` agent, which returns a
-trace of what it read so its sources can be spot-checked.
+Claude Code asks before every `Write` or `Edit` under `.claude/` in default and `acceptEdits` modes, and an allow
+rule does not lift it (measured on Claude Code 2.1.311). Expect one prompt per write.
 
 ## Validating
 
+From the repository root, before finishing any knowledge base work:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/scripts/validate.py" --root .claude/reference --stale
 ```
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/scripts/validate.py --root .claude/reference --stale
-```
 
-Run it from the repository root before finishing any knowledge base work. It needs PyYAML (a dependency the user
-installs; never install it yourself).
+- Exit 0 says only that no error was found. Warnings leave it unchanged, so read them.
+- It checks format, not truth. Never report a clean run as verification.
+- Staleness has three outcomes: clean, stale (the commits are counted), and UNKNOWN (an untracked source or a failed
+  git call). UNKNOWN is never clean.
+- `--stale-in A..B` is the merge gate, which CI runs over a pull request's own commits.
+- It needs PyYAML. If the import fails, tell the user to install it; never install it yourself.
 
-- **Exit 0 means no errors, nothing more.** Warnings, including everything `--stale` reports, never change it. Read
-  the `warn` lines.
-- **It checks format, never truth.** Never report "validation passed" as though the note were verified.
-- **`--stale` has three outcomes:** stale, clean, and UNKNOWN (an untracked source or a failing git call). Never read
-  UNKNOWN as clean.
-- **`--stale-in BASE..HEAD`** is the pull request gate: a note whose sources the range changed fails until its
-  `verified:` line moves in the range, which means re-reading the note against the change first.
+## Re-verifying a stale note
 
-**A stale note:** find which sources moved and what changed, re-read those files, re-check only the claims that
-depend on them, and move `verified` only for what you re-verified. A partial re-verify says so in the Scope line.
-Touching only the frontmatter never moves `verified`.
+1. Find which sources changed since `verified`: `git log --format='%h %cs %s' -- <source>` for each.
+2. Re-read the changed parts.
+3. Re-check only the claims resting on them, and correct the ones that are now wrong.
+4. Move `verified` to today, and say in the Scope line which claims were carried forward without a re-check.
 
-## Setting up a knowledge base in a repository
+A frontmatter-only edit, such as rebuilding `sources`, never moves `verified`.
 
-1. Create `.claude/reference/` with the trees it needs and a `README.md` listing its entry points. Copy
-   `templates/kb.toml` beside it when the repository holds fewer than three trees or adds to a vocabulary.
-2. Add a line to the repository's `CLAUDE.md` saying the knowledge base exists, that it is read before the code it
-   covers, and that silence is not an answer. A knowledge base nothing points at is not read.
-3. Have CI run the validator with `--stale-in` over each pull request's range, from a checkout of this plugin's
-   repository pinned to a commit.
-4. Registering it with Basic Memory is the user's step, not yours: `bm project add <name> <path>`, a reconnect of
-   the MCP server (`/mcp`), then `bm reindex`, since files that appear in a new project can be missed until the next
-   reindex.
+## Starting a knowledge base
 
-Two more things go stale in Basic Memory's index outside the tools: a branch switch in the registered checkout, and
-a `bm config set` on a running server. Run `bm reindex` after the first and reconnect the server after the second.
+1. Create the root with the trees it will use, and a README naming the entry points. The README has no frontmatter.
+2. Copy `templates/kb.toml` to the root when the repository uses fewer than all three trees or adds vocabulary.
+3. Point the repository's `CLAUDE.md` at the root: that it exists, that the note covering an area is read before the
+   area's code, and that a question it does not answer is still open.
+4. Run the validator in CI with `--stale-in` over each pull request's commits; the plugin's README has the recipe.
+5. Registering with Basic Memory is the user's step, not the agent's: `bm project add <name> <path>`, a reconnect of
+   the MCP server, then `bm reindex`. After checking out another branch in the registered checkout, the user runs
+   `bm reindex`; after `bm config set`, the user reconnects the server.

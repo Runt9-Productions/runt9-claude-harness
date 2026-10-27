@@ -3,8 +3,7 @@ title: Mod CI Checks
 type: note
 permalink: plugins/mod-ci
 tags: [plugins, mods, ci]
-verified: 2026-10-26
-branch: claude/reference-kb
+verified: 2026-10-27
 coverage: partial
 measured_on: "Claude Code 2.1.310, npm 11.17, oxlint 1.86.0"
 sources:

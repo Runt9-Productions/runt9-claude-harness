@@ -8,7 +8,7 @@
     {
       "name": "reference-kb",
       "source": "./plugins/reference-kb",
-      "description": "A reference knowledge base in .claude/reference/: the shared format, its validator and templates, and a writer agent"
+      "description": "Reference knowledge bases in .claude/reference/: the note format, templates, a validator with a merge gate for CI, and a writer agent"
     },
     {
       "name": "teammate-delivery",

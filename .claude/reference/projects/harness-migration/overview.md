@@ -15,7 +15,7 @@ source copies of what moved.
 
 ## Where it stands
 
-- [status] Steps 01 and 02 are merged; 03 and 04 are committed and wait on the owner's push and CI review; 05's plugin is committed and its knowledge base notes are in review.
+- [status] Steps 01 to 05 are merged; 06 is next.
 
 ## Documents
 

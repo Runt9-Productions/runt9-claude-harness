@@ -4,7 +4,6 @@ type: note
 permalink: skills/overview
 tags: [skills, claude-code, compaction]
 verified: 2026-10-26
-branch: claude/reference-kb
 coverage: partial
 measured_on: "Claude Code 2.1.310"
 ---

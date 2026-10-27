@@ -1,34 +1,29 @@
 ---
-title: <Project Name> Decisions
+title: "{{Project name}} Decisions"
 type: note
-permalink: projects/<slug>/decisions
-tags: [area]
+permalink: "{{projects/<slug>/decisions}}"
+tags: ["{{subject}}", "{{subject}}"]
 ---
 
-# <Project Name> Decisions
+<!--
+{{Delete this checklist before saving.}}
+- Append only. An overturned entry is tagged #superseded and kept, saying what replaced it.
+- [decision] is an owner's ruling, with who and when. An agent's own choice is a [proposal] with its status.
+- A question for the owner is written under Open Questions, never left only in conversation.
+- A decision that outlives the project goes in a domains/ note instead.
+- The title is unique.
+-->
 
-Decisions taken and questions raised while building. Starts empty and grows as the work runs.
+# {{Project name}} Decisions
+
+{{What this log covers, and where the durable decisions live instead.}}
 
 ## Decisions
 
-- [decision] What was chosen, by whom, and why the alternative was not (item 03).
-- [decision] A choice that has since been overturned #superseded (item 05, replaced by the entry below).
-- [decision] What replaced it, and what changed to make the earlier call wrong (item 07).
+- [decision] {{The ruling, with its one-line reason}} (owner, {{YYYY-MM-DD}})
+- [decision] {{An overturned ruling}} #superseded (owner, {{YYYY-MM-DD}}; replaced by {{the later ruling}})
+- [proposal] {{What an agent chose or thinks the owner wants}} (open)
 
-## Open questions
+## Open Questions
 
-- [question] What is genuinely open, and what would answer it.
-
-<!--
-  Delete this block before saving.
-
-  Build time only. Findings from a prototype or a spike belong in research/; this file records what was decided
-  while turning them into code.
-
-  Append rather than rewrite: the value of this file is the sequence. Tag an overturned entry #superseded and leave
-  it in place, unedited, beside what replaced it, so the reasoning survives and the log still says what was decided
-  at the time.
-
-  A question for the owner goes under Open questions here, never only in conversation: a question asked in chat is
-  answered in chat and is gone at the next compaction.
--->
+- [question] {{What the owner is asked, and what each answer would change}}

@@ -1,57 +1,46 @@
 ---
-title: Human Readable Name
+title: "{{Title, unique across the knowledge base}}"
 type: note
-permalink: area/slug
-tags: [area, subsystem]
-verified: YYYY-MM-DD
-branch: the-branch-you-read-the-code-on
+permalink: "{{path from the root without .md, minus the leading domains/}}"
+tags: ["{{subject}}", "{{subject}}"]
+verified: "{{YYYY-MM-DD, the day the claims were checked}}"
 coverage: partial
 sources:
-  - path/to/the-file-this-note-is-about.ext
-  - path/to/the-other-one-you-actually-read.ext
+  - "{{repository path of a file a claim rests on}}"
 ---
 
-# Human Readable Name
+<!--
+{{Delete this checklist before saving.}}
+- permalink: the path from the root without .md, with domains/ dropped.
+- verified: today only if every claim was checked today; a claim carried forward keeps the old date and the Scope
+  line says it was carried.
+- sources: every file a claim rests on, and none it does not. For a platform fact, measured_on: "<tool> <version>"
+  may stand in for sources.
+- Scope: names specifically what was not read.
+- Every [fact] was read or measured in this run; second-hand claims are [risk] or [question] and say so.
+- Every count was counted.
+- Tags and categories come from the format or kb.toml.
+- The title is unique.
+- A hub note has a line in the README.
+- A new convention is applied to every note it covers, and to the format, templates or kb.toml.
+-->
 
-> **Scope.** REPLACE THIS SENTENCE with what *this* note covers and, specifically, what it does not: the class, module, vendor or path that was not read, and anything carried forward unverified from an earlier pass.
+# {{Title}}
 
-One paragraph on what this note is for and when to read it. Say what the reader is about to get wrong if they skip it.
+> **Scope.** {{What this note covers and which parts of which files were read}}. Not covered: {{the specific things left unread}}.
+
+{{Who should read this, before doing what.}}
 
 ## Observations
 
-- [fact] A single indexable fact, citing `symbolName` plus `TheFile.ext:123`.
-- [trap] A fact that belongs to a cross-cutting class, tagged so it is findable from outside this note #silent-failure (and a trailing parenthetical for the qualifier).
-- [fact] A fact tied to a ticket #PROJ-123
-- [invariant] Holds today, and code elsewhere depends on it holding.
-- [risk] A hazard believed but not demonstrated. Say what would confirm it.
-- [question] Genuinely open. Say what would answer it.
-- [decision] A ruling by whoever owns the decision, with who, where and when, and the reason.
-- [history] Why it is this way: ticket, commit, date.
+- [fact] {{What was read or measured, citing the symbol and file:line}}
+- [trap] {{A behaviour that makes the obvious reading or change wrong}} #silent-failure
+- [invariant] {{What must stay true, and what breaks if it does not}}
+- [risk] {{A failure not seen, or a claim taken second-hand, saying which}}
+- [question] {{What is open, and what would settle it}}
+- [decision] {{An owner's ruling and its one-line reason}} (owner, {{YYYY-MM-DD}})
 
 ## Relations
 
-- part_of [[Parent Hub Note]]
-- see_also [[Some Other Note]]
-
-<!--
-CHECKLIST: delete this block before saving.
-
-  [ ] permalink = the path under domains/ minus .md, with no "domains/" prefix:
-      domains/<area>/overview.md -> <area>/overview
-  [ ] verified = the date you read the code; branch = the branch you read it on. Never carry either forward from
-      another note, and never move them without re-reading.
-  [ ] sources = the repo-relative files this note's claims depend on: if the file changed, would something here
-      become wrong? Padding the list produces false staleness; trimming it produces false confidence.
-  [ ] A measured platform fact with no such file: replace sources with measured_on, naming the tool and version.
-  [ ] coverage: partial, and the Scope line names something specific. Scope only: no boilerplate, and no fact about
-      the subject, which belongs in the body.
-  [ ] Every [fact] cites a symbol you opened and read in full this run. A second-hand claim is a [risk] or a
-      [question] that says it is unverified.
-  [ ] Counted things were counted. One fact per observation line.
-  [ ] Inline tags come from the format's table or kb.toml, plus the ticket pattern. Tag what someone would look for
-      from outside this note, not every line.
-  [ ] The title matches the [[wikilinks]] other notes will use, and is unique in the knowledge base.
-  [ ] A hub note is listed in the knowledge base README's entry points.
-  [ ] A convention you invented while writing this is written into the format or kb.toml and applied to every
-      existing note in the same change, or dropped.
--->
+- part_of [[{{Area overview title}}]]
+- see_also [[{{Related note title}}]]

@@ -1,47 +1,42 @@
 ---
-title: Human Readable Name
+title: "{{Title, unique across the knowledge base}}"
 type: note
-permalink: entities/area/slug
-tags: [kind, classification]
-verified: YYYY-MM-DD
+permalink: "{{path from the root without .md, such as entities/set/item}}"
+tags: ["{{subject}}", "{{subject}}"]
+verified: "{{YYYY-MM-DD, the day the claims were checked}}"
 coverage: partial
-branch: the-branch-you-read-the-code-on
+id: "{{the item's identifier within its set}}"
 sources:
-  - path/to/the-definition-that-implements-this.ext
-id: stable-external-identifier
+  - "{{repository path of a file a claim rests on}}"
 ---
 
-# Human Readable Name
+<!--
+{{Delete this checklist before saving.}}
+- permalink: the path from the root without .md, entities/ kept.
+- verified: today only if every claim was checked today; a claim carried forward keeps the old date and the Scope
+  line says it was carried.
+- sources: every file a claim rests on, and none it does not. Delete the key if no claim rests on a file.
+- Scope: names specifically what was not read.
+- Every [fact] was read or measured in this run; second-hand claims are [risk] or [question] and say so.
+- Every count was counted.
+- Tags and categories come from the format or kb.toml.
+- The title is unique.
+- The domains/ note indexing this set lists the item and relates back to it.
+- A new convention is applied to every note it covers, and to the format, templates or kb.toml.
+-->
 
-> **Scope.** REPLACE THIS SENTENCE with what *this* note covers and, specifically, what it does not. When the evidence is not code, name the evidence that is missing rather than the code that was not read.
+# {{Title}}
 
-One paragraph on what this entity is and why it has a note. An entity note earns its place by holding what its
-definition does not say: how the thing is used and what goes wrong with it, not a restatement of the definition.
+> **Scope.** {{What this note covers about the item and which parts of which files were read}}. Not covered: {{the specific things left unread}}.
+
+{{Who should read this, before doing what.}}
 
 ## Observations
 
-- [fact] A single indexable fact, citing `symbolName` plus `TheFile.ext:123`.
-- [decision] A ruling about this entity, with who made it, where and when, and the reason.
-- [question] Genuinely open. Say what would answer it.
+- [fact] {{What was read or measured about this item, citing the symbol and file:line}}
+- [trap] {{Where this item behaves differently from the rest of its set}}
+- [question] {{What is open, and what would settle it}}
 
 ## Relations
 
-- part_of [[Parent Hub Note]]
-- see_also [[Some Other Note]]
-
-<!--
-CHECKLIST: delete this block before saving.
-
-  [ ] Is this an entity? One note per member of an enumerable set. If the set is "however many investigations we
-      do", it is a topic and belongs in domains/.
-  [ ] permalink = the path under the knowledge base minus .md, keeping the leading entities/.
-  [ ] Required: title, type, permalink, tags, verified, coverage and the Scope line. Optional: branch, sources, id.
-      Delete the optional keys that do not apply rather than leaving them blank.
-  [ ] tags carry the kind and any classification, instead of a per-kind frontmatter key that every note in the tree
-      would then have to carry.
-  [ ] sources = the files whose change would make something here wrong. Omit it when the evidence is not a repo file.
-  [ ] id = a stable external identifier. Once other notes cite it, it never changes, is never reused and is never
-      renumbered.
-  [ ] Relations declare part_of the domains/ note that indexes this kind, and that note links back.
-  [ ] The title matches the [[wikilinks]] other notes will use, and is unique in the knowledge base.
--->
+- part_of [[{{Title of the domains/ note indexing the set}}]]

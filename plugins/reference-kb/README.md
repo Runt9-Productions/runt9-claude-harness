@@ -1,22 +1,52 @@
 # reference-kb
 
-A reference knowledge base is a repository's `.claude/reference/` directory of notes written for an agent to read
-before the code: what is surprising, which file to read, and what a note does not cover. This plugin carries what
-every such knowledge base shares, so each repository declares only what differs in `.claude/reference/kb.toml`.
+A reference knowledge base is a directory of Markdown notes in a repository, `.claude/reference/` by default, that an
+agent reads before the code or platform behaviour a note covers. Each note says which files matter, what in them is
+unexpected, when it was last checked against them, and what it did not cover. This plugin carries everything such
+knowledge bases share; a repository declares only what it adds, in a `kb.toml` beside its notes.
 
-- **The `reference-kb` skill:** how to read, search, write and validate notes, and how to set a knowledge base up.
-  Its `references/format.md` is the format: frontmatter, the three trees (`domains/`, `entities/`, `projects/`), the
-  closed vocabularies of observation categories, inline tags and relation types, and the staleness rules.
-- **`validate.py`** in the skill's `scripts/`: checks every note against the format, and with `--stale` or
-  `--stale-in BASE..HEAD` against git history. `--root` names the knowledge base, `.claude/reference` by default.
-  Needs Python 3.12 and PyYAML.
-- **Templates** in the skill's `templates/`, one per kind of note plus `kb.toml`.
-- **The `kb-writer` agent:** writes and re-verifies notes, and returns a trace of what it read.
-[Basic Memory](https://github.com/basicmachines-co/basic-memory) is optional: without it the skill falls back to
-reading files and text search. Registering a knowledge base with it is the user's step (`bm project add`).
+What it ships:
 
-To validate a knowledge base in another repository's CI, check this repository out at a pinned commit and run
-`python3 <checkout>/plugins/reference-kb/skills/reference-kb/scripts/validate.py --root .claude/reference
---stale-in "$BASE..$HEAD"`.
+- **The `reference-kb` skill**: how to read, search, write, re-verify and validate notes, and how to set a knowledge
+  base up.
+- **The format**, `skills/reference-kb/references/format.md`: the one authority on what a note is.
+- **Templates**, `skills/reference-kb/templates/`: one per kind of note, and a starting `kb.toml`.
+- **The validator**, `skills/reference-kb/scripts/validate.py`: checks every note against the format, warns about
+  notes whose sources changed since they were verified, and gates a pull request that changes a note's sources
+  without re-verifying it.
+- **The `kb-writer` agent**, spawned as `reference-kb:kb-writer`: writes a note that needs a lot of reading and
+  returns a trace of what it read.
+
+## Needs
+
+- Python 3.12 and PyYAML for the validator. Install PyYAML yourself; the agent will not.
+- Basic Memory is optional. With it, agents search notes by meaning; without it, they read the files and search the
+  text. Registering a knowledge base with Basic Memory (`bm project add`) is a step for you, not the agent.
+
+## The validator in another repository's CI
+
+Check this repository out at a pinned commit beside your own, then run the validator over the pull request's own
+commits. In GitHub's pull request checkout `HEAD` merges the pull request into its base, so `HEAD^1..HEAD^2` is
+exactly the pull request's commits, and the full history is needed to walk them.
+
+```yaml
+- uses: actions/checkout@<commit sha>
+  with:
+    fetch-depth: 0
+    persist-credentials: false
+- uses: actions/checkout@<commit sha>
+  with:
+    repository: Runt9-Productions/runt9-claude-harness
+    ref: <commit sha of this repository>
+    path: .reference-kb
+    persist-credentials: false
+- run: python3 -m pip install pyyaml==6.0.3
+- run: >-
+    python3 .reference-kb/plugins/reference-kb/skills/reference-kb/scripts/validate.py
+    --root .claude/reference --stale-in HEAD^1..HEAD^2
+```
+
+It exits 0 when no error was found, 1 when a note has an error, and 2 when it could check nothing, which includes a
+root that is missing or holds no notes. A knowledge base that moved or emptied therefore fails the step.
 
 No settings.

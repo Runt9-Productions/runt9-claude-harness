@@ -1,35 +1,35 @@
 ---
-title: <Project Name>
+title: "{{Project name, unique across the knowledge base}}"
 type: note
-permalink: projects/<slug>/overview
-tags: [area, subsystem]
-status: research
-opened: YYYY-MM-DD
+permalink: "{{projects/<slug>/overview}}"
+tags: ["{{subject}}", "{{subject}}"]
+status: "{{research, implementation, complete, tabled or blocked}}"
+opened: "{{YYYY-MM-DD}}"
 ---
 
-# <Project Name>
+<!--
+{{Delete this checklist before saving.}}
+- permalink: projects/<slug>/overview, from the path.
+- status: research or implementation needs decisions.md beside this file; implementation needs checklist.md too.
+- The [status] line is rewritten in place whenever the project moves, and is true when merged.
+- A fact that will outlive the project goes in a domains/ note, linked from here.
+- Tags and categories come from the format or kb.toml.
+- The title is unique, and the README lists this hub note.
+-->
 
-One paragraph: what this project is and what it is for. Name the ticket or the trigger that started it.
+# {{Project name}}
+
+{{What the project builds or settles, and how it will end.}}
 
 ## Where it stands
 
-- [status] The one line a cold reader needs before anything else.
+- [status] {{Where the project is now, true when merged}}
 
 ## Documents
 
-- [[<Project Name> Checklist]]: the units of work, and which one is live
-- [[<Project Name> Decisions]]: decisions taken and questions still open
+- [[{{Project name}} Checklist]]: the units of work and which is live
+- [[{{Project name}} Decisions]]: rulings taken and questions still open
 
 ## Relations
 
-- see_also [[Some Other Note]]
-
-<!--
-  Delete this block before saving.
-
-  The hub and nothing else. What grows as work proceeds belongs in checklist.md (state), decisions.md (choices and
-  questions) or research/ (findings); an overview that accumulates is one nobody re-reads.
-
-  status decides what else this directory must hold: decisions.md once the project has started, and checklist.md to
-  enter implementation. See "The projects/ document set" in the format.
--->
+- see_also [[{{Title of a domains/ note this project relies on}}]]

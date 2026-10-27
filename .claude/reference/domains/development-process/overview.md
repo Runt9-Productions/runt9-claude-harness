@@ -3,8 +3,7 @@ title: Development Process
 type: note
 permalink: development-process/overview
 tags: [development-process, ci, releasing]
-verified: 2026-10-26
-branch: claude/reference-kb
+verified: 2026-10-27
 coverage: partial
 sources:
   - .github/scripts/guard-plugin-versions.sh

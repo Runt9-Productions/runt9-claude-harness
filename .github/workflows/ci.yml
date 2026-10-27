@@ -132,17 +132,19 @@ jobs:
       - name: pytest
         run: python -m pytest -p no:cacheprovider
 
-      # In the merge checkout HEAD^1 is the base and HEAD^2 the PR's head, so the range is the PR's own commits: a note
-      # fails when the PR changes its sources without moving `verified`, not for staleness it inherited. The validator
-      # exits 0 when it finds no notes, so a root that moved or emptied would pass; its summary line is checked for that.
+      # A root that moved or emptied fails, since the validator exits 2 when it finds no notes.
       - name: Knowledge base validates
+        run: python plugins/reference-kb/skills/reference-kb/scripts/validate.py --root .claude/reference
+
+      # In the merge checkout HEAD^1 is the base and HEAD^2 the PR's head, so the range is the PR's own commits: a note
+      # fails when the PR changes its sources without moving `verified`, not for staleness it inherited. Skipped for
+      # Dependabot, whose pin bumps change sources such as this file without touching what a note says, and which
+      # cannot edit the notes.
+      - name: Knowledge base notes are re-verified when their sources change
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
         run: |
           python plugins/reference-kb/skills/reference-kb/scripts/validate.py --root .claude/reference \
-            --stale-in HEAD^1..HEAD^2 | tee "$RUNNER_TEMP/kb-validate.txt"
-          if grep -q '^0 notes,' "$RUNNER_TEMP/kb-validate.txt"; then
-            echo "::error::The validator found no notes under .claude/reference."
-            exit 1
-          fi
+            --stale-in HEAD^1..HEAD^2
 
   leak-scan:
     needs: zizmor

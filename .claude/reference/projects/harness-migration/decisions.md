@@ -33,11 +33,11 @@ are in the domain notes ([[Plugin Platform]], [[Mod CI Checks]], [[Skill Loading
 - [decision] away's write guard is self-contained: Write, Edit, MultiEdit and NotebookEdit are checked by file path, any other tool call is refused if its input names a guarded path, and the guard is on in away mode only (owner, 2026-10-25). The owner reviews it again once the code exists.
 - [decision] handoff keeps the in-repository `.claude/output` convention, and its README says to git-exclude it (owner, 2026-10-25).
 - [decision] The mod-authoring notes split: engine gotchas become a skill holding only what the built-in plugin-authoring skill lacks, the contracts go in this repository's CLAUDE.md under one heading, and anything tied to one machine is dropped or goes local (owner, 2026-10-25).
-- [decision] board drops its compatibility code for older saved state (owner, 2026-10-25).
+- [decision] board ships with one saved-state format and no migration code (owner, 2026-10-25).
 - [decision] Order of moves, infrastructure first: bootstrap and Python CI, style-guide skills, reference-kb, delegation with worktrees and dev-process, guardrails with bootstrap's settings merge, the CLAUDE.md template, the state plugins, the rest, then cleanup (owner, 2026-10-25): what this repository needs to develop itself comes before what already works elsewhere.
 - [decision] bootstrap refuses to run inside a Claude Code session (owner, 2026-10-26): it writes the install directory no agent may write.
 - [decision] bootstrap v1 installs the githooks component (git hooks and leak scan together), `core.hooksPath` in the repositories the user names, and the marketplace's plugins; the settings merge waits for guardrails (owner, 2026-10-26): it grows with each step that brings something installable.
-- [decision] A public `kotlin-style` skill ships beside the others, and repository-specific comment rules stay in their repository (owner, 2026-10-26).
+- [decision] A `kotlin-style` skill ships beside the other language skills, and comment-style holds only rules that apply in any repository (owner, 2026-10-26).
 - [decision] Design justification for a reviewer goes in comments on the pull request, not in the commit message or code comments (owner, 2026-10-26).
 - [decision] One reference-kb plugin carries the skill, the validator and templates, and the kb-writer agent (owner, 2026-10-26): the knowledge base arrives with its writer.
 - [decision] One shared format lives in the plugin, and each repository declares only what differs in `.claude/reference/kb.toml` (owner, 2026-10-26).
