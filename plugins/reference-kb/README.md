@@ -17,6 +17,17 @@ What it ships:
 - **The `kb-writer` agent**, spawned as `reference-kb:kb-writer`: writes a note that needs a lot of reading and
   returns a trace of what it read.
 
+## Basic Memory
+
+Notes are written in [Basic Memory](https://github.com/basicmachines-co/basic-memory)'s Markdown syntax: YAML
+frontmatter, `- [category]` observations, and `relation [[Target]]` lines. That keeps a knowledge base readable by its
+tools. The rest is this plugin's own format on top of that syntax: the trees, `verified` and `sources`, staleness
+against git, the Scope line and project checklists. The validator checks all of it, needs no Basic Memory, and
+contains none of its code.
+
+Basic Memory has its own optional schema validation (`bm schema validate`), which checks frontmatter, observations
+and relations against schema notes. It does not check anything this format adds.
+
 ## Needs
 
 - Python 3.12 and PyYAML for the validator. Install PyYAML yourself; the agent will not.
