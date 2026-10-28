@@ -35,6 +35,23 @@ between them bump together. Marketplace entries hold only a name, a description 
 works the same way with one version for all of `harness/`, in `harness/harness.json`: its rise is what tells a user
 to run `bootstrap.py harness` again.
 
+## Issues and pull request text
+
+Changes to this repository, fixes and new features alike, are tracked as GitHub issues in the shape of
+`.github/ISSUE_TEMPLATE/change.md`: Objective, Technical details, Out of scope, Acceptance criteria.
+
+- Acceptance criteria are plain bullets stating outcomes, a few at most. Meeting them is necessary, not sufficient:
+  review still judges the change against the objective.
+- An issue stands on its own. It never points at `.claude/output`, a session, or anything outside this repository,
+  and its examples are synthetic.
+- Labels: `bug` or `enhancement`, one `area:` label, and `from-review` for a review finding deferred from its pull
+  request.
+- Issues, pull request descriptions and review replies are public the moment they post, and no CI scan reads them.
+  Write each to a file, with an issue's or pull request's title on the first line, run
+  `scan.sh --text <file> . origin/main` from the installed harness (`~/.claude/harness/current/leak-scan/`, or the
+  checkout's `harness/leak-scan/` where none is installed), and post the title and body from that file only when the
+  scan exits 0. Cite commits by their short hash: a full one matches the scan's hex-identifier rule.
+
 ## Machine-local layers
 
 A plugin reads machine-local data from `~/.claude/local/<plugin>/` and treats a missing file as empty; a skill in
