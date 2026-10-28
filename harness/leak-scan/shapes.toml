@@ -13,6 +13,7 @@ filter = '''
 filter.matchesAny(finding["match"], [
     `(?i)@users\.noreply\.github\.com$`,
     `(?i)^noreply@github\.com$`,
+    `(?i)^support@github\.com$`,
     `(?i)^noreply@anthropic\.com$`,
     `(?i)@example\.(?:com|org|net)$`,
     `(?i)\.(?:test|example|invalid|localhost)$`,
