@@ -20,7 +20,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 # Above every definition: on an older interpreter their annotations raise at import, before main could say why.
 if sys.version_info < (3, 12):  # noqa: UP036 (ruff assumes the target version, and this check is for older ones)
@@ -43,6 +43,8 @@ VERSIONS_DIR = INSTALL_DIR / "versions"
 CURRENT = INSTALL_DIR / "current"
 SOURCE_COMMIT = "SOURCE_COMMIT"
 FILE_MODES = {"100644": 0o644, "100755": 0o755}
+# Not installed, so changing one needs no version rise; the CI version guard exempts the same files.
+NOT_SHIPPED = ("harness/*/README.md", "test_*.py", "test_*.bats", "*.test.ts", "*.test.tsx")
 
 SKILLS_DIR = CLAUDE_DIR / "skills"
 SKILL_FILE = "SKILL.md"
@@ -149,7 +151,7 @@ def check_checkout() -> None:
 
 
 def export_tree(commit: str, source: str, target: Path) -> None:
-    """Writes the blobs under `source` in `commit` to `target`, bypassing every filter and attribute."""
+    """Writes the blobs under `source` in `commit` that ship to `target`, bypassing every filter and attribute."""
     listing = git(CLONE, "ls-tree", "-r", "-z", "--full-tree", commit, "--", source)
     entries = [entry for entry in listing.split(b"\0") if entry]
     if not entries:
@@ -158,6 +160,8 @@ def export_tree(commit: str, source: str, target: Path) -> None:
         meta, raw_path = entry.split(b"\t", 1)
         mode, _, blob = meta.decode().split()
         path = os.fsdecode(raw_path)
+        if any(PurePosixPath(path).match(pattern) for pattern in NOT_SHIPPED):
+            continue
         if mode not in FILE_MODES:
             raise Stop(f"{path} in {commit} is not a regular file (mode {mode}); only regular files install")
         destination = target / Path(path).relative_to(source)
@@ -178,33 +182,34 @@ def harness_version(commit: str) -> str:
 def install_harness(run: Run) -> None:
     commit = git(CLONE, "rev-parse", "--verify", "HEAD^{commit}").decode().strip()
     version = harness_version(commit)
-    # Named by content as well as version, so a commit that changes harness/ without a version rise (a branch, or two
-    # pull requests raising to the same version) installs anew instead of finding its version already there.
-    tree = git(CLONE, "rev-parse", f"{commit}:{HARNESS_SOURCE}").decode().strip()
-    name = f"{version}-{tree[:12]}"
-    target = VERSIONS_DIR / name
+    target = VERSIONS_DIR / version
 
+    replace = True
     if target.exists():
-        print(f"harness: {version} with this content is already installed in {target}")
-    else:
+        no_stdin = f"no answer on stdin to whether to replace {target}; run bootstrap.py in a terminal"
+        question = f"{version} is already installed in {target}. Replace it from {commit}? [y/N] "
+        replace = answered_yes(question, no_stdin)
+    if replace:
         VERSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        # Staged beside where it goes, so the one rename that installs it cannot leave a partial version.
+        # Staged beside where it goes, so a rename installs it whole.
         with tempfile.TemporaryDirectory(prefix=".staging-", dir=VERSIONS_DIR) as staging:
-            staged = Path(staging) / name
+            staged = Path(staging) / version
             export_tree(commit, HARNESS_SOURCE, staged)
             (staged / SOURCE_COMMIT).write_text(f"{commit}\n", encoding="utf-8")
+            if target.exists():
+                shutil.rmtree(target)
             staged.rename(target)
         print(f"harness: installed {version} from {commit} into {target}")
 
-    # A new link renamed over the old one, so `current` never names a missing or partial version.
+    # A new link renamed over the old one, so `current` never names a partial version.
     link = INSTALL_DIR / ".current-new"
     link.unlink(missing_ok=True)
-    link.symlink_to(Path(VERSIONS_DIR.name) / name)
+    link.symlink_to(Path(VERSIONS_DIR.name) / version)
     link.replace(CURRENT)
-    print(f"harness: {CURRENT} points at {name}")
+    print(f"harness: {CURRENT} points at {version}")
 
     for other in VERSIONS_DIR.iterdir():
-        if other.name != name:
+        if other.name != version:
             shutil.rmtree(other)
 
 

@@ -27,7 +27,7 @@ With no component named it asks about each one. The components, in install order
 
 | Component | Installs |
 |---|---|
-| `harness` | `harness/` as it is in the commit checked out (never the working tree), into `~/.claude/harness/versions/<version>-<tree>/` with that commit's hash in `SOURCE_COMMIT`, then points the `~/.claude/harness/current` link at it and removes every other version. `<version>` is `harness/harness.json`'s and `<tree>` names the content, so the same content is never copied twice and changed content always installs. |
+| `harness` | `harness/` as it is in the commit checked out (never the working tree), into `~/.claude/harness/versions/<version>/` with that commit's hash in `SOURCE_COMMIT`, then points the `~/.claude/harness/current` link at it and removes every other version. `<version>` is `harness/harness.json`'s; when it is already installed, it asks before replacing it. READMEs and tests are not installed. |
 | `hooks-path` | `core.hooksPath` set to `~/.claude/harness/current/githooks` in each `--repo`. Git then runs only those hooks there. |
 | `skills` | A link `~/.claude/skills/<name>` to `~/.claude/harness/current/skills/<name>` for each skill, and removes links to a skill the installed version no longer has. Other skills are never touched. |
 | `plugin:<name>` | `claude plugin marketplace add Runt9-Productions/runt9-claude-harness`, then `claude plugin install <name>@runt9`. Plugins come from GitHub, never from this clone. |
