@@ -6,9 +6,11 @@
 #
 #   scan.sh [--ref <ref name>]... [--export <dir>] <repo> <trusted-ref|none> <git log revisions...>
 #   scan.sh --ref refs/heads/topic . origin/main origin/main..topic
+#   scan.sh --text <file> <repo> <trusted-ref|none>
 #
 # The allowlist is the repo's .leak-scan.toml as committed on <trusted-ref>, never the working tree, so a change
 # cannot allowlist itself. `none` scans with no allowlist. --export writes what was scanned to <dir>; see the README.
+# --text scans one file instead of commits, such as an issue or pull request body before it is posted.
 #
 # Exit 0 clean, 1 findings, 2 the scan did not run. Treat 2 as a failure, never as clean.
 set -Eeuo pipefail
@@ -16,21 +18,32 @@ trap 'echo "leak-scan: failed at line $LINENO" >&2; exit 2' ERR
 
 usage() {
     echo "usage: scan.sh [--ref <ref name>]... [--export <dir>] <repo> <trusted-ref|none> <git log revisions...>" >&2
+    echo "       scan.sh --text <file> <repo> <trusted-ref|none>" >&2
     exit 2
 }
 
 ref_names=()
 export_dir=
-while [[ ${1:-} == --ref || ${1:-} == --export ]]; do
+text_file=
+while [[ ${1:-} == --ref || ${1:-} == --export || ${1:-} == --text ]]; do
     (( $# >= 2 )) || usage
-    if [[ $1 == --ref ]]; then
-        ref_names+=("$2")
-    else
-        export_dir=$2
-    fi
+    case $1 in
+        --ref) ref_names+=("$2") ;;
+        --export) export_dir=$2 ;;
+        --text) text_file=$2 ;;
+    esac
     shift 2
 done
-(( $# >= 3 )) || usage
+if [[ -n $text_file ]]; then
+    (( $# == 2 )) || usage
+    [[ -z $export_dir && ${#ref_names[@]} -eq 0 ]] || usage
+    if [[ ! -f $text_file ]]; then
+        echo "leak-scan: $text_file is not a file" >&2
+        exit 2
+    fi
+else
+    (( $# >= 3 )) || usage
+fi
 if [[ -n $export_dir ]]; then
     mkdir -p "$export_dir"
     if [[ -n $(ls -A "$export_dir") ]]; then
@@ -55,8 +68,11 @@ clean() {
 
 # Only refs are read from the repo itself. Everything else reads a bare mirror that borrows the repo's objects and has
 # none of its config, attributes or ignore files, which would otherwise hide content.
-resolved=$(clean git -C "$repo" rev-parse "$@")
-mapfile -t revisions <<< "$resolved"
+revisions=()
+if (( $# > 0 )); then
+    resolved=$(clean git -C "$repo" rev-parse "$@")
+    mapfile -t revisions <<< "$resolved"
+fi
 common_dir=$(clean git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
 object_format=$(clean git -C "$repo" rev-parse --show-object-format)
 mirror=$work/mirror
@@ -177,8 +193,16 @@ self_check() {
 
 self_check
 mkdir -p "$work/push/text"
-printf '%s\n' "${ref_names[@]}" > "$work/push/text/ref-names"
-scan "$work/push" "$mirror" "$work/shapes.toml" "${revisions[@]}"
+if [[ -n $text_file ]]; then
+    cp "$text_file" "$work/push/text/body"
+    betterleaks_scan "$work/shapes.toml" "$work/push/shapes-text.json" dir "$work/push/text"
+    betterleaks_scan "$work/secrets.toml" "$work/push/secrets-text.json" --redact=100 dir "$work/push/text"
+    echo '[]' > "$work/push/shapes-git.json"
+    echo '[]' > "$work/push/secrets-git.json"
+else
+    printf '%s\n' "${ref_names[@]}" > "$work/push/text/ref-names"
+    scan "$work/push" "$mirror" "$work/shapes.toml" "${revisions[@]}"
+fi
 
 if [[ -n $export_dir ]]; then
     cp -R "$work/push/text" "$export_dir/text"
@@ -196,6 +220,7 @@ fi
 #   ticket-key  1a2b3c4d5e6f (message):3  ABC-123
 #   email-address  1a2b3c4d5e6f (identity):1  someone@example.com
 #   home-directory  (file names):7  /home/user
+#   email-address  (text):4  someone@example.com
 # Secret findings omit the match.
 report() {
     jq -r --arg text "$work/push/text/" --arg pass "$2" --argjson show_match "$3" '
@@ -204,6 +229,7 @@ report() {
         | (if $pass == "git" then "\(.Commit[0:12]) \($file)"
            elif $file == "file-names" then "(file names)"
            elif $file == "ref-names" then "(ref names)"
+           elif $file == "body" then "(text)"
            else ($file | capture("^(?<sha>[0-9a-f]+)\\.(?<kind>.*)$") | "\(.sha[0:12]) (\(.kind))") end) as $where
         | "\(.RuleID)  \($where):\(.StartLine)" + (if $show_match then "  \(.Match)" else "" end)
     ' "$1"

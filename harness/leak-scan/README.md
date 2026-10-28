@@ -23,7 +23,12 @@ if any goes unreported.
 ```sh
 scan.sh [--ref <ref name>]... [--export <dir>] <repo> <trusted-ref|none> <git log revisions...>
 scan.sh --ref refs/heads/topic . origin/main origin/main..topic
+scan.sh --text <file> <repo> <trusted-ref|none>
 ```
+
+- `--text <file>`: scans one file instead of commits, with the same rules and the allowlist from `<trusted-ref>`. It
+  is for text published outside git, such as an issue or pull request body before it is posted. It takes no
+  `--ref`, `--export` or revisions.
 
 - `--ref`: a ref name the push creates or updates on the remote, such as `refs/heads/topic` or `refs/tags/v1`. A
   push publishes the name, so it is scanned too. Repeat it for each ref.

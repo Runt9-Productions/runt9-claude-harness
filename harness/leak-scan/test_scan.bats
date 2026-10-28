@@ -108,3 +108,16 @@ trust_repo_allowlist() {
     [ "$status" -eq 2 ]
     [[ $output == *"the revisions include an octopus merge, which cannot be scanned"* ]]
 }
+
+@test "--text scans one file under the trusted allowlist" {
+    trust_repo_allowlist
+    body=$BATS_TEST_TMPDIR/body.md
+    printf '## Objective\nNothing private here.\n' > "$body"
+    run "$scan" --text "$body" "$repo" trusted
+    [ "$status" -eq 0 ]
+
+    printf 'Ask %s about it.\n' "$leak" >> "$body"
+    run "$scan" --text "$body" "$repo" trusted
+    [ "$status" -eq 1 ]
+    [[ $output == *"email-address  (text):3  $leak"* ]]
+}
