@@ -47,9 +47,10 @@ Work on what is already in this repository is tracked as GitHub issues in the sh
 - Labels: `bug` or `enhancement`, one `area:` label, and `from-review` for a review finding deferred from its pull
   request.
 - Issues, pull request descriptions and review replies are public the moment they post, and no CI scan reads them.
-  Write each to a file, run `scan.sh --text <file> . origin/main` from the installed harness
-  (`~/.claude/harness/current/leak-scan/`, or the checkout's `harness/leak-scan/` where none is installed), and post
-  it with `--body-file` only when the scan exits 0.
+  Write each to a file, with an issue's or pull request's title on the first line, run
+  `scan.sh --text <file> . origin/main` from the installed harness (`~/.claude/harness/current/leak-scan/`, or the
+  checkout's `harness/leak-scan/` where none is installed), and post the title and body from that file only when the
+  scan exits 0. Cite commits by their short hash: a full one matches the scan's hex-identifier rule.
 
 ## Machine-local layers
 
