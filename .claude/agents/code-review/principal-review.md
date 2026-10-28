@@ -37,8 +37,8 @@ ships.
 
 ## Out of scope
 
-Naming, duplication and structure belong to `code-health`. Raise them only when they make the change wrong, not
-merely harder to maintain.
+Naming and structure belong to `code-health`, and code that could be removed to `simplification`. Raise them only
+when they make the change wrong, not merely harder to maintain.
 
 ## How far to read
 
