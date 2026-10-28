@@ -102,9 +102,10 @@ if (( ${#tips[@]} == 0 )); then
     exit 0
 fi
 
-# The pass cache and the review's working files live in the install directory, which the agent's write guards cover.
-# In the repository's .git or in /tmp, an agent could plant a pass or edit the review's inputs.
-state=$root/state
+# The pass cache and the review's working files live beside the installed copy, in the directory the agent's write
+# guards cover. In the repository's .git or in /tmp, an agent could plant a pass or edit the review's inputs. `root`
+# keeps the symlink git ran the hook through, so under ~/.claude/harness/current this is ~/.claude/harness/state.
+state=${root%/*}/state
 mkdir -p "$state/passed"
 work=$(mktemp -d "$state/push.XXXXXX")
 trap 'rm -rf "$work"' EXIT

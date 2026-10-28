@@ -16,13 +16,14 @@ A language skill loads together with `code-style`. A repository's own style guid
 
 Run this from a clone of the repository, in your own shell rather than a Claude Code session:
 
-    python3 bootstrap.py skills
+    python3 bootstrap.py harness skills
 
-It copies each skill into `~/.claude/skills/<name>/`. The installed copy is yours to edit. When it differs from the
-clone's copy, a later run shows the difference as a diff and replaces your copy only if you answer yes.
+It links `~/.claude/skills/<name>` to the installed version's copy, so a new harness version updates every skill at
+once. Change a skill through its local additions (below), not by editing the installed copy, which the next version
+replaces.
 
-The installer refuses to write when `~/.claude/skills`, or one skill's directory inside it, is a symlink that resolves
-outside `~/.claude`, so it never writes into another repository through a link.
+The installer refuses when `~/.claude/skills` resolves outside `~/.claude`, so it never writes into another
+repository through a link, and when a skill's name there is already taken by anything but its link.
 
 ## Local additions
 

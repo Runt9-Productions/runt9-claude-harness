@@ -86,19 +86,17 @@ of the diff.
 **Install a copy, not the checkout.** From your own shell, in a clone of this repository:
 
 ```
-python3 bootstrap.py githooks hooks-path --repo <path> [--repo <path> ...]
+python3 bootstrap.py harness hooks-path --repo <path> [--repo <path> ...]
 ```
 
-`githooks` copies `githooks/` and `leak-scan/` from the commit checked out into `~/.claude/harness/` and records the
-commit in `~/.claude/harness/SOURCE_COMMIT`; `hooks-path` sets `core.hooksPath` to `~/.claude/harness/githooks` in
-each repository named. By hand, copy the two directories side by side into one directory `<dir>` outside the
-repository and run `git config core.hooksPath <dir>/githooks` in each repository the agent works in. With
-`bootstrap.py`, `<dir>` is `~/.claude/harness`.
+`harness` installs the commit's `harness/` as a version under `~/.claude/harness/versions/` and points
+`~/.claude/harness/current` at it; `hooks-path` sets `core.hooksPath` to `~/.claude/harness/current/githooks` in each
+repository named. By hand, copy `githooks/` and `leak-scan/` side by side into one directory `<dir>/<copy>` outside
+the repository and run `git config core.hooksPath <dir>/<copy>/githooks` in each repository the agent works in.
 
-Each `bootstrap.py githooks` run replaces `githooks/` and `leak-scan/` whole, so no other file belongs in them. The
-leak gate keeps its pass cache and working files in `<dir>/state/`, which a reinstall keeps, so whatever keeps the
-agent from writing to the installed copy has to cover all of `<dir>`. Nothing in this repository does that; it is
-your harness's job.
+The leak gate keeps its pass cache and working files in `<dir>/state/`, beside the copy, so they survive a new version.
+Whatever keeps the agent from writing to the installed copy has to cover all of `<dir>`. Nothing in this repository
+does that; it is your harness's job.
 
 `core.hooksPath` replaces `.git/hooks/`, so git runs only these hooks: a repository's own other hooks do not run with
 this install. A tool that rewrites `core.hooksPath`, such as husky, undoes the install in that repository. Set the

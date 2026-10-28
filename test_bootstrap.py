@@ -26,26 +26,11 @@ MARKETPLACE = {
 MARKETPLACE_ADD = ["plugin", "marketplace", "add", "Runt9-Productions/runt9-claude-harness"]
 PRE_PUSH = b"#!/bin/sh\necho example pre-push\n"
 ALPHA_SKILL = b"example alpha skill\n"
-EDITED_SKILL = b"example edited skill\n"
 STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
 sys.exit(int(os.environ.get("EXAMPLE_CLAUDE_EXIT", "0")))
-"""
-# Runs bootstrap.py with only the first rename onto `target` interrupted, so a rollback's rename back onto it runs.
-INTERRUPTED_RENAME = """
-import pathlib, runpy, sys
-rename = pathlib.Path.rename
-interrupted = []
-def interrupting_rename(self, target):
-    if pathlib.Path(target) == pathlib.Path({target!r}) and not interrupted:
-        interrupted.append(target)
-        raise KeyboardInterrupt
-    return rename(self, target)
-pathlib.Path.rename = interrupting_rename
-sys.argv = sys.argv[1:]
-runpy.run_path(sys.argv[0], run_name="__main__")
 """
 
 
@@ -54,6 +39,7 @@ class Sandbox:
         self.root = root
         self.home = root / "home"
         self.install = self.home / ".claude" / "harness"
+        self.current = self.install / "current"
         self.skills = self.home / ".claude" / "skills"
         self.clone = root / "clone"
         self.log = root / "claude.log"
@@ -77,6 +63,9 @@ class Sandbox:
         path.write_bytes(content)
         path.chmod(mode)
 
+    def set_version(self, version: str) -> None:
+        self.write("harness/harness.json", json.dumps({"version": version}).encode())
+
     def commit(self, message: str, push: bool = True) -> str:
         self.git(self.clone, "add", "--all")
         self.git(self.clone, *IDENTITY, "commit", "--quiet", "-m", message)
@@ -89,11 +78,9 @@ class Sandbox:
         self.git(self.root, "init", "--quiet", "-b", "main", str(repo))
         return repo
 
-    def run(
-        self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None, python: tuple[str, ...] = ()
-    ):
+    def run(self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None):
         return subprocess.run(
-            [sys.executable, *python, str(self.clone / "bootstrap.py"), *args],
+            [sys.executable, str(self.clone / "bootstrap.py"), *args],
             cwd=self.root,
             env={**self.env, **(env or {})},
             input=stdin,
@@ -122,6 +109,7 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.git(box.clone, "remote", "add", "origin", str(tmp_path / "origin.git"))
     shutil.copy(SCRIPT, box.clone / "bootstrap.py")
     box.write(".claude-plugin/marketplace.json", json.dumps(MARKETPLACE).encode())
+    box.set_version("0.1.0")
     box.write("harness/githooks/pre-push", PRE_PUSH, 0o755)
     box.write("harness/githooks/README.md", b"example readme\n")
     box.write("harness/githooks/example-retired-hook", b"#!/bin/sh\n", 0o755)
@@ -138,112 +126,84 @@ def installed_mode(path: Path) -> int:
     return path.stat().st_mode & 0o777
 
 
-def test_githooks_installs_the_commit_and_keeps_state(sandbox: Sandbox) -> None:
-    assert sandbox.run("githooks").returncode == 0
+def test_harness_installs_a_new_version_and_keeps_state(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
     marker = sandbox.install / "state" / "passed" / "example-pass"
     marker.parent.mkdir(parents=True)
     marker.touch()
     (sandbox.clone / "harness/githooks/example-retired-hook").unlink()
+    sandbox.set_version("0.2.0")
     head = sandbox.commit("Drop the example hook")
 
-    result = sandbox.run("githooks")
+    result = sandbox.run("harness")
 
     assert result.returncode == 0, result.stderr
     assert "warning" not in result.stderr
-    assert f"from {head} into {sandbox.install}" in result.stdout
-    assert (sandbox.install / "SOURCE_COMMIT").read_text() == f"{head}\n"
-    assert (sandbox.install / "githooks/pre-push").read_bytes() == PRE_PUSH
-    assert installed_mode(sandbox.install / "githooks/pre-push") == 0o755
-    assert installed_mode(sandbox.install / "leak-scan/scan.sh") == 0o755
-    assert installed_mode(sandbox.install / "githooks/README.md") == 0o644
-    assert not (sandbox.install / "githooks/example-retired-hook").exists()
+    assert f"installed 0.2.0 from {head} into {sandbox.install / 'versions/0.2.0'}" in result.stdout
+    assert sandbox.current.readlink() == Path("versions/0.2.0")
+    assert (sandbox.current / "SOURCE_COMMIT").read_text() == f"{head}\n"
+    assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
+    assert installed_mode(sandbox.current / "githooks/pre-push") == 0o755
+    assert installed_mode(sandbox.current / "leak-scan/scan.sh") == 0o755
+    assert installed_mode(sandbox.current / "githooks/README.md") == 0o644
+    assert not (sandbox.current / "githooks/example-retired-hook").exists()
+    assert sorted(path.name for path in (sandbox.install / "versions").iterdir()) == ["0.2.0"]
     assert marker.exists()
 
 
-def test_githooks_installs_the_commit_not_a_hidden_working_tree_change(sandbox: Sandbox) -> None:
+def test_harness_rerun_at_the_same_version_installs_nothing(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    sandbox.write("harness/githooks/pre-push", b"#!/bin/sh\necho example unbumped\n", 0o755)
+    sandbox.commit("Change the example hook without a version rise")
+
+    result = sandbox.run("harness")
+
+    assert result.returncode == 0, result.stderr
+    assert "0.1.0 is already installed" in result.stdout
+    assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
+
+
+def test_harness_installs_the_commit_not_a_hidden_working_tree_change(sandbox: Sandbox) -> None:
     sandbox.git(sandbox.clone, "update-index", "--skip-worktree", "harness/githooks/pre-push")
     (sandbox.clone / "harness/githooks/pre-push").write_bytes(b"#!/bin/sh\necho example edit\n")
     assert sandbox.git(sandbox.clone, "status", "--porcelain") == ""
 
-    result = sandbox.run("githooks")
+    result = sandbox.run("harness")
 
     assert result.returncode == 0, result.stderr
-    assert (sandbox.install / "githooks/pre-push").read_bytes() == PRE_PUSH
+    assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root renames a directory it cannot write")
-def test_failed_reinstall_leaves_the_previous_install(sandbox: Sandbox) -> None:
-    first = sandbox.git(sandbox.clone, "rev-parse", "HEAD")
-    assert sandbox.run("githooks").returncode == 0
-    sandbox.write("harness/githooks/pre-push", b"#!/bin/sh\necho example second\n", 0o755)
-    sandbox.commit("Change the example hook")
-    # Moving a directory to another parent needs write permission on it, so swapping out leak-scan fails after
-    # githooks has already been swapped.
-    (sandbox.install / "leak-scan").chmod(0o555)
-    try:
-        result = sandbox.run("githooks")
-    finally:
-        (sandbox.install / "leak-scan").chmod(0o755)
-
-    assert result.returncode == 1
-    assert "githooks failed: [Errno 13] Permission denied" in result.stderr
-    assert (sandbox.install / "githooks/pre-push").read_bytes() == PRE_PUSH
-    assert (sandbox.install / "leak-scan/scan.sh").exists()
-    assert (sandbox.install / "SOURCE_COMMIT").read_text() == f"{first}\n"
-    assert sorted(path.name for path in sandbox.install.iterdir()) == ["SOURCE_COMMIT", "githooks", "leak-scan"]
-
-
-@pytest.mark.skipif(os.geteuid() == 0, reason="root renames a directory it cannot write")
-def test_reinstall_failing_at_source_commit_puts_both_parts_back(sandbox: Sandbox) -> None:
-    assert sandbox.run("githooks").returncode == 0
-    sandbox.write("harness/githooks/pre-push", b"#!/bin/sh\necho example second\n", 0o755)
-    sandbox.commit("Change the example hook")
-    # SOURCE_COMMIT is swapped in last, and a directory without write permission cannot move to another directory.
-    source_commit = sandbox.install / "SOURCE_COMMIT"
-    source_commit.unlink()
-    source_commit.mkdir(mode=0o555)
-    try:
-        result = sandbox.run("githooks")
-    finally:
-        source_commit.chmod(0o755)
-
-    assert result.returncode == 1
-    assert "githooks failed:" in result.stderr
-    assert (sandbox.install / "githooks/pre-push").read_bytes() == PRE_PUSH
-    assert (sandbox.install / "leak-scan/scan.sh").exists()
-    assert source_commit.is_dir()
-    assert sorted(path.name for path in sandbox.install.iterdir()) == ["SOURCE_COMMIT", "githooks", "leak-scan"]
-
-
-def test_symlink_in_a_part_stops_githooks(sandbox: Sandbox) -> None:
+def test_symlink_in_the_harness_stops_the_install(sandbox: Sandbox) -> None:
     (sandbox.clone / "harness/leak-scan/example-link").symlink_to("scan.sh")
     head = sandbox.commit("Add an example symlink")
 
-    result = sandbox.run("githooks")
+    result = sandbox.run("harness")
 
     assert result.returncode == 1
     assert f"harness/leak-scan/example-link in {head} is not a regular file (mode 120000)" in result.stderr
-    assert not (sandbox.install / "githooks").exists()
+    assert not sandbox.current.exists()
+    assert list((sandbox.install / "versions").iterdir()) == []
 
 
-def test_uncommitted_tracked_change_refuses_githooks(sandbox: Sandbox) -> None:
+def test_uncommitted_tracked_change_refuses_the_harness(sandbox: Sandbox) -> None:
     (sandbox.clone / "harness/githooks/README.md").write_text("example edit\n")
 
-    result = sandbox.run("githooks")
+    result = sandbox.run("harness")
 
     assert result.returncode == 1
     assert "has uncommitted changes to tracked files" in result.stderr
     assert not sandbox.install.exists()
 
 
-def test_untracked_file_does_not_refuse_githooks(sandbox: Sandbox) -> None:
+def test_untracked_file_does_not_refuse_the_harness(sandbox: Sandbox) -> None:
     (sandbox.clone / "harness/githooks/example-untracked").write_text("example\n")
 
-    result = sandbox.run("githooks")
+    result = sandbox.run("harness")
 
     assert result.returncode == 0, result.stderr
-    assert (sandbox.install / "githooks/pre-push").exists()
-    assert not (sandbox.install / "githooks/example-untracked").exists()
+    assert (sandbox.current / "githooks/pre-push").exists()
+    assert not (sandbox.current / "githooks/example-untracked").exists()
 
 
 def test_uncommitted_tracked_change_does_not_refuse_a_plugin_only_run(sandbox: Sandbox) -> None:
@@ -272,7 +232,7 @@ def test_older_python_stops_with_one_line(sandbox: Sandbox) -> None:
 
 @pytest.mark.parametrize("variable", ["CLAUDE_CODE_SESSION_ID", "CLAUDECODE"])
 def test_session_refuses(sandbox: Sandbox, variable: str) -> None:
-    result = sandbox.run("githooks", "plugin:example-one", env={variable: "1"})
+    result = sandbox.run("harness", "plugin:example-one", env={variable: "1"})
 
     assert result.returncode == 1
     assert "refusing to run inside a Claude Code session" in result.stderr
@@ -287,7 +247,7 @@ def test_list_works_in_a_session(sandbox: Sandbox, variable: str) -> None:
     assert result.returncode == 0, result.stderr
     names = [line.split()[0] for line in result.stdout.splitlines()]
     assert names == [
-        "githooks",
+        "harness",
         "hooks-path",
         "skills",
         "plugin:example-one",
@@ -300,35 +260,35 @@ def test_head_off_origin_main_warns_and_installs_head(sandbox: Sandbox) -> None:
     sandbox.write("harness/githooks/README.md", b"example local change\n")
     head = sandbox.commit("Example local commit", push=False)
 
-    result = sandbox.run("githooks")
+    result = sandbox.run("harness")
 
     assert result.returncode == 0, result.stderr
     assert "warning: HEAD is not on origin/main" in result.stderr
-    assert (sandbox.install / "SOURCE_COMMIT").read_text() == f"{head}\n"
+    assert (sandbox.current / "SOURCE_COMMIT").read_text() == f"{head}\n"
 
 
-def test_hooks_path_sets_each_repository_after_githooks(sandbox: Sandbox) -> None:
+def test_hooks_path_sets_each_repository_after_the_harness(sandbox: Sandbox) -> None:
     with_bot = sandbox.new_repo("example-with-bot")
     sandbox.git(with_bot, "config", "claude.botEmail", "bot@example.com")
     without_bot = sandbox.new_repo("example-without-bot")
 
-    result = sandbox.run("hooks-path", "githooks", "--repo", str(with_bot), "--repo", str(without_bot))
+    result = sandbox.run("hooks-path", "harness", "--repo", str(with_bot), "--repo", str(without_bot))
 
     assert result.returncode == 0, result.stderr
-    hooks = str(sandbox.install / "githooks")
+    hooks = str(sandbox.current / "githooks")
     assert sandbox.hooks_path(with_bot) == hooks
     assert sandbox.hooks_path(without_bot) == hooks
     assert f"{without_bot} sets no claude.botEmail" in result.stderr
     assert f"{with_bot} sets no claude.botEmail" not in result.stderr
 
 
-def test_hooks_path_refuses_before_githooks_is_installed(sandbox: Sandbox) -> None:
+def test_hooks_path_refuses_before_the_harness_is_installed(sandbox: Sandbox) -> None:
     repo = sandbox.new_repo("example-repo")
 
     result = sandbox.run("hooks-path", "--repo", str(repo))
 
     assert result.returncode == 1
-    assert "githooks is not installed" in result.stderr
+    assert "the harness is not installed" in result.stderr
     assert sandbox.hooks_path(repo) is None
 
 
@@ -347,7 +307,7 @@ def test_hooks_path_prints_a_different_previous_value(sandbox: Sandbox, config_f
     previous_in = sandbox.root / config_file
     sandbox.git(sandbox.root, "config", "--file", str(previous_in), "core.hooksPath", "/example/old hooks")
     env = {"GIT_CONFIG_GLOBAL": str(global_config)}
-    assert sandbox.run("githooks", env=env).returncode == 0
+    assert sandbox.run("harness", env=env).returncode == 0
 
     replaced = sandbox.run("hooks-path", "--repo", str(repo), env=env)
     repeated = sandbox.run("hooks-path", "--repo", str(repo), env=env)
@@ -355,7 +315,7 @@ def test_hooks_path_prints_a_different_previous_value(sandbox: Sandbox, config_f
     assert replaced.returncode == 0, replaced.stderr
     assert f"{repo} had core.hooksPath /example/old hooks" in replaced.stdout
     assert f"to restore it: git -C {repo} {restore}\n" in replaced.stdout
-    assert sandbox.hooks_path(repo) == str(sandbox.install / "githooks")
+    assert sandbox.hooks_path(repo) == str(sandbox.current / "githooks")
     assert repeated.returncode == 0, repeated.stderr
     assert "had core.hooksPath" not in repeated.stdout
 
@@ -367,7 +327,7 @@ def test_hooks_path_names_the_repository_hooks_that_stop_running(sandbox: Sandbo
     for name in ("pre-commit", "pre-push.sample"):
         (hooks_dir / name).write_text("#!/bin/sh\n")
         (hooks_dir / name).chmod(0o755)
-    assert sandbox.run("githooks").returncode == 0
+    assert sandbox.run("harness").returncode == 0
 
     result = sandbox.run("hooks-path", "--repo", str(repo))
 
@@ -379,12 +339,12 @@ def test_hooks_path_names_the_repository_hooks_that_stop_running(sandbox: Sandbo
 def test_hooks_path_ignores_a_git_dir_in_the_environment(sandbox: Sandbox) -> None:
     repo = sandbox.new_repo("example-repo")
     other = sandbox.new_repo("example-other")
-    assert sandbox.run("githooks").returncode == 0
+    assert sandbox.run("harness").returncode == 0
 
     result = sandbox.run("hooks-path", "--repo", str(repo), env={"GIT_DIR": str(other / ".git")})
 
     assert result.returncode == 0, result.stderr
-    assert sandbox.hooks_path(repo) == str(sandbox.install / "githooks")
+    assert sandbox.hooks_path(repo) == str(sandbox.current / "githooks")
     assert sandbox.hooks_path(other) is None
 
 
@@ -394,7 +354,7 @@ def test_hooks_path_refuses_a_directory_inside_a_repository(sandbox: Sandbox) ->
     inner = outer / "example-subdirectory"
     inner.mkdir()
 
-    result = sandbox.run("githooks", "hooks-path", "--repo", str(named_first), "--repo", str(inner))
+    result = sandbox.run("harness", "hooks-path", "--repo", str(named_first), "--repo", str(inner))
 
     assert result.returncode == 1
     assert f"{inner} is inside the repository {outer}, not its top level" in result.stderr
@@ -409,73 +369,55 @@ def test_hooks_path_fails_when_git_reads_another_value(sandbox: Sandbox) -> None
     override.write_text("[core]\n\thooksPath = /example/override\n")
     sandbox.git(repo, "config", "include.path", str(override))
 
-    result = sandbox.run("githooks", "hooks-path", "--repo", str(repo))
+    result = sandbox.run("harness", "hooks-path", "--repo", str(repo))
 
     assert result.returncode == 1
     assert "reads core.hooksPath as /example/override" in result.stderr
-    assert "installed before it: githooks" in result.stderr
-    assert (sandbox.install / "githooks/pre-push").exists()
+    assert "installed before it: harness" in result.stderr
+    assert (sandbox.current / "githooks/pre-push").exists()
 
 
-def test_skills_installs_each_skill_and_leaves_other_skills(sandbox: Sandbox) -> None:
+def test_skills_links_each_skill_and_leaves_other_skills(sandbox: Sandbox) -> None:
     own = sandbox.skills / "example-own/SKILL.md"
     own.parent.mkdir(parents=True)
     own.write_bytes(b"example own skill\n")
 
-    result = sandbox.run("skills")
+    result = sandbox.run("harness", "skills")
+    rerun = sandbox.run("skills")
 
     assert result.returncode == 0, result.stderr
     assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta", "example-own"]
+    for name in ("example-alpha", "example-beta"):
+        assert (sandbox.skills / name).readlink() == sandbox.current / "skills" / name
     assert (sandbox.skills / "example-alpha/SKILL.md").read_bytes() == ALPHA_SKILL
-    assert installed_mode(sandbox.skills / "example-alpha/SKILL.md") == 0o644
-    assert installed_mode(sandbox.skills / "example-beta/scripts/example.sh") == 0o755
     assert own.read_bytes() == b"example own skill\n"
+    assert rerun.returncode == 0, rerun.stderr
+    assert "linked" not in rerun.stdout
 
 
-def test_skills_rerun_leaves_a_matching_copy(sandbox: Sandbox) -> None:
-    assert sandbox.run("skills").returncode == 0
-    inode = (sandbox.skills / "example-alpha").stat().st_ino
+def test_skill_name_already_taken_refuses_with_nothing_linked(sandbox: Sandbox) -> None:
+    taken = sandbox.skills / "example-beta"
+    taken.mkdir(parents=True)
 
-    result = sandbox.run("skills")
-
-    assert result.returncode == 0, result.stderr
-    assert "example-alpha is up to date" in result.stdout
-    assert "installed example-alpha" not in result.stdout
-    assert (sandbox.skills / "example-alpha").stat().st_ino == inode
-
-
-def test_edited_skill_shows_the_diff_and_is_replaced_only_on_yes(sandbox: Sandbox) -> None:
-    assert sandbox.run("skills").returncode == 0
-    skill = sandbox.skills / "example-alpha"
-    (skill / "SKILL.md").write_bytes(EDITED_SKILL)
-    (skill / "example-notes.md").write_bytes(b"example notes\n")
-
-    kept = sandbox.run("skills", stdin="n\n")
-    kept_content = (skill / "SKILL.md").read_bytes()
-    replaced = sandbox.run("skills", stdin="y\n")
-
-    assert kept.returncode == 0, kept.stderr
-    assert "-example edited skill\n+example alpha skill\n" in kept.stdout
-    assert "-example notes\n" in kept.stdout
-    assert "kept your copy of example-alpha" in kept.stdout
-    assert kept_content == EDITED_SKILL
-    assert replaced.returncode == 0, replaced.stderr
-    assert (skill / "SKILL.md").read_bytes() == ALPHA_SKILL
-    assert not (skill / "example-notes.md").exists()
-
-
-def test_edited_skill_without_stdin_stops_before_any_skill_is_written(sandbox: Sandbox) -> None:
-    assert sandbox.run("skills").returncode == 0
-    shutil.rmtree(sandbox.skills / "example-alpha")
-    (sandbox.skills / "example-beta/SKILL.md").write_bytes(EDITED_SKILL)
-
-    result = sandbox.run("skills")
+    result = sandbox.run("harness", "skills")
 
     assert result.returncode == 1
-    assert "no answer on stdin to whether to replace" in result.stderr
-    assert "run bootstrap.py in a terminal" in result.stderr
-    assert (sandbox.skills / "example-beta/SKILL.md").read_bytes() == EDITED_SKILL
-    assert not (sandbox.skills / "example-alpha").exists()
+    assert f"{taken} already exist and are not links into" in result.stderr
+    assert "installed before it: harness" in result.stderr
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-beta"]
+
+
+def test_skill_dropped_by_a_new_version_loses_its_link(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness", "skills").returncode == 0
+    shutil.rmtree(sandbox.clone / "harness/skills/example-beta")
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Drop the example beta skill")
+
+    result = sandbox.run("harness", "skills")
+
+    assert result.returncode == 0, result.stderr
+    assert f"removed {sandbox.skills / 'example-beta'}" in result.stdout
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha"]
 
 
 def test_skills_directory_linked_outside_claude_refuses_with_nothing_written(sandbox: Sandbox) -> None:
@@ -484,7 +426,7 @@ def test_skills_directory_linked_outside_claude_refuses_with_nothing_written(san
     sandbox.skills.parent.mkdir()
     sandbox.skills.symlink_to(elsewhere)
 
-    result = sandbox.run("githooks", "skills")
+    result = sandbox.run("harness", "skills")
 
     assert result.returncode == 1
     assert f"{sandbox.skills} resolves to {elsewhere.resolve()}, outside" in result.stderr
@@ -492,74 +434,20 @@ def test_skills_directory_linked_outside_claude_refuses_with_nothing_written(san
     assert not sandbox.install.exists()
 
 
-def test_linked_skill_refuses_before_any_skill_is_written(sandbox: Sandbox) -> None:
-    elsewhere = sandbox.root / "example-elsewhere"
-    elsewhere.mkdir()
-    sandbox.skills.mkdir(parents=True)
-    (sandbox.skills / "example-beta").symlink_to(elsewhere)
-
+def test_skills_refuses_before_the_harness_is_installed(sandbox: Sandbox) -> None:
     result = sandbox.run("skills")
 
     assert result.returncode == 1
-    assert f"{sandbox.skills / 'example-beta'} resolves to {elsewhere.resolve()}, outside" in result.stderr
-    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-beta"]
-    assert list(elsewhere.iterdir()) == []
-
-
-def test_skills_installs_the_commit_not_the_working_tree(sandbox: Sandbox) -> None:
-    sandbox.git(sandbox.clone, "update-index", "--skip-worktree", "harness/skills/example-alpha/SKILL.md")
-    (sandbox.clone / "harness/skills/example-alpha/SKILL.md").write_bytes(EDITED_SKILL)
-    (sandbox.clone / "harness/skills/example-alpha/example-untracked").write_bytes(b"example\n")
-
-    result = sandbox.run("skills")
-
-    assert result.returncode == 0, result.stderr
-    assert (sandbox.skills / "example-alpha/SKILL.md").read_bytes() == ALPHA_SKILL
-    assert not (sandbox.skills / "example-alpha/example-untracked").exists()
-
-
-@pytest.mark.skipif(os.geteuid() == 0, reason="root renames a directory it cannot write")
-def test_failed_skill_replacement_leaves_each_skill_whole(sandbox: Sandbox) -> None:
-    assert sandbox.run("skills").returncode == 0
-    for name in ("example-alpha", "example-beta"):
-        (sandbox.skills / name / "SKILL.md").write_bytes(EDITED_SKILL)
-    # Moving a directory to another parent needs write permission on it, so replacing example-beta fails after
-    # example-alpha has been replaced.
-    (sandbox.skills / "example-beta").chmod(0o555)
-    try:
-        result = sandbox.run("skills", stdin="y\ny\n")
-    finally:
-        (sandbox.skills / "example-beta").chmod(0o755)
-
-    assert result.returncode == 1
-    assert "skills failed: [Errno 13] Permission denied" in result.stderr
-    assert (sandbox.skills / "example-alpha/SKILL.md").read_bytes() == ALPHA_SKILL
-    assert (sandbox.skills / "example-beta/SKILL.md").read_bytes() == EDITED_SKILL
-    assert (sandbox.skills / "example-beta/scripts/example.sh").exists()
-    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta"]
-
-
-def test_interrupted_skill_replacement_leaves_the_installed_skill(sandbox: Sandbox) -> None:
-    assert sandbox.run("skills").returncode == 0
-    skill = sandbox.skills / "example-alpha"
-    (skill / "SKILL.md").write_bytes(EDITED_SKILL)
-    # The interrupt lands after the installed copy has been moved aside, before the clone's is renamed in.
-    interrupt = INTERRUPTED_RENAME.format(target=str(skill.resolve()))
-
-    result = sandbox.run("skills", stdin="y\n", python=("-c", interrupt))
-
-    assert result.returncode != 0
-    assert "KeyboardInterrupt" in result.stderr
-    assert (skill / "SKILL.md").read_bytes() == EDITED_SKILL
-    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta"]
+    assert "the harness is not installed" in result.stderr
+    assert not sandbox.skills.exists()
 
 
 @pytest.mark.parametrize(
     ("args", "reason"),
     [
-        (["githooks", "example-unknown"], "unknown component example-unknown"),
-        (["githooks", "--repo", "{repo}"], "--repo is used only by hooks-path"),
-        (["githooks", "hooks-path"], "hooks-path needs --repo"),
+        (["harness", "example-unknown"], "unknown component example-unknown"),
+        (["harness", "--repo", "{repo}"], "--repo is used only by hooks-path"),
+        (["harness", "hooks-path"], "hooks-path needs --repo"),
     ],
     ids=["unknown-component", "repo-without-hooks-path", "hooks-path-without-repo"],
 )
@@ -592,82 +480,41 @@ def test_failing_claude_command_stops_the_run(sandbox: Sandbox) -> None:
     assert sandbox.claude_calls() == [MARKETPLACE_ADD]
 
 
-def make_plugin_dir(parent: Path, directory: str, manifest_name: str | None) -> str:
-    path = parent / directory
-    path.mkdir(parents=True)
-    if manifest_name is not None:
-        (path / ".claude-plugin").mkdir()
-        (path / ".claude-plugin/plugin.json").write_text(json.dumps({"name": manifest_name}))
-    return str(path)
-
-
 @pytest.mark.parametrize("in_settings", [False, True], ids=["shell", "settings"])
-def test_plugin_dirs_warning_names_the_loaded_plugin(sandbox: Sandbox, in_settings: bool) -> None:
-    parent = sandbox.root / "example-plugin-dirs"
-    entries = [
-        make_plugin_dir(parent, "example-one", "example-renamed"),
-        make_plugin_dir(parent, "example-elsewhere", "example-two"),
-        make_plugin_dir(parent, "example-three", None),
-    ]
-    value = os.pathsep.join(entries)
+def test_plugin_dirs_warns_once(sandbox: Sandbox, in_settings: bool) -> None:
+    value = str(sandbox.root / "example-plugin-dirs")
     env = {"CLAUDE_CODE_PLUGIN_DIRS": value}
     if in_settings:
         env = {}
         (sandbox.home / ".claude").mkdir()
         (sandbox.home / ".claude/settings.json").write_text(json.dumps({"env": {"CLAUDE_CODE_PLUGIN_DIRS": value}}))
 
-    result = sandbox.run("plugin:example-one", "plugin:example-two", "plugin:example-three", env=env)
+    result = sandbox.run("plugin:example-one", "plugin:example-two", env=env)
 
     assert result.returncode == 0, result.stderr
-    assert f"loads example-two from {entries[1]}" in result.stderr
-    assert f"loads example-three from {entries[2]}" in result.stderr
-    assert "loads example-one from" not in result.stderr
-    assert sandbox.claude_calls() == [
-        MARKETPLACE_ADD,
-        ["plugin", "install", "example-one@example-market"],
-        ["plugin", "install", "example-two@example-market"],
-        ["plugin", "install", "example-three@example-market"],
-    ]
+    assert result.stderr.count(f"CLAUDE_CODE_PLUGIN_DIRS is {value}") == 1
+    assert len(sandbox.claude_calls()) == 3
 
 
-# A `content` of None makes `broken` a directory, which cannot be read as a file.
-@pytest.mark.parametrize(
-    ("broken", "content", "reason"),
-    [
-        ("example-plugin/.claude-plugin/plugin.json", "[]", "is not a JSON object"),
-        ("example-plugin/.claude-plugin/plugin.json", "{", "is not valid JSON"),
-        ("example-plugin/.claude-plugin/plugin.json", None, "cannot read {path}: Is a directory"),
-        ("home/.claude/settings.json", "[]", "is not a JSON object"),
-    ],
-    ids=["manifest-not-object", "manifest-not-json", "manifest-unreadable", "settings-not-object"],
-)
-def test_bad_json_stops_before_any_claude_call(sandbox: Sandbox, broken: str, content: str | None, reason: str) -> None:
-    plugin_dir = sandbox.root / "example-plugin"
-    (plugin_dir / ".claude-plugin").mkdir(parents=True)
+def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -> None:
     settings = sandbox.home / ".claude/settings.json"
     settings.parent.mkdir()
-    settings.write_text(json.dumps({"env": {"CLAUDE_CODE_PLUGIN_DIRS": str(plugin_dir)}}))
-    path = sandbox.root / broken
-    if content is None:
-        path.mkdir()
-    else:
-        path.write_text(content)
+    settings.write_text("[]")
 
     result = sandbox.run("plugin:example-one")
 
     assert result.returncode == 1
-    assert reason.format(path=path) in result.stderr
-    assert str(path) in result.stderr
+    assert f"{settings} is not a JSON object" in result.stderr
     assert sandbox.claude_calls() == []
 
 
 def test_prompt_installs_what_was_answered_yes(sandbox: Sandbox) -> None:
-    # githooks, skills, then the three plugins; hooks-path is not offered without --repo.
+    # harness, skills, then the three plugins; hooks-path is not offered without --repo.
     result = sandbox.run(stdin="y\nn\nn\ny\nn\n")
 
     assert result.returncode == 0, result.stderr
     assert "Install hooks-path" not in result.stdout
-    assert (sandbox.install / "githooks/pre-push").exists()
+    assert (sandbox.current / "githooks/pre-push").exists()
     assert not sandbox.skills.exists()
     assert sandbox.claude_calls() == [MARKETPLACE_ADD, ["plugin", "install", "example-two@example-market"]]
 

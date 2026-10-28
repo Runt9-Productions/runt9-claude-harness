@@ -14,13 +14,13 @@ are in the domain notes ([[Plugin Platform]], [[Mod CI Checks]], [[Skill Loading
 ## Decisions
 
 - [decision] The marketplace is named `runt9`; each plugin is self-contained under `plugins/<name>/`, and `harness/` holds what cannot be a plugin (owner, 2026-10-24).
-- [decision] `bootstrap.py` at the root is the one entry point: standard library only, it copies `harness/` parts into `~/.claude/harness/` and never symlinks (owner, 2026-10-24): a symlink makes whatever branch the clone has checked out live.
+- [decision] `bootstrap.py` at the root is the one entry point: standard library only, it copies `harness/` parts into `~/.claude/harness/` and never symlinks #superseded (owner, 2026-10-24; replaced by the versioned-install decision below, which still never links into the clone).
 - [decision] bootstrap writes the source commit into the install directory, refuses a tree with uncommitted changes and warns when HEAD is not on `origin/main` (owner, 2026-10-24).
 - [decision] One clone, the working clone; updating is checking out `main`, pulling and re-running bootstrap (owner, 2026-10-24).
 - [decision] The bot's credential helper is optional (owner, 2026-10-24): where a human already gates merges, Claude commits as that user, co-authored.
 - [decision] No template repository for private layers: examples sit beside the code that reads them, bootstrap offers to copy each where no file exists and never overwrites, and an optional private repository URL is cloned to `~/.claude/local` only when that directory is absent (owner, 2026-10-24).
 - [decision] Local layers become flat data files, not modules the hooks import (owner, 2026-10-24).
-- [decision] Style guides become flat skills under `harness/skills/<guide>/`, copied by bootstrap per guide; the copy is the user's, so a re-run shows the diff and asks before overwriting (owner, 2026-10-24).
+- [decision] Style guides become flat skills under `harness/skills/<guide>/`, copied by bootstrap per guide; the copy is the user's, so a re-run shows the diff and asks before overwriting #superseded (owner, 2026-10-24; replaced by the versioned-install decision below: skills are links, changed through local additions).
 - [decision] A hook lists the skills loaded before a compaction and tells the agent to reload what it needs #superseded (owner, 2026-10-24; replaced by the no-reload-hook decision in [[Skill Loading]]).
 - [decision] No hook reminds an agent of the style skills after each edit (owner, 2026-10-24): the comment sweep and the review panel catch style.
 - [decision] No standalone tool-routing guide ships (owner, 2026-10-24): Opus used `LSP` unprompted on reference questions without one (4 of 4 on a Python fixture). Tool-routing guidance is split across reference-kb, delegation, the CLAUDE.md template and dev-process.
@@ -37,6 +37,7 @@ are in the domain notes ([[Plugin Platform]], [[Mod CI Checks]], [[Skill Loading
 - [decision] Order of moves, infrastructure first: bootstrap and Python CI, style-guide skills, reference-kb, delegation with worktrees and dev-process, guardrails with bootstrap's settings merge, the CLAUDE.md template, the state plugins, the rest, then cleanup (owner, 2026-10-25): what this repository needs to develop itself comes before what already works elsewhere.
 - [decision] bootstrap refuses to run inside a Claude Code session (owner, 2026-10-26): it writes the install directory no agent may write.
 - [decision] bootstrap v1 installs the githooks component (git hooks and leak scan together), `core.hooksPath` in the repositories the user names, and the marketplace's plugins; the settings merge waits for guardrails (owner, 2026-10-26): it grows with each step that brings something installable.
+- [decision] The harness is versioned like a plugin, in `harness/harness.json`, and CI requires the version to rise with any shipped change. bootstrap installs `harness/` from HEAD into `~/.claude/harness/versions/<version>/` with `SOURCE_COMMIT` inside, swaps the `current` link to it, and removes other versions; hooks and skills are reached only through `current`, skills as links in `~/.claude/skills/` (owner, 2026-10-27): one atomic switch per version replaces the per-part swaps, rollbacks and the skills diff-and-ask.
 - [decision] A `kotlin-style` skill ships beside the other language skills, and comment-style holds only rules that apply in any repository (owner, 2026-10-26).
 - [decision] Design justification for a reviewer goes in comments on the pull request, not in the commit message or code comments (owner, 2026-10-26).
 - [decision] One reference-kb plugin carries the skill, the validator and templates, and the kb-writer agent (owner, 2026-10-26): the knowledge base arrives with its writer.

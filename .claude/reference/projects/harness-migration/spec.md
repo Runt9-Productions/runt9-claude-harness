@@ -16,8 +16,8 @@ Replaces the hand copy of the git hooks with one script, and gives later steps a
 Small on purpose: it grows with each step that brings something installable.
 
 - **Location and dependencies:** `bootstrap.py` at the repository root, Python standard library only.
-- **What it does:** copies `harness/` parts into `~/.claude/harness/`, never symlinking, and writes the source
-  commit there; installs plugins with `claude plugin marketplace add`, then `claude plugin install <name>@runt9`.
+- **What it does:** installs `harness/` as a version under `~/.claude/harness/versions/`, with the source commit
+  inside, behind the `current` link (see the versioned-install decision); installs plugins with `claude plugin marketplace add`, then `claude plugin install <name>@runt9`.
 - **What it refuses:** a tree with uncommitted changes, and running inside a Claude Code session
   (`CLAUDE_CODE_SESSION_ID` set), since it writes the install directory no agent may write. It warns, without
   refusing, when HEAD is not on `origin/main`.
@@ -48,8 +48,8 @@ Code-style principles, language guides and a comment guide become skills a publi
   configuration paths. Skills refer to each other by skill name.
 - **Local additions:** each skill injects `~/.claude/local/<skill>/additions.md` at load, and a missing file is not
   an error.
-- **bootstrap component `skills`:** copies each `harness/skills/<name>/` into `~/.claude/skills/<name>/`. The copy is
-  the user's, so a re-run shows the diff against the installed copy and asks before overwriting. It refuses when
+- **bootstrap component `skills`:** links `~/.claude/skills/<name>` to the installed version's copy; a user changes
+  a skill through its local additions. It refuses when
   `~/.claude/skills` resolves outside `~/.claude`, since a linked skills directory would write into another
   repository. Tests at the boundaries, like bootstrap's.
 - **References:** every in-repository mention of the guides points at the skills, including the code-review

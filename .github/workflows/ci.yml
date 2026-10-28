@@ -60,8 +60,8 @@ jobs:
       - name: Marketplace entries only point at plugins/
         run: bash .github/scripts/guard-marketplace-entries.sh
 
-      - name: Every changed plugin raises its version
-        run: bash .github/scripts/guard-plugin-versions.sh
+      - name: Every changed plugin, and a changed harness, raises its version
+        run: bash .github/scripts/guard-versions.sh
 
   # shellcheck and the bats tests over every tracked shell script: these workflow scripts and the harness.
   scripts:

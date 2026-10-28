@@ -7,10 +7,12 @@ zero=0000000000000000000000000000000000000000
 setup() {
     local source_root
     source_root=$(cd "$BATS_TEST_DIRNAME/../.." && pwd)
+    # Laid out as bootstrap.py installs it: the hook runs through `current`, and keeps its state beside it.
     install=$BATS_TEST_TMPDIR/install
-    mkdir -p "$install"
-    cp -r "$source_root/harness/githooks" "$source_root/harness/leak-scan" "$install/"
-    hook=$install/githooks/pre-push
+    mkdir -p "$install/versions/1"
+    cp -r "$source_root/harness/githooks" "$source_root/harness/leak-scan" "$install/versions/1/"
+    ln -s versions/1 "$install/current"
+    hook=$install/current/githooks/pre-push
 
     # The stub goes first on PATH, so the real claude is never reached.
     export HOME=$BATS_TEST_TMPDIR/home
@@ -147,7 +149,7 @@ leak="write to someone@acme-corp"".com"
 @test "a pass under an earlier copy of the gate is not reused" {
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
-    echo "# changed" >> "$install/leak-scan/shapes.toml"
+    echo "# changed" >> "$install/current/leak-scan/shapes.toml"
     push fail "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]

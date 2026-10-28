@@ -154,7 +154,7 @@ something the ruling did not account for.
 - Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
   common mistakes only. (2026-10-25)
 - CI reviewing a PR with that PR's own `.claude/` and `CLAUDE.md`. (2026-10-25)
-- `bootstrap.py githooks` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
+- `bootstrap.py harness` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
   (2026-10-27)
 
 ## Delivery
