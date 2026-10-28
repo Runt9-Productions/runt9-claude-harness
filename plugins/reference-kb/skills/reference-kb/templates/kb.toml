@@ -1,0 +1,13 @@
+# What this knowledge base adds to the reference-kb format. Keep only the trees in use, and delete any table that
+# adds nothing.
+
+trees = ["domains", "entities", "projects"]
+
+[categories]
+"{{name}}" = "{{what an observation in this category records}}"
+
+[tags]
+"{{name}}" = "{{what a line with this tag has in common with others}}"
+
+[statuses]
+"{{name}}" = "{{what a project in this status is doing}}"

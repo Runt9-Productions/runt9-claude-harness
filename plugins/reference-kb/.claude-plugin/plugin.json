@@ -1,0 +1,8 @@
+{
+  "name": "reference-kb",
+  "version": "0.1.0",
+  "description": "Reference knowledge bases in .claude/reference/: the note format, templates, a validator with a merge gate for CI, and a writer agent",
+  "author": {
+    "name": "Runt9 Productions"
+  }
+}

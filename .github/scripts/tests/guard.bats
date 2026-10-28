@@ -137,6 +137,15 @@ run_in_fixture() {
     [ "$status" -eq 0 ]
 }
 
+@test "a change to only a plugin's Python tests needs no bump" {
+    base_plugin_at a 1.0.0
+    mkdir -p "$FIXTURE/plugins/a/skills/s/scripts"
+    echo test > "$FIXTURE/plugins/a/skills/s/scripts/test_example.py"
+    merge_pr
+    run_in_fixture guard-plugin-versions.sh
+    [ "$status" -eq 0 ]
+}
+
 @test "a new plugin needs no bump" {
     plugin_at b 0.1.0
     merge_pr
