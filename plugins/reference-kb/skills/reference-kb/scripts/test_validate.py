@@ -223,11 +223,10 @@ def test_a_note_outside_the_declared_trees_fails(repo: Repo) -> None:
         ("# Example Topic\n\n", "", "no H1"),
         (SCOPE, "", "no Scope blockquote"),
         ("**Scope.**", "**Covers.**", "must open with `**Scope.**`"),
-        (SCOPE, "> **Scope.** The example file.\n", "too short"),
         ("## Observations", "## Relations\n\n- mentions [[Example Topic]]\n\n## Observations", "unknown relation type"),
         ("## Observations", "## Relations\n\n- see also [[Example Topic]]\n\n## Observations", "must read `- <type>"),
     ],
-    ids=["no H1", "no Scope", "Scope opener", "short Scope", "relation type", "relation shape"],
+    ids=["no H1", "no Scope", "Scope opener", "relation type", "relation shape"],
 )
 def test_a_malformed_body_fails(repo: Repo, old: str, new: str, message: str) -> None:
     repo.write_note("domains/example/topic.md", domain_note(SOURCED).replace(old, new))
@@ -420,27 +419,6 @@ def test_a_merge_whose_resolution_is_the_only_source_change_is_not_counted(repo:
 
     assert gate.returncode == 0, gate.stdout
     assert "0 warnings" in stale.stdout, stale.stdout
-
-
-@pytest.mark.parametrize(
-    ("edited_first", "status"), [(False, 1), (True, 0)], ids=["moved only", "edited before the move"]
-)
-def test_the_gate_counts_a_moved_note_by_its_edits_under_any_path(repo: Repo, edited_first: bool, status: int) -> None:
-    base = committed_note(repo, "2026-01-10T09:00:00+00:00")
-    repo.write("src/example.txt", "two\n")
-    repo.commit("2026-01-10T15:00:00+00:00")
-    if edited_first:
-        repo.write_note("domains/example/topic.md", domain_note(SOURCED, "- [fact] The example file holds two.\n"))
-        repo.commit("2026-01-10T15:30:00+00:00")
-    moved = ROOT / "domains/example/moved.md"
-    repo.git("mv", str(ROOT / "domains/example/topic.md"), str(moved))
-    text = (repo.path / moved).read_text()
-    (repo.path / moved).write_text(text.replace("permalink: example/topic", "permalink: example/moved"))
-    repo.commit("2026-01-10T16:00:00+00:00")
-
-    result = repo.validate("--stale-in", f"{base}..HEAD")
-
-    assert result.returncode == status, result.stdout
 
 
 def test_the_gate_fails_an_untracked_source_as_unknown(repo: Repo) -> None:

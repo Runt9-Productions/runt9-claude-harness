@@ -275,13 +275,12 @@ python3 <skill>/scripts/validate.py --root .claude/reference [--warnings] [--sta
 - **It checks format, not truth.** A clean run says nothing about whether the claims are right.
 - **Both staleness modes leave merge commits out.** A merge's changes are counted in the commits that made them, so
   merging a branch never makes a note stale by itself, and neither does a change made only in a merge's resolution.
-- **A source commit is re-verified** when that commit, or a later commit descending from it, edits the note and
-  leaves `verified` on or after the source commit's date (the committer's own date, as `git log --format=%cs` shows
-  it). `verified` need not move: a same-day edit that keeps the date counts. Edits under the note's earlier paths
-  count, and a commit that only moves the note, changing at most its `permalink`, does not.
-- **`--stale`** warns about each note whose sources changed in commits dated after `verified` and not re-verified. A
-  commit on the same day as `verified` counts as covered, so an uncommitted re-verify still clears the warning. A
-  source git does not track, and any git failure, is reported as UNKNOWN, never as clean.
+- **`--stale`** warns about each note whose sources changed in commits dated after `verified` (the committer's own
+  date, as `git log --format=%cs` shows it). A commit on the same day as `verified` counts as covered, so an
+  uncommitted re-verify still clears the warning. A source git does not track, and any git failure, is reported as
+  UNKNOWN, never as clean.
 - **`--stale-in A..B`** is the merge gate, and implies `--stale`. A note fails when a commit in the range changes one
-  of its sources and is not re-verified. A source change after the note's last edit therefore fails even when its
-  date matches `verified`. UNKNOWN fails here. Staleness from before the range never fails.
+  of its sources and neither that commit nor a later one descending from it edits the note leaving `verified` on or
+  after the change's date. `verified` need not move: a same-day edit that keeps the date counts. A source change after
+  the note's last edit therefore fails even when its date matches `verified`. Moving a note counts as editing it.
+  UNKNOWN fails here. Staleness from before the range never fails.
