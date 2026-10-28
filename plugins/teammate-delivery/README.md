@@ -1,20 +1,63 @@
 # teammate-delivery
 
-With Agent Teams, a message sent to a teammate normally waits in its mailbox until the teammate's whole turn ends.
-This plugin adds the message to the teammate's running turn instead, so the teammate reads it at its next model
-request, headed `[Message from <sender>, delivered while you were working]` with the message quoted beneath. In it,
-the `<` of any tag whose name holds a `-`, `_` or `:` is escaped as `<\`, so `<system-reminder>` arrives as
-`<\system-reminder>`; `List<String>`, `<div>` and the harness's one-word tags (`channel`, `terminal`, `browser`) pass
-unchanged. A message to an idle teammate still goes by mailbox. If the teammate's turn ends before reading the
-message, a short mailbox message wakes it; if the turn was stopped instead, nothing restarts it and a notice says the
-message is unread.
+Under Agent Teams, a message sent to an in-process teammate normally waits in its mailbox until the teammate's
+current turn ends. With this plugin, a message the model sends to a teammate that is mid-turn is added to that
+teammate's conversation at once, so its next model request reads it. Nothing else about sending changes.
 
-Only teammates that run in the lead's own process are affected. A teammate in a terminal pane of its own (tmux,
-iTerm2) runs no loop there, so every message to it still goes by mailbox.
+Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. There are no settings.
 
-A message delivered this way never passes other plugins' `session.send` or `session.receive` hooks, so a plugin that
-gates or rewrites teammate messages there does not see it. It does pass their `session.append` hooks, as a row with
-door `note` in the teammate's conversation, so such a plugin should hook that too. The receiver learns the sender only
-from the name in the header, not from the sender the harness verifies.
+## What the teammate sees
 
-Needs Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). No settings.
+The message arrives as one row: a header line naming the sender, then the body with every line quoted.
+
+```
+Message from team-lead, delivered during your turn:
+> Run the fixture suite again.
+> Then report back.
+```
+
+The sender is `team-lead` when the main conversation sent it, and otherwise the sending teammate's name. The
+receiver learns the sender by name only. Every Unicode line break starts a new quoted line (CRLF counts as one),
+so no line of the body can pass for a header.
+
+Inside the body, every `<` that starts something shaped like the engine's envelope tags gets a `\` inserted after
+it: `<example-tag>` becomes `<\example-tag>` and `</example-tag>` becomes `<\/example-tag>`. The shape is a `<`, an
+optional `/`, then a name of letters, combining marks, digits, dots and separators that starts with a letter and
+holds at least one separator. A separator is any Unicode dash or hyphen, the minus sign, any Unicode connector such
+as `_`, or a colon. The fullwidth and small forms of `<`, `/` and `:` count as those characters, and invisible
+characters (zero-width spaces and joiners, soft hyphens, word joiners) are ignored, so none of them hides a tag.
+That holds even when the tag follows a word with no space, so a generic whose type name has a separator is escaped
+too (`Result<io_error>` becomes `Result<\io_error>`). Plain HTML such as `<div>`, one-word tags and a `<` followed
+by a space or by anything other than a letter (`a < b-c`, `x<-y`) are left alone. Case does not matter.
+
+## When it applies
+
+A send is diverted only when it comes from the model, exactly one agent matches the address (by id, by name or by
+teammate id), that agent is a teammate, it is running, and the plugin has seen its current turn start. Everything
+else goes to the mailbox as usual: an idle or finished teammate, an unknown or ambiguous name, a subagent that is
+not a teammate, and any send made by a plugin. If anything fails, or another plugin refuses the row, the message
+goes to the mailbox instead.
+
+Teammates hosted in their own terminal pane (tmux, iTerm2) run in another process and are not affected.
+
+After the plugin reloads, it has forgotten which turns are open, so sends use the mailbox until each teammate
+makes its next model request. It has also forgotten the messages it added before the reload: if the teammate's turn
+then ends without another model request, those messages get neither the wake-up nor a resend described below.
+
+## When the turn ends
+
+If the teammate's turn ends before any request carried the message:
+
+- If the turn ended with an answer and the message is still in the conversation, the teammate gets one short
+  mailbox message saying that a message reached it mid-turn and where to find it. If the conversation no longer
+  holds it, the message itself is sent through the mailbox.
+- If the turn was interrupted, refused or ended in an error, the teammate is not restarted. A toast says the
+  message went unread.
+
+A toast also reports a mailbox send that failed and any error inside the plugin.
+
+## Other plugins
+
+A diverted message does not travel by mailbox, so other plugins' `session.receive` hooks never see it, and neither
+do `session.send` hooks that run after this plugin's. `session.append` hooks see it as a `note` row from this
+plugin.
