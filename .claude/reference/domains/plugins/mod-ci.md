@@ -26,6 +26,7 @@ their input is missing, which is why the job checks the input exists first.
 - [fact] With a logged-in configuration the same types run makes a real model call and exits 0 #measured (so running it locally spends a request)
 - [fact] Types written this way match a session's for core `claude-code`; tool schemas that depend on server flags differ, and `claude-code-mcp` is empty #measured
 - [fact] A plugin named in a mod's `dependencies` needs its own `--plugin-dir` on the types run #measured
+- [trap] The job finds a mod only at `hooks/hooks.json`, so it fails a `plugin.json` that sets `hooks`: a mod that key points elsewhere would pass unchecked #silent-failure
 - [trap] Type-aware oxlint on a mod with no types exits 0 with only a warning, so the job fails when `tsconfig.json` or `.claude-plugin/types` is missing before it lints #silent-failure #measured
 - [fact] `@anthropic-ai/claude-code` installed with scripts off leaves `bin/claude.exe` as a stub that exits 1, while `node cli-wrapper.cjs` runs `--version`, `-p`, `plugin validate` and `plugin test` #measured (the job wraps `cli-wrapper.cjs` in a `claude` script)
 - [trap] `npm ci` never applies `min-release-age`: the cooldown applies only when npm resolves versions, and only on npm 11.10 or newer #silent-failure #measured (with a 100-year cooldown `npm ci` exits 0 and `npm install` fails ETARGET)
