@@ -1,67 +1,18 @@
-"""Install the parts of runt9-claude-harness that cannot be plugins, and the plugins if you pick them.
+"""Install the parts of runt9-claude-harness that cannot be plugins, and the plugins you pick.
 
     python3 bootstrap.py [component ...] [--repo <path> ...] [--list]
 
-Run it in your own shell, not in a Claude Code session. It installs from the clone that holds this script, whatever
-the working directory. --list prints the components and exits. With components named it installs exactly those, in
-the order below; with none named it asks about each one.
+Run it in your own shell, not in a Claude Code session. With components named it installs exactly those, in the order
+--list shows; with none named it asks about each one. README.md says what each component does and what it refuses.
 
-Components, in install order:
-
-  githooks        Copies harness/githooks and harness/leak-scan, as they are in the commit checked out, into
-                  ~/.claude/harness/ and writes that commit's hash to ~/.claude/harness/SOURCE_COMMIT. The copies are
-                  the commit's files with their modes, never the working tree. Each run replaces both directories
-                  whole, so nothing else belongs in them; ~/.claude/harness/state/, where pre-push keeps its pass
-                  cache, is kept.
-  hooks-path      Sets core.hooksPath to ~/.claude/harness/githooks in each --repo. Git then runs only those hooks
-                  in that repository, so its own hooks in .git/hooks stop running.
-  skills          Copies each skill in harness/skills (a directory holding a SKILL.md), as it is in the commit checked
-                  out, into ~/.claude/skills/<name>/, with each file's mode. An installed copy is yours to edit: when
-                  it differs from the commit's, the run shows a diff from yours to the commit's and replaces yours
-                  only if you answer yes. A replaced skill's directory is replaced whole, so files added to it by hand
-                  go. Other skills in ~/.claude/skills are never touched.
-  plugin:<name>   One per plugin in .claude-plugin/marketplace.json. Runs `claude plugin marketplace add
-                  Runt9-Productions/runt9-claude-harness` and `claude plugin install <name>@runt9`. Plugins come from
-                  GitHub, never from this clone.
-
-Checks:
-
-  - Refuses to run inside a Claude Code session (CLAUDE_CODE_SESSION_ID or CLAUDECODE set). --list still works.
-  - An unknown component, or --repo without hooks-path, stops the run before anything is installed.
-  - githooks and skills: refuse uncommitted changes to tracked files (untracked files are fine), and a symlink or
-    submodule in what they copy. Warn, and install anyway, when HEAD is not reachable from origin/main as of the
-    last fetch. A failed install leaves the previous one in place; for skills, each skill is either as it was or
-    replaced whole.
-  - hooks-path: refuses, before changing any repository, when githooks is not installed, when no --repo is given,
-    or when a --repo is not the top level of a git repository. Prints a different core.hooksPath it replaces,
-    whichever config sets it, and the command that restores it. Warns about each hook of the repository's own that
-    stops running. Fails when the value git reads back differs, because a config.worktree or an include sets
-    another. Notes each repository without claude.botEmail, where the hooks run only the leak gate.
-  - skills: refuses, before anything is installed, when ~/.claude/skills or a skill's directory in it resolves
-    outside ~/.claude, such as through a symlink into another repository. Stops when an installed copy differs and
-    stdin has no answer, so run it in a terminal.
-  - plugin:<name>: warns when CLAUDE_CODE_PLUGIN_DIRS, in the shell or in the env block of ~/.claude/settings.json,
-    also loads the plugin, since a session then runs that copy instead. Stops before running claude when a
-    plugin.json there or the settings file cannot be read or is not a JSON object.
-
-Git runs without GIT_DIR, GIT_WORK_TREE and the other variables that point it at another repository or add config
-to it, so the repository read and changed is always the one named.
-
-Nothing here keeps an agent from writing to ~/.claude/harness/ or ~/.claude/skills/; that is your harness's job.
-
-Updating: for githooks and skills, check out main, pull and run `python3 bootstrap.py githooks skills` again. For a
-plugin, run `claude plugin update <name>@runt9`; running this script again does not update a plugin already
-installed.
-
-Exits 0 when everything picked installed, otherwise 1 with one line naming the reason. A component installed before
-a later one failed stays installed, and that line says which.
+Exits 0 when everything picked installed, otherwise 1 with one line naming the reason and what installed before it.
 """
 
 import argparse
-import difflib
 import functools
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -82,16 +33,20 @@ MARKETPLACE_SOURCE = "Runt9-Productions/runt9-claude-harness"
 UPSTREAM = "origin/main"
 CLAUDE_DIR = Path.home() / ".claude"
 
+HARNESS_SOURCE = "harness"
+HARNESS_MANIFEST = f"{HARNESS_SOURCE}/harness.json"
+# The version names a directory, so it may hold nothing that walks out of one.
+VERSION_PATTERN = re.compile(r"\d+(\.\d+)*")
 INSTALL_DIR = CLAUDE_DIR / "harness"
+VERSIONS_DIR = INSTALL_DIR / "versions"
+# Hooks and skills are reached through this link, so pointing it at another version switches all of them at once.
+CURRENT = INSTALL_DIR / "current"
 SOURCE_COMMIT = "SOURCE_COMMIT"
-# Installed side by side, because pre-push finds the scanner at ../leak-scan.
-HARNESS_PARTS = ("githooks", "leak-scan")
-# Swapped in this order: SOURCE_COMMIT last, so it is never in place before both parts are.
-SWAPPED_IN = (*HARNESS_PARTS, SOURCE_COMMIT)
 FILE_MODES = {"100644": 0o644, "100755": 0o755}
+# Not installed, so changing one needs no version rise; the CI version guard exempts the same files.
+NOT_SHIPPED = ("harness/*/README.md", "test_*.py", "test_*.bats", "*.test.ts", "*.test.tsx")
 
 SKILLS_DIR = CLAUDE_DIR / "skills"
-SKILLS_SOURCE = "harness/skills"
 SKILL_FILE = "SKILL.md"
 
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
@@ -107,12 +62,6 @@ class Stop(Exception):
 class Run:
     repos: list[Path]
     installed: list[str] = field(default_factory=list)
-    marketplace_added: bool = False
-
-    @functools.cached_property
-    def commit(self) -> str:
-        """The commit every component from the clone installs."""
-        return git(CLONE, "rev-parse", "--verify", "HEAD^{commit}").decode().strip()
 
 
 @dataclass(frozen=True)
@@ -121,9 +70,7 @@ class Component:
     summary: str
     install: Callable[[Run], None]
     # Runs for every picked component before the first install, so a refusal installs nothing.
-    check: Callable[[Run], object] | None = None
-    # Installs files from the clone, so the checkout checks apply.
-    from_clone: bool = False
+    check: Callable[[Run], None] | None = None
     # Acts on the --repo paths; prompt mode offers it only when --repo is given.
     needs_repos: bool = False
 
@@ -170,18 +117,22 @@ def git_config(repo: Path, *args: str) -> str | None:
     return os.fsdecode(result.stdout).strip()
 
 
+def parse_json_object(text: str | bytes, origin: str) -> dict:
+    try:
+        value = json.loads(text)
+    except ValueError as error:
+        raise Stop(f"{origin} is not valid JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise Stop(f"{origin} is not a JSON object")
+    return value
+
+
 def read_json_object(path: Path) -> dict:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
         raise Stop(f"cannot read {path}: {error.strerror}") from error
-    try:
-        value = json.loads(text)
-    except ValueError as error:
-        raise Stop(f"{path} is not valid JSON: {error}") from error
-    if not isinstance(value, dict):
-        raise Stop(f"{path} is not a JSON object")
-    return value
+    return parse_json_object(text, str(path))
 
 
 def check_checkout() -> None:
@@ -200,7 +151,7 @@ def check_checkout() -> None:
 
 
 def export_tree(commit: str, source: str, target: Path) -> None:
-    """Writes the blobs under `source` in `commit` to `target`, bypassing every filter and attribute."""
+    """Writes the blobs under `source` in `commit` that ship to `target`, bypassing every filter and attribute."""
     listing = git(CLONE, "ls-tree", "-r", "-z", "--full-tree", commit, "--", source)
     entries = [entry for entry in listing.split(b"\0") if entry]
     if not entries:
@@ -209,6 +160,8 @@ def export_tree(commit: str, source: str, target: Path) -> None:
         meta, raw_path = entry.split(b"\t", 1)
         mode, _, blob = meta.decode().split()
         path = os.fsdecode(raw_path)
+        if any(PurePosixPath(path).match(pattern) for pattern in NOT_SHIPPED):
+            continue
         if mode not in FILE_MODES:
             raise Stop(f"{path} in {commit} is not a regular file (mode {mode}); only regular files install")
         destination = target / Path(path).relative_to(source)
@@ -217,44 +170,52 @@ def export_tree(commit: str, source: str, target: Path) -> None:
         destination.chmod(FILE_MODES[mode])
 
 
-def swap_in(moves: list[tuple[Path, Path]], beside: Path) -> None:
-    """Renames each staged path in `moves` over its installed path, in order. Any failure, an interrupt included,
-    renames every one back, so the previous install stays whole. When a rename back fails, the previous install is
-    left in a directory made in `beside`, so `beside` must not be one the caller deletes."""
-    retired = Path(tempfile.mkdtemp(prefix=".retired-", dir=beside))
-    # Each rename is recorded before it runs, so an interrupt between the two cannot leave one out of the rollback.
-    renamed: list[tuple[Path, Path]] = []
-    try:
-        for staged, current in moves:
-            if current.exists():
-                renamed.append((current, retired / current.name))
-                current.rename(retired / current.name)
-            renamed.append((staged, current))
-            staged.rename(current)
-    except BaseException:
-        try:
-            for source, destination in reversed(renamed):
-                if destination.exists():
-                    destination.rename(source)
-        except OSError as error:
-            raise Stop(f"could not put the previous install back; it is in {retired}: {error}") from error
-        retired.rmdir()
-        raise
-    shutil.rmtree(retired, ignore_errors=True)
+def harness_version(commit: str) -> str:
+    origin = f"{HARNESS_MANIFEST} in {commit}"
+    text = git(CLONE, "show", f"{commit}:{HARNESS_MANIFEST}")
+    version = parse_json_object(text, origin).get("version")
+    if not isinstance(version, str) or not VERSION_PATTERN.fullmatch(version):
+        raise Stop(f"{origin} needs a version made of dot-separated numbers")
+    return version
 
 
-def install_githooks(run: Run) -> None:
-    commit = run.commit
-    INSTALL_DIR.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".bootstrap-", dir=INSTALL_DIR))
-    try:
-        for part in HARNESS_PARTS:
-            export_tree(commit, f"harness/{part}", staging / part)
-        (staging / SOURCE_COMMIT).write_text(f"{commit}\n", encoding="utf-8")
-        swap_in([(staging / name, INSTALL_DIR / name) for name in SWAPPED_IN], INSTALL_DIR)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-    print(f"githooks: installed {' and '.join(HARNESS_PARTS)} from {commit} into {INSTALL_DIR}")
+def install_harness(run: Run) -> None:
+    commit = git(CLONE, "rev-parse", "--verify", "HEAD^{commit}").decode().strip()
+    version = harness_version(commit)
+    target = VERSIONS_DIR / version
+
+    replace = True
+    if target.exists():
+        no_stdin = f"no answer on stdin to whether to replace {target}; run bootstrap.py in a terminal"
+        question = f"{version} is already installed in {target}. Replace it from {commit}? [y/N] "
+        replace = answered_yes(question, no_stdin)
+    if replace:
+        VERSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        # Staged beside where it goes, so a rename installs it whole.
+        with tempfile.TemporaryDirectory(prefix=".staging-", dir=VERSIONS_DIR) as staging:
+            staged = Path(staging) / version
+            export_tree(commit, HARNESS_SOURCE, staged)
+            (staged / SOURCE_COMMIT).write_text(f"{commit}\n", encoding="utf-8")
+            if target.exists():
+                shutil.rmtree(target)
+            staged.rename(target)
+        print(f"harness: installed {version} from {commit} into {target}")
+
+    # A new link renamed over the old one, so `current` never names a partial version.
+    link = INSTALL_DIR / ".current-new"
+    link.unlink(missing_ok=True)
+    link.symlink_to(Path(VERSIONS_DIR.name) / version)
+    link.replace(CURRENT)
+    print(f"harness: {CURRENT} points at {version}")
+
+    for other in VERSIONS_DIR.iterdir():
+        if other.name != version:
+            shutil.rmtree(other)
+
+
+def require_harness() -> None:
+    if not CURRENT.is_dir():
+        raise Stop(f"the harness is not installed in {INSTALL_DIR}; install it first")
 
 
 def check_hooks_path(run: Run) -> None:
@@ -272,15 +233,11 @@ def check_hooks_path(run: Run) -> None:
 def report_replaced_hooks(repo: Path, hooks: str) -> None:
     """Says what setting core.hooksPath to `hooks` turns off in `repo`: the value git uses now, from whichever
     scope, and each hook in the directory git runs hooks from now."""
-    current = git_config(repo, "--show-scope", "--get", "core.hooksPath")
-    if current is None:
-        hooks_dir = repo / os.fsdecode(git(repo, "rev-parse", "--git-path", "hooks")).strip()
-    else:
-        scope, previous = current.split("\t", 1)
+    configured = git_config(repo, "--show-scope", "--get", "core.hooksPath")
+    if configured is not None:
+        scope, previous = configured.split("\t", 1)
         if previous == hooks:
             return
-        # A relative core.hooksPath is relative to the top level, which check_hooks_path made sure `repo` is.
-        hooks_dir = repo / Path(previous).expanduser()
         if scope == "local":
             restore = ["git", "-C", str(repo), "config", "core.hooksPath", previous]
         else:
@@ -288,6 +245,8 @@ def report_replaced_hooks(repo: Path, hooks: str) -> None:
             restore = ["git", "-C", str(repo), "config", "--unset", "core.hooksPath"]
         print(f"hooks-path: {repo} had core.hooksPath {previous} from its {scope} config")
         print(f"hooks-path: to restore it: {shlex.join(restore)}")
+
+    hooks_dir = repo / os.fsdecode(git(repo, "rev-parse", "--git-path", "hooks")).strip()
     if not hooks_dir.is_dir():
         return
     disabled = []
@@ -301,9 +260,8 @@ def report_replaced_hooks(repo: Path, hooks: str) -> None:
 
 
 def install_hooks_path(run: Run) -> None:
-    hooks = str(INSTALL_DIR / "githooks")
-    if not (INSTALL_DIR / SOURCE_COMMIT).is_file():
-        raise Stop(f"githooks is not installed in {INSTALL_DIR}; install it first")
+    require_harness()
+    hooks = str(CURRENT / "githooks")
     for repo in run.repos:
         report_replaced_hooks(repo, hooks)
         git(repo, "config", "--local", "core.hooksPath", hooks)
@@ -315,141 +273,59 @@ def install_hooks_path(run: Run) -> None:
             warn(f"{repo} sets no claude.botEmail, so only the leak gate runs there")
 
 
-@dataclass(frozen=True)
-class SkillFile:
-    mode: int
-    content: bytes
-
-
-def skill_names(commit: str) -> list[str]:
-    listing = git(CLONE, "ls-tree", "-r", "-z", "--name-only", "--full-tree", commit, "--", SKILLS_SOURCE)
-    names = []
-    for entry in listing.split(b"\0"):
-        path = PurePosixPath(os.fsdecode(entry))
-        if path.name == SKILL_FILE and path.parent.parent == PurePosixPath(SKILLS_SOURCE):
-            names.append(path.parent.name)
-    return names
-
-
-def resolve_inside_claude_dir(path: Path) -> Path:
-    resolved = path.resolve()
+def check_skills() -> None:
+    resolved = SKILLS_DIR.resolve()
     if not resolved.is_relative_to(CLAUDE_DIR.resolve()):
-        raise Stop(f"{path} resolves to {resolved}, outside {CLAUDE_DIR}; refusing to write through it")
-    return resolved
+        raise Stop(f"{SKILLS_DIR} resolves to {resolved}, outside {CLAUDE_DIR}; refusing to write through it")
 
 
-def skill_targets(run: Run) -> dict[str, Path]:
-    """Maps each skill in the commit to the directory it installs to, through any symlink inside ~/.claude."""
-    resolve_inside_claude_dir(SKILLS_DIR)
-    return {name: resolve_inside_claude_dir(SKILLS_DIR / name) for name in skill_names(run.commit)}
-
-
-def read_skill(directory: Path) -> dict[str, SkillFile]:
-    files = {}
-    for path in sorted(directory.rglob("*")):
-        if path.is_dir():
-            continue
-        files[path.relative_to(directory).as_posix()] = SkillFile(path.stat().st_mode & 0o777, path.read_bytes())
-    return files
-
-
-def text_lines(file: SkillFile | None) -> list[str]:
-    if file is None:
-        return []
-    return file.content.decode(errors="replace").splitlines()
-
-
-def print_skill_diff(installed: dict[str, SkillFile], clone: dict[str, SkillFile]) -> None:
-    """Prints a unified diff from the installed copy to the clone's, with a line for each changed file mode."""
-    for path in sorted(installed.keys() | clone.keys()):
-        before = installed.get(path)
-        after = clone.get(path)
-        if before == after:
-            continue
-        if before is not None and after is not None and before.mode != after.mode:
-            print(f"mode of {path}: {before.mode:o} installed, {after.mode:o} in the clone")
-        lines = difflib.unified_diff(
-            text_lines(before), text_lines(after), f"installed/{path}", f"clone/{path}", lineterm=""
-        )
-        for line in lines:
-            print(line)
-
-
-def should_replace(name: str, target: Path, staged: Path, run: Run) -> bool:
-    """Whether the clone's copy of a skill goes over `target`, asking first when the installed copy differs."""
-    if not target.exists():
-        return True
-    installed = read_skill(target)
-    clone = read_skill(staged)
-    if installed == clone:
-        print(f"skills: {name} is up to date in {target}")
-        return False
-    print(f"skills: {target} differs from {SKILLS_SOURCE}/{name} in {run.commit}:")
-    print_skill_diff(installed, clone)
-    no_stdin = f"no answer on stdin to whether to replace {target}; run bootstrap.py in a terminal"
-    if answered_yes(f"Replace {target} with the clone's copy? [y/N] ", no_stdin):
-        return True
-    print(f"skills: kept your copy of {name} in {target}")
-    return False
+def is_link_to(link: Path, target: Path) -> bool:
+    return link.is_symlink() and link.readlink() == target
 
 
 def install_skills(run: Run) -> None:
-    targets = skill_targets(run)
+    require_harness()
+    source = CURRENT / "skills"
+    names = sorted(path.name for path in source.iterdir() if (path / SKILL_FILE).is_file())
+
+    taken = []
+    for name in names:
+        link = SKILLS_DIR / name
+        if os.path.lexists(link) and not is_link_to(link, source / name):
+            taken.append(str(link))
+    if taken:
+        raise Stop(f"{', '.join(taken)} already exist and are not links into {source}; move them away to install these")
+
     SKILLS_DIR.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".bootstrap-", dir=SKILLS_DIR))
-    try:
-        # Every question is answered before the first skill is replaced, so no stdin stops the run with none written.
-        replacing = []
-        for name, target in targets.items():
-            staged = staging / name
-            export_tree(run.commit, f"{SKILLS_SOURCE}/{name}", staged)
-            if should_replace(name, target, staged, run):
-                replacing.append(name)
-        for name in replacing:
-            swap_in([(staging / name, targets[name])], SKILLS_DIR)
-            print(f"skills: installed {name} from {run.commit} into {targets[name]}")
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+    for name in names:
+        link = SKILLS_DIR / name
+        if not os.path.lexists(link):
+            link.symlink_to(source / name)
+            print(f"skills: linked {link} to {source / name}")
+
+    # A skill that a later version dropped leaves its link dangling.
+    for link in SKILLS_DIR.iterdir():
+        if not link.is_symlink() or link.exists():
+            continue
+        if link.readlink().parent == source:
+            link.unlink()
+            print(f"skills: removed {link}, whose skill this version no longer has")
 
 
-def plugin_dirs_entries() -> list[str]:
+# Cached so it runs once per run, however many plugins are picked.
+@functools.cache
+def check_plugin_setup() -> None:
+    if shutil.which("claude") is None:
+        raise Stop("claude is not on PATH, and plugin components run it")
     values = []
     if os.environ.get(PLUGIN_DIRS_VARIABLE):
         values.append(os.environ[PLUGIN_DIRS_VARIABLE])
     if SETTINGS_FILE.exists():
         env = read_json_object(SETTINGS_FILE).get("env")
-        if isinstance(env, dict) and isinstance(env.get(PLUGIN_DIRS_VARIABLE), str):
+        if isinstance(env, dict) and env.get(PLUGIN_DIRS_VARIABLE):
             values.append(env[PLUGIN_DIRS_VARIABLE])
-    entries = []
     for value in values:
-        entries.extend(entry for entry in value.split(os.pathsep) if entry)
-    return entries
-
-
-@functools.cache
-def plugins_from_dirs() -> dict[str, str]:
-    """Maps each plugin name CLAUDE_CODE_PLUGIN_DIRS loads to the entry that loads it."""
-    loaded = {}
-    for entry in plugin_dirs_entries():
-        directory = Path(entry).expanduser()
-        # Claude Code skips a relative entry, and an archive entry is not read here.
-        if not directory.is_absolute() or not directory.is_dir():
-            continue
-        manifest = directory / ".claude-plugin" / "plugin.json"
-        name = directory.name
-        if manifest.exists():
-            name = read_json_object(manifest).get("name")
-        if isinstance(name, str):
-            loaded[name] = entry
-    return loaded
-
-
-def check_plugin(name: str, run: Run) -> None:
-    if shutil.which("claude") is None:
-        raise Stop("claude is not on PATH, and plugin components run it")
-    entry = plugins_from_dirs().get(name)
-    if entry is not None:
-        warn(f"{PLUGIN_DIRS_VARIABLE} also loads {name} from {entry}, and a session runs that copy instead")
+        warn(f"{PLUGIN_DIRS_VARIABLE} is {value}, and a plugin it loads replaces the installed one of the same name")
 
 
 def claude(*args: str) -> None:
@@ -458,11 +334,14 @@ def claude(*args: str) -> None:
         raise Stop(f"claude {' '.join(args)} exited {result.returncode}")
 
 
+# Cached so it runs once per run. Adding a marketplace already added succeeds, so a re-run needs no special case.
+@functools.cache
+def add_marketplace() -> None:
+    claude("plugin", "marketplace", "add", MARKETPLACE_SOURCE)
+
+
 def install_plugin(name: str, marketplace: str, run: Run) -> None:
-    # Adding a marketplace that is already added succeeds, so a re-run needs no special case.
-    if not run.marketplace_added:
-        claude("plugin", "marketplace", "add", MARKETPLACE_SOURCE)
-        run.marketplace_added = True
+    add_marketplace()
     claude("plugin", "install", f"{name}@{marketplace}")
 
 
@@ -482,33 +361,33 @@ def plugin_components() -> list[Component]:
                 name=f"plugin:{name}",
                 summary=plugin.get("description", ""),
                 install=functools.partial(install_plugin, name, marketplace_name),
-                check=functools.partial(check_plugin, name),
+                check=lambda run: check_plugin_setup(),
             )
         )
     return components
 
 
-# Install order. A new installable part is one entry here and its install function.
+# Install order. Everything under harness/ arrives with the harness component; a part that must also be wired into
+# ~/.claude or a repository is one entry here and its install function.
 HARNESS_COMPONENTS = (
     Component(
-        name="githooks",
-        summary="copy harness/githooks and harness/leak-scan from HEAD into ~/.claude/harness",
-        install=install_githooks,
-        from_clone=True,
+        name="harness",
+        summary="install harness/ from HEAD as ~/.claude/harness/versions/<version> and point current at it",
+        install=install_harness,
+        check=lambda run: check_checkout(),
     ),
     Component(
         name="hooks-path",
-        summary="set core.hooksPath to ~/.claude/harness/githooks in each --repo",
+        summary="set core.hooksPath to ~/.claude/harness/current/githooks in each --repo",
         install=install_hooks_path,
         check=check_hooks_path,
         needs_repos=True,
     ),
     Component(
         name="skills",
-        summary="copy the skills in harness/skills from HEAD into ~/.claude/skills, asking before replacing an edit",
+        summary="link each skill in ~/.claude/harness/current/skills into ~/.claude/skills",
         install=install_skills,
-        check=skill_targets,
-        from_clone=True,
+        check=lambda run: check_skills(),
     ),
 )
 
@@ -563,8 +442,6 @@ def bootstrap(args: argparse.Namespace) -> None:
     if not picked:
         print("Nothing picked.")
         return
-    if any(component.from_clone for component in picked):
-        check_checkout()
     for component in picked:
         if component.check is not None:
             component.check(run)

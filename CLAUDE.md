@@ -10,11 +10,12 @@ nothing from an employer, a private project or a specific machine goes in, in co
   fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`), `leak-scan/` (the scan that gate and CI
   run, with its allowlist in `.leak-scan.toml`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`,
-  `typescript-style` and `comment-style` skills).
-- `bootstrap.py`: installs the harness parts a user picks into `~/.claude/harness/`, the skills into
-  `~/.claude/skills/`, sets `core.hooksPath` in the repositories named, and installs plugins from the marketplace. A
-  new installable part under `harness/` registers a component in its `HARNESS_COMPONENTS`. Its tests are
-  `test_bootstrap.py` beside it.
+  `typescript-style` and `comment-style` skills). Its version is in `harness/harness.json`.
+- `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
+  `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the
+  repositories named, and installs plugins from the marketplace. A new part under `harness/` that must be wired into
+  `~/.claude` or a repository registers a component in its `HARNESS_COMPONENTS`. Its tests are `test_bootstrap.py`
+  beside it.
 - `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
   needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only, except PyYAML
   in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
@@ -30,7 +31,9 @@ nothing from an employer, a private project or a specific machine goes in, in co
 Merging is not releasing. Every plugin sets `version` in its `.claude-plugin/plugin.json`, and a user gets a
 change only when they update and that version has risen; auto-update is off for this marketplace by default. So
 every PR that changes what a plugin ships raises its version, and CI fails it otherwise. Plugins with a contract
-between them bump together. Marketplace entries hold only a name, a description and `./plugins/<name>`.
+between them bump together. Marketplace entries hold only a name, a description and `./plugins/<name>`. The harness
+works the same way with one version for all of `harness/`, in `harness/harness.json`: its rise is what tells a user
+to run `bootstrap.py harness` again.
 
 ## Machine-local layers
 

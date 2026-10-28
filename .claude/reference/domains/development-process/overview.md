@@ -3,25 +3,26 @@ title: Development Process
 type: note
 permalink: development-process/overview
 tags: [development-process, ci, releasing]
-verified: 2026-10-27
+verified: 2026-10-28
 coverage: partial
 sources:
-  - .github/scripts/guard-plugin-versions.sh
+  - .github/scripts/guard-versions.sh
   - .github/workflows/ci.yml
 ---
 
 # Development Process
 
-> **Scope.** How a change becomes a release here, and the CI and GitHub rules a pull request runs into: `guard-plugin-versions.sh` and the `on:` trigger, the `gate` job and the pytest step of `ci.yml` were read. The GitHub push refusal is carried from an earlier observation and was not re-tested when this note was written. Not covered: the leak scan, the pre-push gate, the CI review workflow (`code-review.yml`), the invisible-character and marketplace guards, and the bot's commit identity.
+> **Scope.** How a change becomes a release here, and the CI and GitHub rules a pull request runs into: `guard-versions.sh` and the `on:` trigger, the `gate` job and the pytest step of `ci.yml` were read. The GitHub push refusal is carried from an earlier observation and was not re-tested when this note was written. Not covered: the leak scan, the pre-push gate, the CI review workflow (`code-review.yml`), the invisible-character and marketplace guards, and the bot's commit identity.
 
 Read this before changing what a plugin ships, before editing anything under `.github/workflows/`, or before adding a
 filter to CI. Each trap here produces a pull request that looks finished and either reaches nobody or never reports.
 
 ## Observations
 
-- [fact] `guard-plugin-versions.sh` fails a pull request that changes a plugin's files without raising `version` in its `.claude-plugin/plugin.json`; it compares with `sort -V`, so the version must rise, not merely change.
-- [trap] The guard exempts only a plugin's top-level `README.md`, `*.test.ts`, `*.test.tsx` and `test_*.py`. Any other doc inside a plugin, a skill's `references/` included, needs a version bump.
-- [fact] A plugin that is new in the pull request passes the guard at any version.
+- [fact] `guard-versions.sh` fails a pull request that changes a plugin's files without raising `version` in its `.claude-plugin/plugin.json`; it compares with `sort -V`, so the version must rise, not merely change.
+- [fact] The same guard treats everything under `harness/` as one unit versioned in `harness/harness.json`, because a rise is what tells a user to run `bootstrap.py harness` again.
+- [trap] The guard exempts only a plugin's top-level `README.md`, a README directly under a `harness/` part, `*.test.ts`, `*.test.tsx`, `test_*.py` and `test_*.bats`. Any other doc, a skill's `references/` included, needs a version bump.
+- [fact] A plugin, or a `harness.json`, that is new in the pull request passes the guard at any version.
 - [fact] The version guard diffs `HEAD^1` to `HEAD` in GitHub's merge checkout, which is exactly what the merge changes even when the base has moved.
 - [trap] `ci.yml` must never be filtered with `paths` or `paths-ignore`: a pull request the filter excludes never starts the workflow, so `gate` never reports and the pull request waits forever #silent-failure
 - [trap] `gate` runs with `if: always()` and fails on any `failure` or `cancelled` result; with a plain `needs` it would be skipped when a job fails, and GitHub passes a skipped required check #silent-failure

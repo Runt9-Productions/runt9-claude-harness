@@ -119,8 +119,8 @@ A new plugin with a contract adds its rows here.
 
 - A new plugin brings a marketplace entry, a README, `author`, `version` and tests at its boundaries.
 - A change to what a plugin ships brings a `version` rise, and so does every contract partner it touches.
-- A new installable part under `harness/` brings a component in `HARNESS_COMPONENTS` in `bootstrap.py`, or users
-  never get it.
+- A change to what `harness/` ships brings a rise in `harness/harness.json`. A new part there that must be wired into
+  `~/.claude` or a repository also brings a component in `HARNESS_COMPONENTS` in `bootstrap.py`, or it arrives unused.
 - A new contract brings a row under "Plugin contracts" and, where one plugin cannot work without the other loaded, a
   `dependencies` entry.
 
@@ -154,7 +154,7 @@ something the ruling did not account for.
 - Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
   common mistakes only. (2026-10-25)
 - CI reviewing a PR with that PR's own `.claude/` and `CLAUDE.md`. (2026-10-25)
-- `bootstrap.py githooks` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
+- `bootstrap.py harness` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
   (2026-10-27)
 
 ## Delivery

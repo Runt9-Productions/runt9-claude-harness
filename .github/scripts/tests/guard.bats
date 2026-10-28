@@ -104,7 +104,7 @@ run_in_fixture() {
     echo v2 > "$FIXTURE/plugins/a/code.ts"
     plugin_at a 1.0.1
     merge_pr
-    run_in_fixture guard-plugin-versions.sh
+    run_in_fixture guard-versions.sh
     [ "$status" -eq 0 ]
     [[ $output == *"a: 1.0.0 -> 1.0.1"* ]]
 }
@@ -113,7 +113,7 @@ run_in_fixture() {
     base_plugin_at a 1.0.0
     echo v2 > "$FIXTURE/plugins/a/code.ts"
     merge_pr
-    run_in_fixture guard-plugin-versions.sh
+    run_in_fixture guard-versions.sh
     [ "$status" -eq 1 ]
     [[ $output == *"a changed, so its version must rise above 1.0.0 (it is 1.0.0)"* ]]
 }
@@ -123,7 +123,7 @@ run_in_fixture() {
     base_plugin_at a 1.10.0
     plugin_at a 1.9.0
     merge_pr
-    run_in_fixture guard-plugin-versions.sh
+    run_in_fixture guard-versions.sh
     [ "$status" -eq 1 ]
     [[ $output == *"a changed, so its version must rise above 1.10.0 (it is 1.9.0)"* ]]
 }
@@ -133,7 +133,7 @@ run_in_fixture() {
     echo docs > "$FIXTURE/plugins/a/README.md"
     echo test > "$FIXTURE/plugins/a/code.test.ts"
     merge_pr
-    run_in_fixture guard-plugin-versions.sh
+    run_in_fixture guard-versions.sh
     [ "$status" -eq 0 ]
 }
 
@@ -142,14 +142,55 @@ run_in_fixture() {
     mkdir -p "$FIXTURE/plugins/a/skills/s/scripts"
     echo test > "$FIXTURE/plugins/a/skills/s/scripts/test_example.py"
     merge_pr
-    run_in_fixture guard-plugin-versions.sh
+    run_in_fixture guard-versions.sh
     [ "$status" -eq 0 ]
 }
 
 @test "a new plugin needs no bump" {
     plugin_at b 0.1.0
     merge_pr
-    run_in_fixture guard-plugin-versions.sh
+    run_in_fixture guard-versions.sh
     [ "$status" -eq 0 ]
     [[ $output == *"b: new at 0.1.0"* ]]
+}
+
+# Commits the harness at the version given on the base branch, then switches back to the PR.
+base_harness_at() {
+    git_t -C "$FIXTURE" switch -q main
+    mkdir -p "$FIXTURE/harness/githooks"
+    printf '{"version": "%s"}\n' "$1" > "$FIXTURE/harness/harness.json"
+    echo v1 > "$FIXTURE/harness/githooks/pre-push"
+    git_t -C "$FIXTURE" add -A
+    git_t -C "$FIXTURE" commit -q -m "base harness"
+    git_t -C "$FIXTURE" switch -q pr
+    git_t -C "$FIXTURE" merge -q main
+}
+
+@test "a harness change without a version rise fails" {
+    base_harness_at 0.1.0
+    echo v2 > "$FIXTURE/harness/githooks/pre-push"
+    merge_pr
+    run_in_fixture guard-versions.sh
+    [ "$status" -eq 1 ]
+    [[ $output == *"harness changed, so its version must rise above 0.1.0 (it is 0.1.0)"* ]]
+}
+
+@test "a harness change with a version rise passes" {
+    base_harness_at 0.1.0
+    echo v2 > "$FIXTURE/harness/githooks/pre-push"
+    printf '{"version": "0.2.0"}\n' > "$FIXTURE/harness/harness.json"
+    merge_pr
+    run_in_fixture guard-versions.sh
+    [ "$status" -eq 0 ]
+    [[ $output == *"harness: 0.1.0 -> 0.2.0"* ]]
+}
+
+@test "a change to only the harness's READMEs or bats tests needs no bump" {
+    base_harness_at 0.1.0
+    echo docs > "$FIXTURE/harness/githooks/README.md"
+    echo test > "$FIXTURE/harness/githooks/test_example.bats"
+    merge_pr
+    run_in_fixture guard-versions.sh
+    [ "$status" -eq 0 ]
+    [[ $output != *harness* ]]
 }
