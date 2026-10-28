@@ -173,7 +173,6 @@ something the ruling did not account for.
 
 ## Standing instructions
 
-`code-health` judges the change against the "Writing here" rules in `CLAUDE.md`, and also against each of these that
-exists on the machine running the review: `~/.claude/code-style-principles.md`, `~/.claude/comment-style-guide.md`, and
-the guide for the language in the diff (`~/.claude/python-style-guide.md` for Python). A missing file is skipped
-without comment.
+`code-health` judges the change against the "Writing here" rules in `CLAUDE.md` and the style-guide skills in this
+checkout: `harness/skills/code-style/SKILL.md`, `harness/skills/comment-style/SKILL.md`, and the skill for the
+language in the diff (`python-style`, `kotlin-style` or `typescript-style` under `harness/skills/`).

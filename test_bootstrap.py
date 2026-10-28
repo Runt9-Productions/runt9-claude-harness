@@ -25,11 +25,27 @@ MARKETPLACE = {
 }
 MARKETPLACE_ADD = ["plugin", "marketplace", "add", "Runt9-Productions/runt9-claude-harness"]
 PRE_PUSH = b"#!/bin/sh\necho example pre-push\n"
+ALPHA_SKILL = b"example alpha skill\n"
+EDITED_SKILL = b"example edited skill\n"
 STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
 sys.exit(int(os.environ.get("EXAMPLE_CLAUDE_EXIT", "0")))
+"""
+# Runs bootstrap.py with only the first rename onto `target` interrupted, so a rollback's rename back onto it runs.
+INTERRUPTED_RENAME = """
+import pathlib, runpy, sys
+rename = pathlib.Path.rename
+interrupted = []
+def interrupting_rename(self, target):
+    if pathlib.Path(target) == pathlib.Path({target!r}) and not interrupted:
+        interrupted.append(target)
+        raise KeyboardInterrupt
+    return rename(self, target)
+pathlib.Path.rename = interrupting_rename
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
 """
 
 
@@ -38,6 +54,7 @@ class Sandbox:
         self.root = root
         self.home = root / "home"
         self.install = self.home / ".claude" / "harness"
+        self.skills = self.home / ".claude" / "skills"
         self.clone = root / "clone"
         self.log = root / "claude.log"
         bin_dir = root / "bin"
@@ -72,9 +89,11 @@ class Sandbox:
         self.git(self.root, "init", "--quiet", "-b", "main", str(repo))
         return repo
 
-    def run(self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None):
+    def run(
+        self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None, python: tuple[str, ...] = ()
+    ):
         return subprocess.run(
-            [sys.executable, str(self.clone / "bootstrap.py"), *args],
+            [sys.executable, *python, str(self.clone / "bootstrap.py"), *args],
             cwd=self.root,
             env={**self.env, **(env or {})},
             input=stdin,
@@ -107,6 +126,10 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.write("harness/githooks/README.md", b"example readme\n")
     box.write("harness/githooks/example-retired-hook", b"#!/bin/sh\n", 0o755)
     box.write("harness/leak-scan/scan.sh", b"#!/bin/sh\necho example scan\n", 0o755)
+    box.write("harness/skills/README.md", b"example skills readme\n")
+    box.write("harness/skills/example-alpha/SKILL.md", ALPHA_SKILL)
+    box.write("harness/skills/example-beta/SKILL.md", b"example beta skill\n")
+    box.write("harness/skills/example-beta/scripts/example.sh", b"#!/bin/sh\n", 0o755)
     box.commit("Example harness")
     return box
 
@@ -263,7 +286,14 @@ def test_list_works_in_a_session(sandbox: Sandbox, variable: str) -> None:
 
     assert result.returncode == 0, result.stderr
     names = [line.split()[0] for line in result.stdout.splitlines()]
-    assert names == ["githooks", "hooks-path", "plugin:example-one", "plugin:example-two", "plugin:example-three"]
+    assert names == [
+        "githooks",
+        "hooks-path",
+        "skills",
+        "plugin:example-one",
+        "plugin:example-two",
+        "plugin:example-three",
+    ]
 
 
 def test_head_off_origin_main_warns_and_installs_head(sandbox: Sandbox) -> None:
@@ -387,6 +417,143 @@ def test_hooks_path_fails_when_git_reads_another_value(sandbox: Sandbox) -> None
     assert (sandbox.install / "githooks/pre-push").exists()
 
 
+def test_skills_installs_each_skill_and_leaves_other_skills(sandbox: Sandbox) -> None:
+    own = sandbox.skills / "example-own/SKILL.md"
+    own.parent.mkdir(parents=True)
+    own.write_bytes(b"example own skill\n")
+
+    result = sandbox.run("skills")
+
+    assert result.returncode == 0, result.stderr
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta", "example-own"]
+    assert (sandbox.skills / "example-alpha/SKILL.md").read_bytes() == ALPHA_SKILL
+    assert installed_mode(sandbox.skills / "example-alpha/SKILL.md") == 0o644
+    assert installed_mode(sandbox.skills / "example-beta/scripts/example.sh") == 0o755
+    assert own.read_bytes() == b"example own skill\n"
+
+
+def test_skills_rerun_leaves_a_matching_copy(sandbox: Sandbox) -> None:
+    assert sandbox.run("skills").returncode == 0
+    inode = (sandbox.skills / "example-alpha").stat().st_ino
+
+    result = sandbox.run("skills")
+
+    assert result.returncode == 0, result.stderr
+    assert "example-alpha is up to date" in result.stdout
+    assert "installed example-alpha" not in result.stdout
+    assert (sandbox.skills / "example-alpha").stat().st_ino == inode
+
+
+def test_edited_skill_shows_the_diff_and_is_replaced_only_on_yes(sandbox: Sandbox) -> None:
+    assert sandbox.run("skills").returncode == 0
+    skill = sandbox.skills / "example-alpha"
+    (skill / "SKILL.md").write_bytes(EDITED_SKILL)
+    (skill / "example-notes.md").write_bytes(b"example notes\n")
+
+    kept = sandbox.run("skills", stdin="n\n")
+    kept_content = (skill / "SKILL.md").read_bytes()
+    replaced = sandbox.run("skills", stdin="y\n")
+
+    assert kept.returncode == 0, kept.stderr
+    assert "-example edited skill\n+example alpha skill\n" in kept.stdout
+    assert "-example notes\n" in kept.stdout
+    assert "kept your copy of example-alpha" in kept.stdout
+    assert kept_content == EDITED_SKILL
+    assert replaced.returncode == 0, replaced.stderr
+    assert (skill / "SKILL.md").read_bytes() == ALPHA_SKILL
+    assert not (skill / "example-notes.md").exists()
+
+
+def test_edited_skill_without_stdin_stops_before_any_skill_is_written(sandbox: Sandbox) -> None:
+    assert sandbox.run("skills").returncode == 0
+    shutil.rmtree(sandbox.skills / "example-alpha")
+    (sandbox.skills / "example-beta/SKILL.md").write_bytes(EDITED_SKILL)
+
+    result = sandbox.run("skills")
+
+    assert result.returncode == 1
+    assert "no answer on stdin to whether to replace" in result.stderr
+    assert "run bootstrap.py in a terminal" in result.stderr
+    assert (sandbox.skills / "example-beta/SKILL.md").read_bytes() == EDITED_SKILL
+    assert not (sandbox.skills / "example-alpha").exists()
+
+
+def test_skills_directory_linked_outside_claude_refuses_with_nothing_written(sandbox: Sandbox) -> None:
+    elsewhere = sandbox.root / "example-elsewhere"
+    elsewhere.mkdir()
+    sandbox.skills.parent.mkdir()
+    sandbox.skills.symlink_to(elsewhere)
+
+    result = sandbox.run("githooks", "skills")
+
+    assert result.returncode == 1
+    assert f"{sandbox.skills} resolves to {elsewhere.resolve()}, outside" in result.stderr
+    assert list(elsewhere.iterdir()) == []
+    assert not sandbox.install.exists()
+
+
+def test_linked_skill_refuses_before_any_skill_is_written(sandbox: Sandbox) -> None:
+    elsewhere = sandbox.root / "example-elsewhere"
+    elsewhere.mkdir()
+    sandbox.skills.mkdir(parents=True)
+    (sandbox.skills / "example-beta").symlink_to(elsewhere)
+
+    result = sandbox.run("skills")
+
+    assert result.returncode == 1
+    assert f"{sandbox.skills / 'example-beta'} resolves to {elsewhere.resolve()}, outside" in result.stderr
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-beta"]
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_skills_installs_the_commit_not_the_working_tree(sandbox: Sandbox) -> None:
+    sandbox.git(sandbox.clone, "update-index", "--skip-worktree", "harness/skills/example-alpha/SKILL.md")
+    (sandbox.clone / "harness/skills/example-alpha/SKILL.md").write_bytes(EDITED_SKILL)
+    (sandbox.clone / "harness/skills/example-alpha/example-untracked").write_bytes(b"example\n")
+
+    result = sandbox.run("skills")
+
+    assert result.returncode == 0, result.stderr
+    assert (sandbox.skills / "example-alpha/SKILL.md").read_bytes() == ALPHA_SKILL
+    assert not (sandbox.skills / "example-alpha/example-untracked").exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root renames a directory it cannot write")
+def test_failed_skill_replacement_leaves_each_skill_whole(sandbox: Sandbox) -> None:
+    assert sandbox.run("skills").returncode == 0
+    for name in ("example-alpha", "example-beta"):
+        (sandbox.skills / name / "SKILL.md").write_bytes(EDITED_SKILL)
+    # Moving a directory to another parent needs write permission on it, so replacing example-beta fails after
+    # example-alpha has been replaced.
+    (sandbox.skills / "example-beta").chmod(0o555)
+    try:
+        result = sandbox.run("skills", stdin="y\ny\n")
+    finally:
+        (sandbox.skills / "example-beta").chmod(0o755)
+
+    assert result.returncode == 1
+    assert "skills failed: [Errno 13] Permission denied" in result.stderr
+    assert (sandbox.skills / "example-alpha/SKILL.md").read_bytes() == ALPHA_SKILL
+    assert (sandbox.skills / "example-beta/SKILL.md").read_bytes() == EDITED_SKILL
+    assert (sandbox.skills / "example-beta/scripts/example.sh").exists()
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta"]
+
+
+def test_interrupted_skill_replacement_leaves_the_installed_skill(sandbox: Sandbox) -> None:
+    assert sandbox.run("skills").returncode == 0
+    skill = sandbox.skills / "example-alpha"
+    (skill / "SKILL.md").write_bytes(EDITED_SKILL)
+    # The interrupt lands after the installed copy has been moved aside, before the clone's is renamed in.
+    interrupt = INTERRUPTED_RENAME.format(target=str(skill.resolve()))
+
+    result = sandbox.run("skills", stdin="y\n", python=("-c", interrupt))
+
+    assert result.returncode != 0
+    assert "KeyboardInterrupt" in result.stderr
+    assert (skill / "SKILL.md").read_bytes() == EDITED_SKILL
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-beta"]
+
+
 @pytest.mark.parametrize(
     ("args", "reason"),
     [
@@ -495,12 +662,13 @@ def test_bad_json_stops_before_any_claude_call(sandbox: Sandbox, broken: str, co
 
 
 def test_prompt_installs_what_was_answered_yes(sandbox: Sandbox) -> None:
-    # githooks, then the three plugins; hooks-path is not offered without --repo.
-    result = sandbox.run(stdin="y\nn\ny\nn\n")
+    # githooks, skills, then the three plugins; hooks-path is not offered without --repo.
+    result = sandbox.run(stdin="y\nn\nn\ny\nn\n")
 
     assert result.returncode == 0, result.stderr
     assert "Install hooks-path" not in result.stdout
     assert (sandbox.install / "githooks/pre-push").exists()
+    assert not sandbox.skills.exists()
     assert sandbox.claude_calls() == [MARKETPLACE_ADD, ["plugin", "install", "example-two@example-market"]]
 
 
