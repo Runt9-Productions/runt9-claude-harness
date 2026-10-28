@@ -16,9 +16,12 @@ nothing from an employer, a private project or a specific machine goes in, in co
   new installable part under `harness/` registers a component in its `HARNESS_COMPONENTS`. Its tests are
   `test_bootstrap.py` beside it.
 - `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
-  needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only.
+  needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only, except PyYAML
+  in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
 - `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
+- `.claude/reference/`: this repo's knowledge base, in the reference-kb plugin's format. Read the note covering an
+  area before its code or platform behaviour; a question it does not answer is still open.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
   `.oxlintrc.json`).
 

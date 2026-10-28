@@ -5,7 +5,8 @@
 set -Eeuo pipefail
 
 changed=$(git diff --name-only HEAD^1 HEAD -- ':(glob)plugins/**' \
-    ':(glob,exclude)plugins/*/README.md' ':(glob,exclude)**/*.test.ts' ':(glob,exclude)**/*.test.tsx')
+    ':(glob,exclude)plugins/*/README.md' ':(glob,exclude)**/*.test.ts' ':(glob,exclude)**/*.test.tsx' \
+    ':(glob,exclude)**/test_*.py')
 
 names=$(cut -d/ -f2 <<< "$changed" | sort -u)
 mapfile -t plugins <<< "$names"

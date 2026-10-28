@@ -1,0 +1,6 @@
+# What this knowledge base adds to the reference-kb format. Everything not declared here is the format's.
+
+trees = ["domains", "projects"]
+
+[categories]
+vendor = "Stated in Claude Code's documentation and not measured here. Measure it before depending on it."

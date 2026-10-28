@@ -107,9 +107,11 @@ jobs:
       run:
         shell: bash
 
+    # Full history, because the knowledge base step reads the PR's commits back to where it forked.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       # Wheels only, so installing runs no package's build code; pip check fails if the pins stop fitting together.
@@ -134,6 +136,20 @@ jobs:
       # included, so the override keeps only .git and node_modules out.
       - name: pytest
         run: python -P -m pytest -p no:cacheprovider -c /dev/null --rootdir . --noconftest -o 'norecursedirs=.git node_modules'
+
+      # A root that moved or emptied fails, since the validator exits 2 when it finds no notes.
+      - name: Knowledge base validates
+        run: python plugins/reference-kb/skills/reference-kb/scripts/validate.py --root .claude/reference
+
+      # In the merge checkout HEAD^1 is the base and HEAD^2 the PR's head, so the range is the PR's own commits: a note
+      # fails when the PR changes its sources without moving `verified`, not for staleness it inherited. Skipped for
+      # Dependabot, whose pin bumps change sources such as this file without touching what a note says, and which
+      # cannot edit the notes.
+      - name: Knowledge base notes are re-verified when their sources change
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        run: |
+          python plugins/reference-kb/skills/reference-kb/scripts/validate.py --root .claude/reference \
+            --stale-in HEAD^1..HEAD^2
 
   leak-scan:
     needs: zizmor
