@@ -17,6 +17,7 @@ about: Something to build, fix or improve in this repository
 
 ## Acceptance criteria
 
-<!-- What must be true once it is done, as outcomes a reviewer can check, not steps. A few at most. -->
+<!-- What must be true once it is done, as outcomes a reviewer can check, not steps. A few at most. Plain bullets,
+not checkboxes: a checklist invites ticking items off in place of meeting the objective. -->
 
 -

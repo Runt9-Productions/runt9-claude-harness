@@ -37,7 +37,7 @@ to run `bootstrap.py harness` again.
 
 ## Issues and pull request text
 
-Work on what is already in this repository is tracked as GitHub issues in the shape of
+Changes to this repository, fixes and new features alike, are tracked as GitHub issues in the shape of
 `.github/ISSUE_TEMPLATE/change.md`: Objective, Technical details, Out of scope, Acceptance criteria.
 
 - Acceptance criteria are plain bullets stating outcomes, a few at most. Meeting them is necessary, not sufficient:
