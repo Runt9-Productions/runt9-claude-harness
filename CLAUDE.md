@@ -9,8 +9,9 @@ nothing from an employer, a private project or a specific machine goes in, in co
 - `harness/`: what a plugin cannot carry (status line, settings fragments, git hooks, `CLAUDE.md` template and
   fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`), `leak-scan/` (the scan that gate and CI
-  run, with its allowlist in `.leak-scan.toml`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`,
-  `typescript-style` and `comment-style` skills). Its version is in `harness/harness.json`.
+  run, with its allowlist in `.leak-scan.toml`, and the `public-leak` review the gate and `review-text.sh` run) and
+  `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and `comment-style` skills). Its
+  version is in `harness/harness.json`.
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
   `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the
   repositories named, and installs plugins from the marketplace. A new part under `harness/` that must be wired into
@@ -47,10 +48,11 @@ Changes to this repository, fixes and new features alike, are tracked as GitHub 
 - Labels: `bug` or `enhancement`, one `area:` label, and `from-review` for a review finding deferred from its pull
   request.
 - Issues, pull request descriptions and review replies are public the moment they post, and no CI scan reads them.
-  Write each to a file, with an issue's or pull request's title on the first line, run
-  `scan.sh --text <file> . origin/main` from the installed harness (`~/.claude/harness/current/leak-scan/`, or the
-  checkout's `harness/leak-scan/` where none is installed), and post the title and body from that file only when the
-  scan exits 0. Cite commits by their short hash: a full one matches the scan's hex-identifier rule.
+  Write each to a file, with an issue's or pull request's title on the first line, and check it from the installed
+  harness (`~/.claude/harness/current/leak-scan/`, or the checkout's `harness/leak-scan/` where none is installed):
+  `review-text.sh <file> . origin/main` for an issue or pull request, which adds the `public-leak` review, and
+  `scan.sh --text <file> . origin/main` for a review reply. Post the title and body from that file only when the check
+  exits 0. Cite commits by their short hash: a full one matches the scan's hex-identifier rule.
 
 ## Machine-local layers
 

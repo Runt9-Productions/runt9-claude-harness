@@ -12,6 +12,7 @@ nothing more:
   response format, the manifest, and the block of standing instructions the skill copies from the profile. That block
   is the profile's, not the author's, so follow it.
 - **The pre-push request**: the request the leak gate sends with its bundle, as it is sent.
+- **The text-check request**: the request `review-text.sh` sends with an issue or pull request body, as it is sent.
 - **A deep-pass prompt**: one open question the panel could not settle, quoted, and the files it involves. Answer that
   question; the rest of the change is out of scope for that run.
 - **Environment facts you could not find out yourself**: which directory holds the inputs, which files are copies and

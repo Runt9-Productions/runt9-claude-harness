@@ -97,14 +97,14 @@ leak="write to someone@acme-corp"".com"
     push fail "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
-    [[ $output == *"the leak review did not run (claude exited 1)"* ]]
+    [[ $output == *"leak-review: did not run (claude exited 1)"* ]]
 }
 
 @test "no structured output: refused" {
     push unstructured "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
-    [[ $output == *"the leak review did not run (claude exited 0)"* ]]
+    [[ $output == *"leak-review: did not run (claude exited 0)"* ]]
 }
 
 @test "High finding: refused" {
@@ -132,7 +132,7 @@ leak="write to someone@acme-corp"".com"
     push unread "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
-    [[ $output == *"the leak review read 0 of the "*" lines in commits.patch"* ]]
+    [[ $output == *"leak-review: read 0 of the "*" lines in commits.patch"* ]]
 }
 
 @test "Normal finding only: allowed, and the pass is cached under the install directory" {

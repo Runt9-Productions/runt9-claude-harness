@@ -151,149 +151,41 @@ if (( status != 0 )); then
     exit 1
 fi
 
-bundle=$work/review
-mkdir "$bundle"
-
-# Read pages by whole lines and refuses a line past its 25,000-token cap. Longer lines are split into overlapping
-# pieces, so the review can read all of one, and text cut at a split is still whole in the next piece.
-split_long_lines() {
-    awk -v width=4000 -v overlap=200 '
-        length($0) <= width { print; next }
-        {
-            for (start = 1; ; start += width - overlap) {
-                print substr($0, start, width)
-                if (start + width > length($0)) break
-            }
-        }'
-}
-
 # The review reads exactly what the scan read. The patch already holds each commit's message, so of the per-commit
 # text files only the identities, which carry the committer, are added.
-split_long_lines < "$scanned/patch" > "$bundle/commits.patch"
-split_long_lines < "$scanned/binary-files" > "$bundle/binary-files.txt"
-split_long_lines < "$scanned/text/file-names" > "$bundle/file-names.txt"
-split_long_lines < "$scanned/text/ref-names" > "$bundle/ref-names.txt"
+inputs=$work/inputs
+mkdir "$inputs"
+cp "$scanned/patch" "$inputs/commits.patch"
+cp "$scanned/binary-files" "$inputs/binary-files.txt"
+cp "$scanned/text/file-names" "$inputs/file-names.txt"
+cp "$scanned/text/ref-names" "$inputs/ref-names.txt"
 shopt -s nullglob
 for identity in "$scanned"/text/*.identity; do
     cat "$identity"
-done | sort -u | split_long_lines > "$bundle/identities.txt"
+done | sort -u > "$inputs/identities.txt"
 for tag in "$scanned"/text/*.tag; do
     cat "$tag"
     echo
-done | split_long_lines > "$bundle/tags.txt"
+done > "$inputs/tags.txt"
 shopt -u nullglob
-inputs=()
-for input in commits.patch identities.txt file-names.txt binary-files.txt tags.txt ref-names.txt; do
-    if [[ -s $bundle/$input ]]; then
-        inputs+=("$input")
-    else
-        rm "$bundle/$input"
-    fi
-done
-
-for path in .claude/agents/code-review/public-leak.md .claude/agents/references/reviewer-brief.md \
-    .claude/code-review-profile.md CLAUDE.md; do
-    if mirror_git cat-file -e "$trusted:$path" 2> /dev/null; then
-        mirror_git cat-file blob "$trusted:$path" > "$bundle/${path##*/}"
-    fi
-done
-agent_file=$bundle/public-leak.md
-if [[ ! -f $agent_file ]]; then
-    echo "pre-push: the default branch of $url has no .claude/agents/code-review/public-leak.md, push refused" >&2
-    exit 1
-fi
-
-# A pass holds only for this content under this gate, so changing any installed file invalidates every pass.
-key=$( { (cd "$root" && find githooks leak-scan -type f -print0 | sort -z | xargs -0 sha256sum)
-         (cd "$bundle" && sha256sum -- *); } | sha256sum | cut -d' ' -f1)
-passed=$state/passed/$key
-if [[ -f $passed ]]; then
-    echo "pre-push: this change already passed the leak review" >&2
-    exit 0
-fi
-
-# Severity enum and field names are read by the jq calls below.
-schema='{
-  "type": "object", "additionalProperties": false, "required": ["findings", "open_questions", "read"],
-  "properties": {
-    "findings": {"type": "array", "items": {
-      "type": "object", "additionalProperties": false, "required": ["severity", "location", "text", "reveals"],
-      "properties": {"severity": {"enum": ["Critical", "High", "Normal"]}, "location": {"type": "string"},
-                     "text": {"type": "string"}, "reveals": {"type": "string"}}}},
-    "open_questions": {"type": "array", "items": {
-      "type": "object", "additionalProperties": false, "required": ["location", "text", "question"],
-      "properties": {"location": {"type": "string"}, "text": {"type": "string"}, "question": {"type": "string"}}}},
-    "read": {"type": "array", "items": {
-      "type": "object", "additionalProperties": false, "required": ["file", "lines"],
-      "properties": {"file": {"type": "string"}, "lines": {"type": "integer"}}}}
-  }
-}'
 
 request="Review what this push would publish. Its inputs are the files in this directory from this list: \
 commits.patch (each commit's header, message and changed lines, without context; a merge shows only what it adds \
 beyond git's own merge of its parents), identities.txt (every author and committer name and email), file-names.txt \
 (every path it touches), binary-files.txt (commit and path of each binary file, whose content neither you nor the \
 pattern scan can read; raise an open question for each), tags.txt (annotated tags) and ref-names.txt (the branch \
-and tag names it creates or updates). In the input files, a line longer than 4000 characters is split into pieces \
-of 4000 that overlap by 200. The reviewer brief is reviewer-brief.md, and the repository's review profile and \
-CLAUDE.md, where it has them, are code-review-profile.md and CLAUDE.md, all here. Read every input file to its last \
-line, in pages where it is long, and give each one's name and the last line number you read of it in read. Report \
-every finding and open question in the structured output."
+and tag names it creates or updates)."
 
-if [[ $(head -n 1 "$agent_file") != --- ]]; then
-    echo "pre-push: public-leak.md on the default branch of $url does not start with frontmatter, push refused" >&2
-    exit 1
-fi
-# frontmatter_field <key>: the value of `key: value` between the agent file's opening `---` and the next one. It reads
-# one line and keeps any quotes, so public-leak.md must give `description`, `model` and `effort` as single unquoted lines.
-frontmatter_field() {
-    sed -n "2,/^---\$/s/^$1: //p" "$agent_file"
-}
-model=$(frontmatter_field model)
-effort=$(frontmatter_field effort)
-jq -n --arg description "$(frontmatter_field description)" --arg prompt "$(sed '1,/^---$/d' "$agent_file")" \
-    '{"public-leak": {description: $description, prompt: $prompt}}' > "$work/agents.json"
-
-# The review gets only these variables, so nothing the caller sets can redirect or alter it: not ANTHROPIC_BASE_URL, a
-# proxy, NODE_OPTIONS or a plugin directory. The auth variables name a credential, never where it is sent.
-review_env=(PATH="$PATH" HOME="$HOME")
-for name in USER LOGNAME LANG LC_ALL LC_CTYPE ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN; do
-    if [[ -n ${!name:-} ]]; then
-        review_env+=("$name=${!name}")
-    fi
-done
-
-# --restricted confines Read to the bundle and loads no CLAUDE.md, so the review reads only what this hook put there.
-# MCP servers and every tool but Read stay out.
+mkdir "$work/review"
 status=0
-(cd "$bundle" && env -i "${review_env[@]}" timeout 900 claude -p --restricted --agent public-leak \
-    --agents "$work/agents.json" --setting-sources project --strict-mcp-config --tools Read \
-    --model "${model:-opus}" --effort "${effort:-high}" --no-session-persistence --output-format json --json-schema "$schema" \
-    "$request" < /dev/null > "$work/result.json" 2> "$work/claude.stderr") || status=$?
-if (( status != 0 )) || ! jq -e '.structured_output | objects' "$work/result.json" > /dev/null; then
-    echo "pre-push: the leak review did not run (claude exited $status), push refused" >&2
-    cat "$work/claude.stderr" >&2
+"$root/leak-scan/review.sh" --cache "$state/passed" "$work/review" "$mirror" "$trusted" "$request" \
+    "$inputs/commits.patch" "$inputs/identities.txt" "$inputs/file-names.txt" "$inputs/binary-files.txt" \
+    "$inputs/tags.txt" "$inputs/ref-names.txt" || status=$?
+if (( status == 1 )); then
+    echo "pre-push: the leak review flagged this push, push refused" >&2
     exit 1
 fi
-
-jq -r '.structured_output
-    | (.findings[] | "\(.severity)  \(.location)\n  \(.text)\n  \(.reveals)"),
-      (.open_questions[] | "Question  \(.location)\n  \(.text)\n  \(.question)")' "$work/result.json" >&2
-
-for input in "${inputs[@]}"; do
-    lines=$(wc -l < "$bundle/$input")
-    read_lines=$(jq --arg file "$input" '[.structured_output.read[] | select(.file == $file) | .lines] | max // 0' \
-        "$work/result.json")
-    if (( read_lines < lines )); then
-        echo "pre-push: the leak review read $read_lines of the $lines lines in $input, push refused" >&2
-        exit 1
-    fi
-done
-
-blocking=$(jq '.structured_output
-    | ([.findings[] | select(.severity != "Normal")] | length) + (.open_questions | length)' "$work/result.json")
-if (( blocking > 0 )); then
-    echo "pre-push: the leak review raised $blocking question(s) or finding(s) not rated Normal, push refused" >&2
+if (( status != 0 )); then
+    echo "pre-push: the leak review did not run, push refused" >&2
     exit 1
 fi
-touch "$passed"
