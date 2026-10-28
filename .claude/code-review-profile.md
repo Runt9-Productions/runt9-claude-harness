@@ -58,10 +58,11 @@ The scale is Critical (Must Fix), High (Should Fix), Normal (Could Fix). Referen
 - **Normal**: leftover debug output; history or incident narrative in a comment; a README missing a line for a new
   setting or need.
 
-Adding code is not free. Code has to earn its place, and Normal after Normal that guards against ever less likely
-cases makes code unreadable, unmaintainable and cumbersome. So a Normal is optional: the author may decline one with a
-one-line reason. A finding whose only fix is a guard for a case no honest change or common mistake reaches is not
-reported at all. A finding that removes code is worth as much as one that adds it.
+Adding code is not free: Normal after Normal that guards against ever less likely cases makes code unreadable,
+unmaintainable and cumbersome. So a Normal is optional: the author may decline one with a one-line reason. A finding
+whose only fix is a guard for a case no honest change or common mistake reaches is not reported, except where the case
+is `guard-security`'s: hostile pull request content, crafted input, or a model working around a guard. A finding that
+removes code is worth as much as one that adds it.
 
 ## Fragile spots CI does not catch
 

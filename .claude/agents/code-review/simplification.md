@@ -16,8 +16,8 @@ What in this change could be removed or made smaller while keeping every guarant
 
 ## Before the diff
 
-Read every standard the prompt's standing instructions name before you read the change. Code has to earn its place:
-each line is there because a real case needs it, and every line is one more the maintainer reads, tests and keeps.
+Read every standard the prompt's standing instructions name before you read the change, skipping any that does not
+exist. Code has to earn its place: every line is one more the maintainer reads, tests and keeps.
 
 ## In scope
 
@@ -31,7 +31,9 @@ each line is there because a real case needs it, and every line is one more the 
   that change.
 - **Guards that do not earn their place.** A check, fallback, warning or rollback for a case no honest user or common
   mistake reaches, or one whose code costs more to keep than the failure it prevents. That a docstring or README
-  promises the guarantee does not make it necessary; judge the guarantee itself.
+  promises the guarantee does not make it necessary; judge the guarantee itself. A security boundary is the
+  exception: a guard against hostile pull request content, crafted input, or a model working around it stays, whatever
+  its cost (see "What ships" in the profile).
 
 ## Every finding
 
@@ -40,15 +42,12 @@ that guarantee protected. A finding that cannot name what is lost is not ready. 
 case needs is wrong. When you claim a tool already does something, try it on a scratch case if you can, and say when
 you could not.
 
-A guard in a hook, CI workflow or installer is also reviewed by `guard-security`. Propose removing it when it fails the
-test above, and say which case it would stop covering.
-
 "Nothing worth removing" is a valid result.
 
 ## Out of scope
 
-Correctness, security, leaks and contracts belong to other reviewers. Names, comments, readability and adherence to
-the style guides belong to `code-health`.
+Correctness, security, leaks and contracts belong to other reviewers. Names, comments, readability and the style
+guides' other rules belong to `code-health`; their rules on removing code and on one home per piece of logic are yours.
 
 ## How far to read
 
@@ -56,4 +55,4 @@ Read each changed file whole. Open what it calls when a reuse or altitude findin
 
 ## Severity
 
-Always Normal. A few strong findings serve the owner better than many small ones.
+Normal, except High for near-copies that every future change has to keep in step. A few strong findings serve the owner better than many small ones.
