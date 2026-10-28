@@ -1,8 +1,8 @@
 # Code review profile
 
 Facts about this repository that `/code-review` and its panel need. The skill reads every section; each reviewer
-reads the sections its own file names. The pre-push hook hands a copy of this file, named `code-review-profile.md`,
-to the `public-leak` review it runs.
+reads the sections its own file names. The pre-push hook and `review-text.sh` hand a copy of this file, named
+`code-review-profile.md`, to the `public-leak` review they run.
 
 ## What ships, and why a defect is expensive
 

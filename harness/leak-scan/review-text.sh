@@ -28,5 +28,5 @@ cp "$file" "$work/body.md"
 mkdir "$work/review"
 
 request="Review this text before it is posted on GitHub, where it is public at once. Its one input is body.md in \
-this directory: the body of an issue or pull request."
+this directory, holding an issue's or pull request's title on its first line and its body after it."
 "$here/review.sh" "$work/review" "$git_dir" "$trusted" "$request" "$work/body.md" || exit

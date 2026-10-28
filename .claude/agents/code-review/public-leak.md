@@ -1,6 +1,6 @@
 ---
 name: public-leak
-description: Reads a diff, with its commit messages, file names and identities, as an outsider would, asking what it reveals that its owner never meant to make public in an MIT-licensed repository: people, employers, customers, private projects, machines, secrets, or text the author cannot license. The /code-review skill sends it on every panel, and the pre-push hook runs it before each push; do not run it by itself.
+description: Reads a diff, with its commit messages, file names and identities, as an outsider would, asking what it reveals that its owner never meant to make public in an MIT-licensed repository: people, employers, customers, private projects, machines, secrets, or text the author cannot license. The /code-review skill sends it on every panel, the pre-push hook runs it before each push, and review-text.sh before an issue or pull request body is posted; do not run it by itself.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
@@ -67,7 +67,7 @@ text Critical or High. Do not ask where content came from when the content itsel
 
 For each finding, say what it reveals and to whom.
 
-## The pre-push run
+## The pre-push and text-check runs
 
-In that run only `Read` is available, the inputs are the files in the working directory, and the brief and profile
+In those runs only `Read` is available, the inputs are the files in the working directory, and the brief and profile
 arrive as copies named in the request.

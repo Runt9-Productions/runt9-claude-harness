@@ -11,8 +11,8 @@ and emails, annotated tags, file names and ref names. Two passes of [betterleaks
 Names, customers and project vocabulary have no shape; the `public-leak` review agent covers those. `review.sh` runs
 it, with its instructions taken from a trusted commit, over the files a caller gives it: pre-push gives it what a push
 publishes, and `review-text.sh <file> <repo> <trusted-ref>` runs this scan's `--text` mode and then the review over an
-issue or pull request body before it is posted. Both exit 0 clean, 1 on a finding not rated Normal, 2 when a check
-did not run.
+issue or pull request body before it is posted. Both exit 0 clean, 1 on a scan finding, a review finding not rated
+Normal or an open question, and 2 when a check did not run.
 
 **Binary content is not scanned.** A file git's own detection calls binary (a NUL byte near its start) is skipped,
 whatever its name, so a text file with a NUL in it is skipped too. `--export` lists the binary files a range adds,

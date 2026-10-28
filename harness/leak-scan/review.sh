@@ -6,8 +6,8 @@
 # Each input is copied into <bundle-dir>, an empty directory the caller made, under its own name; an empty input is
 # left out. The agent's definition, the reviewer brief, the review profile and CLAUDE.md come from <trusted-commit> in
 # <git-dir>, never the working tree, so the change under review cannot rewrite its own review. <request> tells the
-# agent what the inputs are. With --cache, a pass is recorded in <dir> under a hash of the bundle and of every file
-# installed beside this script, and the same review is not run twice.
+# agent what the inputs are. With --cache, a pass is recorded in <dir> under a hash of the bundle and of every file in
+# the installed githooks/ and leak-scan/, and the same review is not run twice; it needs githooks/ beside leak-scan/.
 #
 # Exit 0 passed, 1 a finding not rated Normal or an open question, 2 the review did not run. Treat 2 as a failure.
 set -Eeuo pipefail
@@ -36,6 +36,7 @@ if [[ ! -d $bundle || -n $(ls -A "$bundle") ]]; then
     echo "leak-review: $bundle must be an empty directory" >&2
     exit 2
 fi
+# Beside the bundle, so the review's working files stay inside whatever location the caller guards.
 scratch=$(mktemp -d "${bundle%/*}/review.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 
