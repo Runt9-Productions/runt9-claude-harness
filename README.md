@@ -27,7 +27,7 @@ With no component named it asks about each one. The components, in install order
 
 | Component | Installs |
 |---|---|
-| `harness` | `harness/` as it is in the commit checked out (never the working tree), into `~/.claude/harness/versions/<version>/` with that commit's hash in `SOURCE_COMMIT`, then points the `~/.claude/harness/current` link at it and removes every other version. The version is `harness/harness.json`'s; when it is already installed, nothing is copied. |
+| `harness` | `harness/` as it is in the commit checked out (never the working tree), into `~/.claude/harness/versions/<version>-<tree>/` with that commit's hash in `SOURCE_COMMIT`, then points the `~/.claude/harness/current` link at it and removes every other version. `<version>` is `harness/harness.json`'s and `<tree>` names the content, so the same content is never copied twice and changed content always installs. |
 | `hooks-path` | `core.hooksPath` set to `~/.claude/harness/current/githooks` in each `--repo`. Git then runs only those hooks there. |
 | `skills` | A link `~/.claude/skills/<name>` to `~/.claude/harness/current/skills/<name>` for each skill, and removes links to a skill the installed version no longer has. Other skills are never touched. |
 | `plugin:<name>` | `claude plugin marketplace add Runt9-Productions/runt9-claude-harness`, then `claude plugin install <name>@runt9`. Plugins come from GitHub, never from this clone. |
@@ -37,7 +37,8 @@ gate's pass cache in `~/.claude/harness/state/` survives it. To change an instal
 `~/.claude/local/<name>/additions.md` ([how](harness/skills/README.md)); edits inside `~/.claude/harness/` are lost on
 the next version.
 
-What it refuses, before installing anything:
+What it refuses. The first two, and the `hooks-path` checks on `--repo`, stop the run before anything installs; the
+rest stop at that component:
 
 - Running inside a Claude Code session. `--list` still works.
 - An unknown component, or `--repo` without `hooks-path`.
@@ -56,7 +57,8 @@ before a later one failed stays installed. Git runs without `GIT_DIR`, `GIT_WORK
 point it at another repository. Nothing here keeps an agent from writing to `~/.claude/harness/`; that is your
 harness's job.
 
-Updating: check out `main`, pull and run `python3 bootstrap.py harness skills` again. For a plugin, run
+Updating: when `harness/harness.json`'s version rises, check out `main`, pull and run
+`python3 bootstrap.py harness skills` again. For a plugin, run
 `claude plugin update <name>@runt9`; running `bootstrap.py` again does not update a plugin already installed.
 
 MIT licensed.

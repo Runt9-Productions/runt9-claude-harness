@@ -20,7 +20,7 @@ filter to CI. Each trap here produces a pull request that looks finished and eit
 ## Observations
 
 - [fact] `guard-versions.sh` fails a pull request that changes a plugin's files without raising `version` in its `.claude-plugin/plugin.json`; it compares with `sort -V`, so the version must rise, not merely change.
-- [fact] The same guard treats everything under `harness/` as one unit versioned in `harness/harness.json`, because `bootstrap.py harness` installs nothing when that version is already installed.
+- [fact] The same guard treats everything under `harness/` as one unit versioned in `harness/harness.json`, because a rise is what tells a user to run `bootstrap.py harness` again.
 - [trap] The guard exempts only a plugin's top-level `README.md`, a README directly under a `harness/` part, `*.test.ts`, `*.test.tsx`, `test_*.py` and `test_*.bats`. Any other doc, a skill's `references/` included, needs a version bump.
 - [fact] A plugin, or a `harness.json`, that is new in the pull request passes the guard at any version.
 - [fact] The version guard diffs `HEAD^1` to `HEAD` in GitHub's merge checkout, which is exactly what the merge changes even when the base has moved.

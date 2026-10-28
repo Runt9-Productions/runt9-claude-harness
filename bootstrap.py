@@ -4,6 +4,8 @@
 
 Run it in your own shell, not in a Claude Code session. With components named it installs exactly those, in the order
 --list shows; with none named it asks about each one. README.md says what each component does and what it refuses.
+
+Exits 0 when everything picked installed, otherwise 1 with one line naming the reason and what installed before it.
 """
 
 import argparse
@@ -113,18 +115,22 @@ def git_config(repo: Path, *args: str) -> str | None:
     return os.fsdecode(result.stdout).strip()
 
 
+def parse_json_object(text: str | bytes, origin: str) -> dict:
+    try:
+        value = json.loads(text)
+    except ValueError as error:
+        raise Stop(f"{origin} is not valid JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise Stop(f"{origin} is not a JSON object")
+    return value
+
+
 def read_json_object(path: Path) -> dict:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
         raise Stop(f"cannot read {path}: {error.strerror}") from error
-    try:
-        value = json.loads(text)
-    except ValueError as error:
-        raise Stop(f"{path} is not valid JSON: {error}") from error
-    if not isinstance(value, dict):
-        raise Stop(f"{path} is not a JSON object")
-    return value
+    return parse_json_object(text, str(path))
 
 
 def check_checkout() -> None:
@@ -161,25 +167,30 @@ def export_tree(commit: str, source: str, target: Path) -> None:
 
 
 def harness_version(commit: str) -> str:
-    manifest = json.loads(git(CLONE, "show", f"{commit}:{HARNESS_MANIFEST}"))
-    version = manifest.get("version") if isinstance(manifest, dict) else None
+    origin = f"{HARNESS_MANIFEST} in {commit}"
+    text = git(CLONE, "show", f"{commit}:{HARNESS_MANIFEST}")
+    version = parse_json_object(text, origin).get("version")
     if not isinstance(version, str) or not VERSION_PATTERN.fullmatch(version):
-        raise Stop(f"{HARNESS_MANIFEST} in {commit} needs a version made of dot-separated numbers")
+        raise Stop(f"{origin} needs a version made of dot-separated numbers")
     return version
 
 
 def install_harness(run: Run) -> None:
     commit = git(CLONE, "rev-parse", "--verify", "HEAD^{commit}").decode().strip()
     version = harness_version(commit)
-    target = VERSIONS_DIR / version
+    # Named by content as well as version, so a commit that changes harness/ without a version rise (a branch, or two
+    # pull requests raising to the same version) installs anew instead of finding its version already there.
+    tree = git(CLONE, "rev-parse", f"{commit}:{HARNESS_SOURCE}").decode().strip()
+    name = f"{version}-{tree[:12]}"
+    target = VERSIONS_DIR / name
 
     if target.exists():
-        print(f"harness: {version} is already installed in {target}; a change installs once its version rises")
+        print(f"harness: {version} with this content is already installed in {target}")
     else:
         VERSIONS_DIR.mkdir(parents=True, exist_ok=True)
         # Staged beside where it goes, so the one rename that installs it cannot leave a partial version.
         with tempfile.TemporaryDirectory(prefix=".staging-", dir=VERSIONS_DIR) as staging:
-            staged = Path(staging) / version
+            staged = Path(staging) / name
             export_tree(commit, HARNESS_SOURCE, staged)
             (staged / SOURCE_COMMIT).write_text(f"{commit}\n", encoding="utf-8")
             staged.rename(target)
@@ -188,14 +199,13 @@ def install_harness(run: Run) -> None:
     # A new link renamed over the old one, so `current` never names a missing or partial version.
     link = INSTALL_DIR / ".current-new"
     link.unlink(missing_ok=True)
-    link.symlink_to(Path(VERSIONS_DIR.name) / version)
+    link.symlink_to(Path(VERSIONS_DIR.name) / name)
     link.replace(CURRENT)
-    print(f"harness: {CURRENT} points at {version}")
+    print(f"harness: {CURRENT} points at {name}")
 
     for other in VERSIONS_DIR.iterdir():
-        if other.name == version or other.name.startswith("."):
-            continue
-        shutil.rmtree(other)
+        if other.name != name:
+            shutil.rmtree(other)
 
 
 def require_harness() -> None:
@@ -297,8 +307,9 @@ def install_skills(run: Run) -> None:
             print(f"skills: removed {link}, whose skill this version no longer has")
 
 
+# Cached so it runs once per run, however many plugins are picked.
 @functools.cache
-def check_claude() -> None:
+def check_plugin_setup() -> None:
     if shutil.which("claude") is None:
         raise Stop("claude is not on PATH, and plugin components run it")
     values = []
@@ -318,9 +329,9 @@ def claude(*args: str) -> None:
         raise Stop(f"claude {' '.join(args)} exited {result.returncode}")
 
 
+# Cached so it runs once per run. Adding a marketplace already added succeeds, so a re-run needs no special case.
 @functools.cache
 def add_marketplace() -> None:
-    # Adding a marketplace that is already added succeeds, so a re-run needs no special case.
     claude("plugin", "marketplace", "add", MARKETPLACE_SOURCE)
 
 
@@ -345,13 +356,14 @@ def plugin_components() -> list[Component]:
                 name=f"plugin:{name}",
                 summary=plugin.get("description", ""),
                 install=functools.partial(install_plugin, name, marketplace_name),
-                check=lambda run: check_claude(),
+                check=lambda run: check_plugin_setup(),
             )
         )
     return components
 
 
-# Install order. A new installable part is one entry here and its install function.
+# Install order. Everything under harness/ arrives with the harness component; a part that must also be wired into
+# ~/.claude or a repository is one entry here and its install function.
 HARNESS_COMPONENTS = (
     Component(
         name="harness",

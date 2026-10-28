@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails when the PR changes a plugin or the harness without raising its version. Installed users get a change only when
-# the version rises, so a change merged without a bump reaches nobody and nothing reports it. Tests and top-level
-# READMEs do not ship behaviour. Run in GitHub's merge checkout, where HEAD^1 is the base.
+# the version rises, so a change merged without a bump reaches nobody and nothing reports it. Tests, a plugin's
+# top-level README and the README directly inside a harness part do not ship behaviour. Run in GitHub's merge checkout, where HEAD^1 is the base.
 set -Eeuo pipefail
 
 changed=$(git diff --name-only HEAD^1 HEAD -- ':(glob)plugins/**' ':(glob)harness/**' \

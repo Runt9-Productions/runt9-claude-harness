@@ -134,33 +134,39 @@ def test_harness_installs_a_new_version_and_keeps_state(sandbox: Sandbox) -> Non
     (sandbox.clone / "harness/githooks/example-retired-hook").unlink()
     sandbox.set_version("0.2.0")
     head = sandbox.commit("Drop the example hook")
+    name = f"0.2.0-{sandbox.git(sandbox.clone, 'rev-parse', 'HEAD:harness')[:12]}"
 
     result = sandbox.run("harness")
 
     assert result.returncode == 0, result.stderr
     assert "warning" not in result.stderr
-    assert f"installed 0.2.0 from {head} into {sandbox.install / 'versions/0.2.0'}" in result.stdout
-    assert sandbox.current.readlink() == Path("versions/0.2.0")
+    assert f"installed 0.2.0 from {head} into {sandbox.install / 'versions' / name}" in result.stdout
+    assert sandbox.current.readlink() == Path("versions", name)
     assert (sandbox.current / "SOURCE_COMMIT").read_text() == f"{head}\n"
     assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
     assert installed_mode(sandbox.current / "githooks/pre-push") == 0o755
     assert installed_mode(sandbox.current / "leak-scan/scan.sh") == 0o755
     assert installed_mode(sandbox.current / "githooks/README.md") == 0o644
     assert not (sandbox.current / "githooks/example-retired-hook").exists()
-    assert sorted(path.name for path in (sandbox.install / "versions").iterdir()) == ["0.2.0"]
+    assert sorted(path.name for path in (sandbox.install / "versions").iterdir()) == [name]
     assert marker.exists()
 
 
-def test_harness_rerun_at_the_same_version_installs_nothing(sandbox: Sandbox) -> None:
+def test_harness_rerun_copies_only_changed_content(sandbox: Sandbox) -> None:
     assert sandbox.run("harness").returncode == 0
+    sandbox.write("example-outside-harness.md", b"example\n")
+    sandbox.commit("Change nothing under harness/")
+    unchanged = sandbox.run("harness")
     sandbox.write("harness/githooks/pre-push", b"#!/bin/sh\necho example unbumped\n", 0o755)
     sandbox.commit("Change the example hook without a version rise")
 
-    result = sandbox.run("harness")
+    changed = sandbox.run("harness")
 
-    assert result.returncode == 0, result.stderr
-    assert "0.1.0 is already installed" in result.stdout
-    assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
+    assert unchanged.returncode == 0, unchanged.stderr
+    assert "0.1.0 with this content is already installed" in unchanged.stdout
+    assert changed.returncode == 0, changed.stderr
+    assert (sandbox.current / "githooks/pre-push").read_bytes() == b"#!/bin/sh\necho example unbumped\n"
+    assert len(list((sandbox.install / "versions").iterdir())) == 1
 
 
 def test_harness_installs_the_commit_not_a_hidden_working_tree_change(sandbox: Sandbox) -> None:
