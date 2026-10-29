@@ -195,7 +195,7 @@ jobs:
         run: npm ci
 
       # The PR's own copy, since this job holds no secret: a change to the action runs here before it reaches a review.
-      - uses: ./.github/actions/install-claude-code
+      - uses: $/.github/actions/install-claude-code
 
       - name: Every plugin validates strictly
         run: |

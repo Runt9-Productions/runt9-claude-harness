@@ -51,7 +51,7 @@ jobs:
 
       # The newest release is also the `claude` that `claude plugin test` runs. CLAUDE_CODE_SUBPROCESS_ENV_SCRUB keeps
       # the token out of every command the review runs, the PR's tests included.
-      - uses: ./default-branch/.github/actions/install-claude-code
+      - uses: ./default-branch/.github/actions/install-claude-code # zizmor: ignore[self-repository] see code-review.yml
         with:
           sandbox: "true"
 
