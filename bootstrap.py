@@ -52,8 +52,9 @@ SKILL_FILE = "SKILL.md"
 
 FRAGMENTS = "fragments"
 USER_CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
-# Inside the installed harness; a missing ~/.claude/CLAUDE.md starts from it.
-CLAUDE_MD_TEMPLATE = "CLAUDE.md"
+# Inside the installed harness; a missing ~/.claude/CLAUDE.md starts from it. Not named CLAUDE.md, which Claude Code
+# would load as instructions for sessions working in harness/.
+CLAUDE_MD_TEMPLATE = "claude-md-template.md"
 BLOCK_START = "<!-- runt9-claude-harness: bootstrap.py keeps the lines from here to the end marker -->"
 BLOCK_END = "<!-- runt9-claude-harness: end -->"
 

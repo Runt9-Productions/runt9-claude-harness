@@ -483,7 +483,7 @@ def test_fragment_import_goes_inside_the_block_through_a_link_only_on_yes(sandbo
 @pytest.mark.parametrize("template", ["# Example template\n", None], ids=["template", "no-template"])
 def test_missing_claude_md_starts_from_the_harness_template(sandbox: Sandbox, template: str | None) -> None:
     if template is not None:
-        sandbox.write("harness/CLAUDE.md", template.encode())
+        sandbox.write("harness/claude-md-template.md", template.encode())
         sandbox.commit("Add an example template")
 
     result = sandbox.run("harness", "fragment:example-rules", stdin="y\n")
