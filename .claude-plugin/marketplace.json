@@ -11,6 +11,11 @@
       "description": "Reference knowledge bases in .claude/reference/: the note format, templates, a validator with a merge gate for CI, and a writer agent"
     },
     {
+      "name": "develop",
+      "source": "./plugins/develop",
+      "description": "A ticket-to-reviewed-draft-pull-request process driven by a per-repository development profile, with an effort-estimate skill and a comment-sweep agent"
+    },
+    {
       "name": "teammate-delivery",
       "source": "./plugins/teammate-delivery",
       "description": "Lets a teammate that is mid-turn read a message on its next model request, not after the turn is over"

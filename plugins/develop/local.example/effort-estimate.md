@@ -1,0 +1,2 @@
+- Give lines of code as ranges rounded to the nearest ten.
+- Treat a change touching more than ten files as Large whatever its line count.
