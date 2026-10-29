@@ -116,6 +116,7 @@ A new plugin with a contract adds its rows here.
 | a `# vX` comment beside a pinned action | the SHA it annotates | Dependabot |
 | the "tuned on" version in `harness/leak-scan/README.md` | `version` in `install-betterleaks.sh` | hand |
 | each request under "Other callers" | the `request` text in `harness/githooks/pre-push`, `harness/leak-scan/review-text.sh` and `harness/leak-scan/review.sh` | hand |
+| `TEST_GLOBS` and `TEST_HELPERS` in `.github/scripts/test-review-payload.py` | the "Test kinds" table in `.claude/test-review-profile.md` | hand |
 
 ## Companions
 

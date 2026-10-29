@@ -112,7 +112,7 @@ jobs:
         id: result
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash .github/scripts/test-review-payload.sh "$RUNNER_TEMP/review.json" "$(git merge-base "$BASE_SHA" HEAD)"
+        run: python3 .github/scripts/test-review-payload.py "$RUNNER_TEMP/review.json" "$(git merge-base "$BASE_SHA" HEAD)"
 
   # Runs when the review failed or was cancelled too, so the label always comes off.
   post-review:
