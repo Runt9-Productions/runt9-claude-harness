@@ -14,6 +14,11 @@
       "name": "teammate-delivery",
       "source": "./plugins/teammate-delivery",
       "description": "Lets a teammate that is mid-turn read a message on its next model request, not after the turn is over"
+    },
+    {
+      "name": "delegation",
+      "source": "./plugins/delegation",
+      "description": "How a lead session spawns, briefs, answers and shuts down Agent Teams teammates, with engineer, web-researcher, code-researcher, verifier and triager agent templates"
     }
   ]
 }
