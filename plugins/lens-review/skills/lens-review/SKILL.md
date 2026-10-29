@@ -30,7 +30,8 @@ Read `.claude/code-review-profile.md` in full. If it does not exist, stop and sa
 repository up" below: every later step depends on it.
 
 Read the reviewer brief, `${CLAUDE_PLUGIN_ROOT}/skills/lens-review/references/reviewer-brief.md`. Every dispatch
-prompt carries it (step 6), so a reviewer's own file need not point at it.
+prompt carries it (step 6), so a reviewer's own file need not point at it. If it cannot be read, stop and say so:
+reviewers dispatched without it run without its checks.
 
 ## 2. Parse the arguments
 

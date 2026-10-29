@@ -34,6 +34,10 @@ message comes back.
 
 ## Needs
 
-`git`, `jq` and `awk`. `gh`, authenticated, for pull request targets and for a profile that posts reviews to GitHub.
+`bash` 4.4 or newer, `git`, `jq` and `awk`. `gh`, authenticated, for pull request targets and for a profile that
+posts reviews to GitHub.
+
+The profile and reviewer pool keep the paths `.claude/code-review-profile.md` and `.claude/agents/code-review/`:
+they name the activity, not the plugin.
 
 No settings.

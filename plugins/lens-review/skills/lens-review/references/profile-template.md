@@ -21,7 +21,8 @@ reads the sections its own file names.
 | Working tree | `git diff HEAD` |
 | Commit | `git show <sha>` |
 | Range | `git diff <a>..<b>` |
-| Pull request | `gh pr diff <n>`, then `gh pr view <n> --json commits,body` |
+
+The skill fetches a pull request itself with `gh`.
 
 - Default branch: `<main>`.
 - Paths excluded from review, or relevant only to some reviewers: `<none>`.
