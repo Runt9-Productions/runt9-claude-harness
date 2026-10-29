@@ -90,11 +90,11 @@ removes code is worth as much as one that adds it.
 
 Behaviour other plugins or the engine rely on. A change to either side of a row is reviewed against the other side.
 
-| Plugin | Contract |
-|---|---|
-| `teammate-delivery` | Diverts only sends whose origin is the model; sends a plugin makes are left alone. |
-| `teammate-delivery` | An idle receiver sees the lead under the name `team-lead`, which must equal `LEAD_NAME` in the module. |
-| `teammate-delivery` | A diverted send returns `{ isDelivered: true }` and never calls `next`. Lower `session.send` hooks and every `session.receive` hook therefore never see it, and the receiver knows the sender only by the name in the row's header, never by a verified `origin.teammate`. |
+| Plugin | Contract | Other side |
+|---|---|---|
+| `teammate-delivery` | Diverts only sends whose origin is the model; sends a plugin makes are left alone. | any plugin that sends to a teammate |
+| `teammate-delivery` | An idle receiver sees the lead under the name `team-lead`, which must equal `LEAD_NAME` in the module. | any tool text that tells a teammate who a message is from |
+| `teammate-delivery` | A diverted send returns `{ isDelivered: true }` and never calls `next`. Lower `session.send` hooks and every `session.receive` hook therefore never see it, and the receiver knows the sender only by the name in the row's header, never by a verified `origin.teammate`. | any plugin with a `session.send` or `session.receive` hook, and any tool text that names a message's sender |
 
 A new plugin with a contract adds its rows here.
 
