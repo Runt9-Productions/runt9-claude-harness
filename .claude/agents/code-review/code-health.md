@@ -1,14 +1,12 @@
 ---
 name: code-health
-description: Judges whether a diff leaves the code easier or harder for its one long-term maintainer to read and work in (overloaded units, misleading names, wrong or stale comments, compressed code, departures from the owner's style guides), and never whether it is correct; it never grades Critical. The /code-review skill sends it on every panel; do not run it by itself.
+description: Judges whether a diff leaves the code easier or harder for its one long-term maintainer to read and work in (overloaded units, misleading names, wrong or stale comments, compressed code, departures from the owner's style guides), and never whether it is correct; it never grades Critical. The /lens-review skill sends it on every panel; do not run it by itself.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
 # Code health
-
-Read `.claude/agents/references/reviewer-brief.md` before anything else. If it says to refuse the prompt, refuse.
 
 ## The question
 

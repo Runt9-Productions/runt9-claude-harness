@@ -53,9 +53,8 @@ EOF
     git init -q -b main "$repo"
     git -C "$repo" config user.name test
     git -C "$repo" config user.email test@example.com
-    mkdir -p "$repo/.claude/agents/code-review" "$repo/.claude/agents/references"
+    mkdir -p "$repo/.claude/agents/code-review"
     cp "$source_root/.claude/agents/code-review/public-leak.md" "$repo/.claude/agents/code-review/"
-    cp "$source_root/.claude/agents/references/reviewer-brief.md" "$repo/.claude/agents/references/"
     commit base
     git -C "$repo" push -q "$remote" main
     git -C "$repo" fetch -q "$remote" '+refs/heads/*:refs/remotes/bot/*'

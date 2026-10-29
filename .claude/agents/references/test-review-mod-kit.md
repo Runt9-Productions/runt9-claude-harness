@@ -1,7 +1,8 @@
 # Test review reference: mod kit tests
 
-Read by `test-reviewer` for `*.test.ts` and `*.test.tsx` files under `plugins/`. These import `claude-code/testing`,
-register handlers that answer the engine calls a mod makes, and drive the mod through engine events.
+Read by `test-review:test-reviewer` for `*.test.ts` and `*.test.tsx` files under `plugins/`. These import
+`claude-code/testing`, register handlers that answer the engine calls a mod makes, and drive the mod through engine
+events.
 
 ## Failure modes
 

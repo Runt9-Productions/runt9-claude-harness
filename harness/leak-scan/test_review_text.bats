@@ -27,8 +27,10 @@ EOF
 
     repo=$BATS_TEST_TMPDIR/repo
     git init -q -b main "$repo"
-    mkdir -p "$repo/.claude/agents/code-review"
+    brief=plugins/lens-review/skills/lens-review/references/reviewer-brief.md
+    mkdir -p "$repo/.claude/agents/code-review" "$repo/${brief%/*}"
     cp "$source_root/.claude/agents/code-review/public-leak.md" "$repo/.claude/agents/code-review/"
+    cp "$source_root/$brief" "$repo/$brief"
     git -C "$repo" add -A
     git -C "$repo" -c user.name=Dev -c user.email=dev@example.com commit -qm base
     body=$BATS_TEST_TMPDIR/body.md
@@ -40,6 +42,7 @@ EOF
     [ "$status" -eq 0 ]
     cmp "$body" "$HOME/bundle/body.md"
     [ -f "$HOME/bundle/public-leak.md" ]
+    [ -f "$HOME/bundle/reviewer-brief.md" ]
 }
 
 @test "a pattern-scan hit stops before the review" {

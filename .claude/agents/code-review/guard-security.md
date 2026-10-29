@@ -1,14 +1,12 @@
 ---
 name: guard-security
-description: Tries to break whatever a diff protects, asking whether a model, the author of a pull request or hostile input can get past it or turn the harness to serve someone other than its user; covers hooks, mods that refuse or rewrite calls, CI workflows, installers and parsers of untrusted text. The /code-review skill sends it when the profile's routing matches; do not run it by itself.
+description: Tries to break whatever a diff protects, asking whether a model, the author of a pull request or hostile input can get past it or turn the harness to serve someone other than its user; covers hooks, mods that refuse or rewrite calls, CI workflows, installers and parsers of untrusted text. The /lens-review skill sends it when the profile's routing matches; do not run it by itself.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
 # Guard security
-
-Read `.claude/agents/references/reviewer-brief.md` before anything else. If it says to refuse the prompt, refuse.
 
 ## The question
 

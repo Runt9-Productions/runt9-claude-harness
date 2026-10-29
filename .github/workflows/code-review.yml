@@ -13,8 +13,8 @@ permissions:
 jobs:
   # Fork PRs get no secrets under pull_request, so they are not reviewed. This job holds the Claude token and a
   # read-only GitHub token; post-review holds the write token and no Claude token, so a prompt-injected reviewer has
-  # nothing that can write. The review runs with the PR's own .claude/, so a change to a reviewer is reviewed by the
-  # changed reviewer.
+  # nothing that can write. The review runs with the PR's own .claude/ and plugins/lens-review, so a change to a
+  # reviewer or to the skill is reviewed by the changed version.
   review:
     if: >-
       github.event.label.name == 'code-review-requested' &&
@@ -70,7 +70,8 @@ jobs:
           CODE_REVIEW_OUTPUT: ${{ runner.temp }}/code-review
           PR: ${{ github.event.pull_request.number }}
         run: |
-          claude -p "/code-review $PR auto" --settings '{"disableAllHooks": true}' --strict-mcp-config \
+          claude -p "/lens-review $PR auto" --plugin-dir plugins/lens-review \
+            --settings '{"disableAllHooks": true}' --strict-mcp-config \
             --permission-mode dontAsk --allowedTools Bash Read Write Agent Skill --disallowedTools WebFetch WebSearch \
             --no-session-persistence --output-format json < /dev/null > "$RUNNER_TEMP/review.json"
           jq '{is_error, num_turns, total_cost_usd, duration_ms, permission_denials}' "$RUNNER_TEMP/review.json"

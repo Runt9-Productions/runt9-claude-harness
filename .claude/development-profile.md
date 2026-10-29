@@ -103,14 +103,16 @@ pre-push gate trusts it, so a build never writes to it.
 
 ## 9. Review
 
-- Panel: this repository's own `/code-review` skill (`.claude/skills/code-review/`) with
-  `.claude/code-review-profile.md`, run in CI.
-- Trigger: the `code-review-requested` label on a same-repository pull request runs `/code-review <n> auto`, posts
+- Panel: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
+  `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run in CI.
+- Trigger: the `code-review-requested` label on a same-repository pull request runs `/lens-review <n> auto`, posts
   a comment-type review on the head and removes the label; adding it again reruns. The workflow has no draft filter,
   so a draft is reviewed. A trivial change the owner can check at a glance skips the label and opens ready.
 - Findings: the merge rule is CI green and no open Critical or High. A Normal is optional and may be declined on its
   thread with a one-line reason (`.claude/code-review-profile.md`, "Severity calibration").
-- Test review: `.claude/test-review-profile.md` exists; run this repository's own `/test-review` locally. Not skipped.
+- Test review: `.claude/test-review-profile.md` exists. The `test-review-requested` label runs the `test-review`
+  plugin in CI over the test files the head changes, posts a comment-type review with each test fix as a suggested
+  change, pushes nothing and removes the label. Add it before `code-review-requested`. Not skipped.
 - External reviewer: none.
 - Inline comments: one `gh api repos/Runt9-Productions/runt9-claude-harness/pulls/<n>/reviews --input <file>` with
   `event: "COMMENT"`, `commit_id`, `body` and `comments[]` of `path`, `line`, `side: "RIGHT"` and `body`. GitHub

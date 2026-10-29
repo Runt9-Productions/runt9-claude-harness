@@ -22,7 +22,8 @@ nothing from an employer, a private project or a specific machine goes in, in co
   needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only, except PyYAML
   in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`.
-- `.claude/`: this repo's own `/code-review` and `/test-review` skills, their reviewer agents and profiles.
+- `.claude/`: the profiles, reviewer pool and test references that the `lens-review` and `test-review` plugins read
+  to review this repo. CI loads both plugins from the pull request's own `plugins/`.
 - `.claude/reference/`: this repo's knowledge base, in the reference-kb plugin's format. Read the note covering an
   area before its code or platform behaviour; a question it does not answer is still open.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with

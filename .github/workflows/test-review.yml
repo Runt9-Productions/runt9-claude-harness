@@ -1,0 +1,154 @@
+name: Test review
+
+# Adding the test-review-requested label to a same-repo PR runs /test-review over the test files its head changes
+# against the default branch, and posts the report as a comment-type review with each test fix as a suggested change.
+# Nothing is pushed: a fix lands only when someone commits its suggestion. The label is removed when the run ends,
+# whatever its outcome, so adding it again runs another. No branch rule requires this workflow.
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  # Fork PRs get no secrets under pull_request, so they are not reviewed. The split is code-review.yml's: this job holds
+  # the Claude token and a read-only GitHub token, post-review the write token and no Claude token. The reviewer runs
+  # the PR's tests and code, so no step before the review runs a file the PR controls, which could plant a command the
+  # review step would then run with the token.
+  review:
+    if: >-
+      github.event.label.name == 'test-review-requested' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    environment: claude-review
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      payload: ${{ steps.result.outputs.payload }}
+      fallback: ${{ steps.result.outputs.fallback }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # The PR's head rather than GitHub's merge, so the line numbers of a fix are the PR's own.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The skill scopes the review against the default branch by name, and the checkout leaves only its
+      # remote-tracking ref.
+      - name: Make the default branch local
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: git branch "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      # Every runner the test profile names, plus the tools the tests need: the pinned pytest and ruff, bats and
+      # shellcheck, and betterleaks. The pins and the betterleaks installer come from the default branch, since the PR's
+      # copies would run before the review step. Wheels only, so installing runs no package's build code.
+      - name: Install the test runners
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bats shellcheck
+          git show "origin/$DEFAULT_BRANCH:requirements-dev.txt" > "$RUNNER_TEMP/requirements-dev.txt"
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check --no-deps --only-binary :all: \
+            -r "$RUNNER_TEMP/requirements-dev.txt"
+          "$RUNNER_TEMP/venv/bin/pip" check
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          git show "origin/$DEFAULT_BRANCH:.github/scripts/install-betterleaks.sh" | bash -s -- "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # Newest release, outside the lockfile, which the PR controls. It is also the `claude` that `claude plugin test`
+      # runs.
+      - name: Install Claude Code
+        run: | # zizmor: ignore[adhoc-packages] latest on purpose: the version auto-updating users run
+          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec node "%s" "$@"\n' \
+            "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs" > "$RUNNER_TEMP/bin/claude"
+          chmod +x "$RUNNER_TEMP/bin/claude"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # As in code-review.yml: CLAUDE_CODE_SUBPROCESS_ENV_SCRUB runs Bash in Claude Code's sandbox, which needs
+      # bubblewrap and socat, and keeps the token out of every command the review runs, the PR's tests included.
+      - name: Install the sandbox's tools
+        run: |
+          sudo apt-get install -y -q bubblewrap socat
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / true
+
+      - name: Review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+        run: |
+          claude -p "/test-review" --plugin-dir plugins/test-review --settings '{"disableAllHooks": true}' \
+            --strict-mcp-config --permission-mode dontAsk --allowedTools Bash Read Edit Write Agent Skill \
+            --disallowedTools WebFetch WebSearch --no-session-persistence --output-format json \
+            < /dev/null > "$RUNNER_TEMP/review.json"
+          jq '{is_error, num_turns, total_cost_usd, duration_ms, permission_denials}' "$RUNNER_TEMP/review.json"
+
+      - name: Turn the fixes into suggestions
+        id: result
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash .github/scripts/test-review-payload.sh "$RUNNER_TEMP/review.json" "$(git merge-base "$BASE_SHA" HEAD)"
+
+  # Runs when the review failed or was cancelled too, so the label always comes off.
+  post-review:
+    needs: review
+    if: always() && needs.review.result != 'skipped'
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+
+    steps:
+      - name: Post the review
+        if: needs.review.result == 'success'
+        env:
+          PAYLOAD: ${{ needs.review.outputs.payload }}
+          FALLBACK: ${{ needs.review.outputs.fallback }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # GitHub rejects a whole review when one comment misses the diff; the fallback then carries every fix as a diff.
+        # The review checked out HEAD_SHA, so the suggestions' line numbers are that commit's.
+        run: |
+          if request=$(jq --arg sha "$HEAD_SHA" '{
+                commit_id: $sha, event: "COMMENT", body,
+                comments: [.comments[]? | {path, line, side, start_line, start_side, body}
+                  | with_entries(select(.value != null))]
+              }' <<< "$PAYLOAD") \
+              && gh api "repos/$REPO/pulls/$PR/reviews" --input - <<< "$request" > /dev/null; then
+            exit 0
+          fi
+          echo "::warning::The suggested changes could not be posted, so the report is posted with every fix as a diff."
+          gh api "repos/$REPO/pulls/$PR/reviews" -f event=COMMENT -f commit_id="$HEAD_SHA" -f body="$FALLBACK" \
+            > /dev/null
+
+      - name: Remove the label
+        if: always()
+        run: gh api -X DELETE "repos/$REPO/issues/$PR/labels/test-review-requested" > /dev/null
