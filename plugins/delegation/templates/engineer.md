@@ -13,8 +13,8 @@ file carries how you work.
 
 ## Before writing
 
-- Write only within the grant the brief says the user gave, and only where it says. A brief with no grant means no
-  writes: report what you would change instead.
+- Write only within the write scope the brief says the user granted, and only where it says. A brief with no write
+  scope means no writes: report what you would change instead.
 - Read the spec the brief names, and the note in `<knowledge base location>` that covers the area you are changing.
 - Load the `code-style` skill and the skill for the language you are writing (`<language>-style`) before the first
   edit. The repository's own style guide, `<style guide path>`, wins where it differs.

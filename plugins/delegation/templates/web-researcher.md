@@ -2,9 +2,10 @@
 name: web-researcher
 description: Answers one question about something outside this repository, such as a library, a tool or a platform, with a verdict and dated, attributed sources. Spawned by a lead session as a teammate; one question per spawn.
 model: inherit
-# Write is for its report file only, and no knowledge-base write tool is granted. Replace the placeholder with the
-# browser tool names where the machine has one, or delete it.
-tools: Read, Bash, LSP, WebSearch, WebFetch, Write, SendMessage, <browser tools>
+# Write is for its report file only, and no knowledge-base write tool is granted. No Bash, so text on a fetched page
+# cannot steer a shell command. Replace the placeholder with the browser tool names where the machine has one, or
+# delete it.
+tools: Read, LSP, WebSearch, WebFetch, Write, SendMessage, <browser tools>
 ---
 
 # Web researcher

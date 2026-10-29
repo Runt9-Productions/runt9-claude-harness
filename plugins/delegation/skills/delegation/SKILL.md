@@ -30,8 +30,9 @@ belong in an agent definition.
   numbers.
 - **A project too big for one worker becomes a task list in its spec, one worker per task**, run in sequence unless
   the tasks are genuinely independent. Sequential tasks build on each other's finished state.
-- **Ramp-up cost comes from the repository's development profile**, not from this skill. What a worker has to read
-  before it can work differs per repository.
+- **Ramp-up cost comes from the repository's development profile**, the document where a repository records its own
+  process (what to read first, how to build and test, where specs live), not from this skill. What a worker has to
+  read before it can work differs per repository.
 - **One task per teammate, after which it goes away.** A warm teammate handed an unrelated second task carries the
   first task's context into it, and a brief that bundles two tasks leaves each less context than the sizing assumed.
 - **A shared resource is a reason to order spawns, never to merge them.** Merging two tasks to avoid contention
@@ -40,8 +41,9 @@ belong in an agent definition.
 ### Roles
 
 - **A worker never judges its own work.** It reads its own result as the result it meant to produce.
-- **A runner agent is for builds the lead would otherwise run, or for several workers contending for one build
-  directory.** Never put one between a worker and its own build: the worker then loses the output it debugs from.
+- **A runner agent, a teammate whose only job is to run builds and tests and report their output, is for builds the
+  lead would otherwise run, or for several workers contending for one build directory.** Never put one between a
+  worker and its own build: the worker then loses the output it debugs from.
 - **Check a worker's tool grant before assuming it can spawn agents.** An agent definition without `Agent` in its
   grant cannot, and a brief that asks it to fails late.
 
@@ -50,6 +52,8 @@ belong in an agent definition.
 - **Name the decisions that stay with the lead**, typically scope, whether a known gap may ship, and sequencing access
   to a shared resource. The teammate decides the rest; one that does not know which are the lead's escalates all of
   them.
+- **State the write scope the user granted, or that there is none.** A teammate cannot see the user's grant, so a
+  brief that omits it leaves the teammate either writing without permission or writing nothing.
 - **Brief for intent and constraints, not the line to change.** A worker that knows the goal can catch a wrong
   instruction; one given only the edit carries it out.
 - **A brief carries the task and the context the agent cannot discover, and never restates or overrides the agent's
@@ -67,9 +71,9 @@ belong in an agent definition.
 
 - **Real parallel work goes in a shared task list that teammates take from and coordinate on directly.** The lead is
   not a message router; routing every handoff through it spends its context on traffic.
-- **Work of any size has a living spec, in the location the repository's development profile names, edited as
-  decisions land.** Teammates read it and take tasks from it, so a decision recorded there reaches every later
-  teammate without a brief repeating it.
+- **Work of any size has a living spec, in the location the repository's development profile names (or, where it has
+  none, a location the brief states), edited as decisions land.** Teammates read it and take tasks from it, so a
+  decision recorded there reaches every later teammate without a brief repeating it.
 
 ### Worktrees and the language server
 
@@ -83,8 +87,9 @@ belong in an agent definition.
 
 - **With any teammate running concurrently, let messages accumulate and answer once.** A message can be read without
   a reply, and each reply costs both sides a turn.
-- **A teammate sees new mail only after its current tool call ends**, so hold instructions and send them together
-  when it reports. Messages sent one at a time land together anyway, and a later one can contradict an earlier one.
+- **A teammate sees new mail only when its turn ends, or, with a mod installed that delivers mail mid-turn, when its
+  current tool call ends**, so hold instructions and send them together when it reports. Messages sent one at a
+  time land together anyway, and a later one can contradict an earlier one.
 - **A teammate that backgrounds a command and goes idle waiting for it is stuck**: nothing wakes it. Teammates run
   builds in the foreground with a timeout long enough for the build. When one is stuck, message it to check the job.
 - **A build or test run is an exclusive, global resource, compile-only phases included.** Nobody changes a shared
