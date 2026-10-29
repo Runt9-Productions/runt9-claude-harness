@@ -9,9 +9,10 @@ nothing from an employer, a private project or a specific machine goes in, in co
 - `harness/`: what a plugin cannot carry (status line, settings fragments, git hooks, `CLAUDE.md` template and
   fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`), `leak-scan/` (the scan that gate and CI
-  run, with its allowlist in `.leak-scan.toml`, and the `public-leak` review the gate and `review-text.sh` run) and
-  `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and `comment-style` skills). Its
-  version is in `harness/harness.json`.
+  run, with its allowlist in `.leak-scan.toml`, and the `public-leak` review the gate and `review-text.sh` run),
+  `fragments/` (always-on `CLAUDE.md` rules a user imports from `~/.claude/harness/current/fragments/`, so far
+  `delegation.md`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and
+  `comment-style` skills). Its version is in `harness/harness.json`.
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
   `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the
   repositories named, and installs plugins from the marketplace. A new part under `harness/` that must be wired into

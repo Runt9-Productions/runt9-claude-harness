@@ -24,6 +24,11 @@
       "name": "test-review",
       "source": "./plugins/test-review",
       "description": "Judges whether existing tests earn their place, proves each verdict by breaking the code under test, and fixes the tests"
+    },
+    {
+      "name": "delegation",
+      "source": "./plugins/delegation",
+      "description": "How a lead session spawns, briefs, answers and shuts down Agent Teams teammates, with engineer, web-researcher, code-researcher, verifier and triager agent templates"
     }
   ]
 }

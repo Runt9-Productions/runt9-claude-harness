@@ -1,0 +1,3 @@
+- On this machine rule-following degrades past about 25% of the context window, so size tasks to finish below that.
+- Build and test runs use one shared build directory, so at most one teammate builds at a time.
+- Reports longer than a few lines go to `~/scratch/reports/`, one file per task.
