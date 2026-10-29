@@ -36,12 +36,12 @@ EOF
     body=$BATS_TEST_TMPDIR/body.md
 }
 
-@test "a clean body passes both checks, and the review reads it" {
+# review.sh refuses to run without public-leak.md, so the exit status already shows the agent reached the review.
+@test "a clean body passes both checks, and the review gets it and the reviewer brief" {
     printf 'Example title\n\n## Objective\nNothing private here.\n' > "$body"
     run "$review_text" "$body" "$repo" main
     [ "$status" -eq 0 ]
     cmp "$body" "$HOME/bundle/body.md"
-    [ -f "$HOME/bundle/public-leak.md" ]
     [ -f "$HOME/bundle/reviewer-brief.md" ]
 }
 
@@ -51,5 +51,6 @@ EOF
     printf 'Ask someone%sacme-corp.com\n' "$at" > "$body"
     run "$review_text" "$body" "$repo" main
     [ "$status" -eq 1 ]
+    [[ $output == *"email-address  (body):1  someone${at}acme-corp.com"* ]]
     [ ! -d "$HOME/bundle" ]
 }

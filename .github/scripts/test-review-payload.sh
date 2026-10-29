@@ -7,8 +7,8 @@
 #
 # <claude-json> is the run's `claude -p --output-format json` output, whose `result` is the report. The fixes are the
 # working tree's changes against HEAD to test files and helpers, untracked files included. The reviewer breaks
-# production code on purpose to prove a test fails, so a change it left anywhere else is named in the body as a
-# warning, never offered as a suggestion. GitHub takes a comment only on a line inside one hunk
+# production code on purpose to prove a test fails, so a change it left to any other tracked file is named in the
+# body as a warning, never offered as a suggestion. GitHub takes a comment only on a line inside one hunk
 # of the pull request's diff, which is <base-commit>..HEAD, so a fix whose replaced lines are not all inside one hunk
 # goes into the body as a diff instead.
 set -Eeuo pipefail
@@ -28,13 +28,14 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 diff_options=(--no-color --no-renames --no-ext-diff --no-textconv)
-git ls-files -z --others --exclude-standard | xargs -0 -r git add -N --
-git -c core.quotePath=false diff "${diff_options[@]}" -U1 HEAD -- "${TEST_PATHS[@]}" > "$work/fixes.diff"
+# Only tracked files count as stray: the sandbox leaves empty stand-ins for dotfiles it protects in the checkout.
 not_tests=()
 for spec in "${TEST_PATHS[@]}"; do
     not_tests+=(":(exclude,glob)${spec#:(glob)}")
 done
 git -c core.quotePath=false diff --name-only HEAD -- . "${not_tests[@]}" > "$work/stray.txt"
+git ls-files -z --others --exclude-standard -- "${TEST_PATHS[@]}" | xargs -0 -r git add -N --
+git -c core.quotePath=false diff "${diff_options[@]}" -U1 HEAD -- "${TEST_PATHS[@]}" > "$work/fixes.diff"
 git -c core.quotePath=false diff "${diff_options[@]}" "$2" HEAD > "$work/pr.diff"
 echo "::group::The fixes"
 cat "$work/fixes.diff"

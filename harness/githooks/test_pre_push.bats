@@ -1,10 +1,11 @@
 #!/usr/bin/env bats
-# Drives pre-push against a scratch repository and remote with a stub `claude`, so no review is spent. Needs what the
-# hook needs except claude.
+# Drives pre-push against a scratch repository and remote with a stub `claude`, so no review is spent. Needs betterleaks
+# and jq.
 
 zero=0000000000000000000000000000000000000000
 
 setup() {
+    export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
     local source_root
     source_root=$(cd "$BATS_TEST_DIRNAME/../.." && pwd)
     # Laid out as bootstrap.py installs it: the hook runs through `current`, and keeps its state beside it.
@@ -134,7 +135,7 @@ leak="write to someone@acme-corp"".com"
     [[ $output == *"leak-review: read 0 of the "*" lines in commits.patch"* ]]
 }
 
-@test "Normal finding only: allowed, and the pass is cached under the install directory" {
+@test "Normal finding only: allowed, and only the pass is kept, under the install directory" {
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
     [ "$calls" -eq 1 ]
@@ -213,13 +214,12 @@ leak="write to someone@acme-corp"".com"
     [[ $output == *"the leak scan flagged this push"* ]]
 }
 
-@test "default branch without public-leak: refused" {
+@test "default branch without public-leak, though the pushed branch has it: refused" {
     git -C "$repo" switch -q main
     git -C "$repo" rm -q -r .claude
     commit "drop the agent"
     git -C "$repo" push -q "$remote" main
     git -C "$repo" switch -q claude/change
-    git -C "$repo" merge -q main
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 0 ]
@@ -244,12 +244,13 @@ leak="write to someone@acme-corp"".com"
     grep -qx refs/tags/v1 "$stub_dir/bundle/ref-names.txt"
 }
 
+# Each attributes file names only its own text file, so honouring either one alone hides a different line.
 @test "binary files are listed, and attributes or config cannot hide a text file's content" {
     printf 'x\0y\n' > "$repo/data.bin"
-    echo '* -diff' > "$repo/.gitattributes"
+    echo 'one.txt -diff' > "$repo/.gitattributes"
     echo "committed attributes" > "$repo/one.txt"
     commit binary
-    echo '* -diff' > "$repo/.git/info/attributes"
+    echo 'two.txt -diff' > "$repo/.git/info/attributes"
     git -C "$repo" config color.ui always
     echo "local attributes" > "$repo/two.txt"
     commit text
@@ -260,7 +261,7 @@ leak="write to someone@acme-corp"".com"
     grep -q "^+local attributes" "$stub_dir/bundle/commits.patch"
 }
 
-@test "the caller's environment does not reach the review" {
+@test "the caller's environment does not reach the review, but its API key does" {
     ANTHROPIC_BASE_URL=http://127.0.0.1:9 NODE_OPTIONS=--require=/x HTTPS_PROXY=http://127.0.0.1:9 \
         ANTHROPIC_API_KEY=synthetic-key push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
