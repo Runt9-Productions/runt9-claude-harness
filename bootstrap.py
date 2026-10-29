@@ -342,7 +342,8 @@ def check_fragment(name: str, run: Run) -> None:
 
 
 def block_bounds(lines: list[str]) -> tuple[int, int] | None:
-    """The indexes of the block's start and end marker lines, or None when `lines` has neither marker."""
+    """The indexes of the block's start and end marker lines, or None when `lines` has neither marker. Raises Stop
+    when the markers are not one start line followed by one end line, which `check_fragment` relies on."""
     starts = [index for index, line in enumerate(lines) if line.rstrip() == BLOCK_START]
     ends = [index for index, line in enumerate(lines) if line.rstrip() == BLOCK_END]
     if not starts and not ends:
@@ -378,11 +379,11 @@ def install_fragment(name: str, run: Run) -> None:
     if USER_CLAUDE_MD.exists():
         # Bytes, so line endings outside the block survive the round trip.
         before = USER_CLAUDE_MD.read_bytes().decode()
-        start = before
+        base_text = before
     else:
         before = ""
-        start = template.read_bytes().decode() if template.is_file() else ""
-    after = with_import(start, import_line)
+        base_text = template.read_bytes().decode() if template.is_file() else ""
+    after = with_import(base_text, import_line)
     if after == before:
         print(f"fragment:{name}: {USER_CLAUDE_MD} already imports {fragment}")
         return

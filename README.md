@@ -62,7 +62,8 @@ other variables that point it at another repository. Nothing here keeps an agent
 that is your harness's job.
 
 Updating: when `harness/harness.json`'s version rises, check out `main`, pull and run
-`python3 bootstrap.py harness skills` again. For a plugin, run
+`python3 bootstrap.py harness skills` again, adding `fragment:<name>` for a fragment `--list` shows that you have not
+imported yet. For a plugin, run
 `claude plugin update <name>@runt9`; running `bootstrap.py` again does not update a plugin already installed.
 
 MIT licensed.

@@ -480,6 +480,18 @@ def test_fragment_import_goes_inside_the_block_through_a_link_only_on_yes(sandbo
     assert "already imports" in rerun.stdout
 
 
+def test_fragment_import_pasted_outside_any_block_is_left_alone(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    before = f"# Example rules\n{EXAMPLE_IMPORT}\n"
+    sandbox.claude_md.write_text(before)
+
+    result = sandbox.run("fragment:example-rules")
+
+    assert result.returncode == 0, result.stderr
+    assert "already imports" in result.stdout
+    assert sandbox.claude_md.read_text() == before
+
+
 @pytest.mark.parametrize("template", ["# Example template\n", None], ids=["template", "no-template"])
 def test_missing_claude_md_starts_from_the_harness_template(sandbox: Sandbox, template: str | None) -> None:
     if template is not None:
