@@ -19,8 +19,6 @@
   as raw output. A search scoped to the files just touched does not count.
 - A rule in a living document may have been written by an earlier agent session rather than decided by the user.
   Check where it came from before treating it as binding, and ask when it is the only thing blocking a simplification.
-- A fact, invariant or trap found while working that the project's docs lack is raised as a candidate addition rather
-  than kept only in the conversation.
 - When friction comes from something a per-call hook cannot reach (what the model is told, tool descriptions, state
   across events, live terminal UI), suggest a Claude Code mod. A per-call allow or deny stays a settings hook, which
   needs nothing more.

@@ -14,3 +14,6 @@
   room for a note, rather than in one long message.
 - Stage each new or changed file by path with `git add` as it is made, so review shows a new file as an addition
   rather than as untracked. Changes the user made stay unstaged, so the staged diff holds only the agent's work.
+- A fact, invariant or trap that the project's instructions or docs lack, found while working, is raised with the user
+  as a proposed addition, naming the file it belongs in. Knowledge kept only in one conversation is a gap the next
+  session falls into again.
