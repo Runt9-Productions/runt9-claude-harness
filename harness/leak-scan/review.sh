@@ -4,10 +4,11 @@
 #   review.sh [--cache <dir>] <bundle-dir> <git-dir> <trusted-commit> <request> <input>...
 #
 # Each input is copied into <bundle-dir>, an empty directory the caller made, under its own name; an empty input is
-# left out. The agent's definition, the reviewer brief, the review profile and CLAUDE.md come from <trusted-commit> in
-# <git-dir>, never the working tree, so the change under review cannot rewrite its own review. <request> tells the
-# agent what the inputs are. With --cache, a pass is recorded in <dir> under a hash of the bundle and of every file in
-# the installed githooks/ and leak-scan/, and the same review is not run twice; it needs githooks/ beside leak-scan/.
+# left out. The agent's definition, the lens-review plugin's reviewer brief, the review profile and CLAUDE.md come from
+# <trusted-commit> in <git-dir>, never the working tree, so the change under review cannot rewrite its own review; the
+# profile and CLAUDE.md may be absent. <request> tells the agent what the inputs are. With --cache, a pass is
+# recorded in <dir> under a hash of the bundle and of every file in the installed githooks/ and leak-scan/, and the
+# same review is not run twice; it needs githooks/ beside leak-scan/.
 #
 # Exit 0 passed, 1 a finding not rated Normal or an open question, 2 the review did not run. Treat 2 as a failure.
 set -Eeuo pipefail
@@ -64,7 +65,10 @@ for input in "$@"; do
     fi
 done
 
-for path in .claude/agents/code-review/public-leak.md .claude/agents/references/reviewer-brief.md \
+# A repository that carries the lens-review plugin has the brief inside it; any other keeps its own copy beside its
+# agent definitions.
+for path in .claude/agents/code-review/public-leak.md \
+    plugins/lens-review/skills/lens-review/references/reviewer-brief.md .claude/agents/references/reviewer-brief.md \
     .claude/code-review-profile.md CLAUDE.md; do
     if git --git-dir="$git_dir" cat-file -e "$trusted:$path" 2> /dev/null; then
         git --git-dir="$git_dir" cat-file blob "$trusted:$path" > "$bundle/${path##*/}"
@@ -73,6 +77,10 @@ done
 agent_file=$bundle/public-leak.md
 if [[ ! -f $agent_file ]]; then
     echo "leak-review: $trusted has no .claude/agents/code-review/public-leak.md" >&2
+    exit 2
+fi
+if [[ ! -f $bundle/reviewer-brief.md ]]; then
+    echo "leak-review: $trusted has no reviewer brief, in plugins/lens-review or .claude/agents/references" >&2
     exit 2
 fi
 
@@ -105,8 +113,8 @@ schema='{
 }'
 
 request="$request In the input files, a line longer than 4000 characters is split into pieces of 4000 that overlap \
-by 200. The reviewer brief is reviewer-brief.md, and the repository's review profile and CLAUDE.md, where it has \
-them, are code-review-profile.md and CLAUDE.md, all here. Read every input file to its last line, in pages where it \
+by 200. The reviewer brief, the repository's review profile and CLAUDE.md, where it has them, are reviewer-brief.md, \
+code-review-profile.md and CLAUDE.md, all here. Read every input file to its last line, in pages where it \
 is long, and give each one's name and the last line number you read of it in read. Report every finding and open \
 question in the structured output."
 

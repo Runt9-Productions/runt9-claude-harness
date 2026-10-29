@@ -1,6 +1,6 @@
 # Test review profile
 
-Facts about this repository's tests that `/test-review` and the `test-reviewer` agent need.
+Facts about this repository's tests that `/test-review` and its `test-review:test-reviewer` agent need.
 
 ## Default branch
 
