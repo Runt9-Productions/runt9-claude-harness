@@ -106,6 +106,9 @@ Run this on the run directory. It writes `manifest.tsv` (per file: lines added, 
 inside `patch.diff`, and the path) and `hunks.txt` (per file: the new-side line spans its hunks cover, comma
 separated, or `-` for none, then the path). It prints the patch's line count.
 
+<!-- Claude Code replaces a dollar sign before a digit with an argument when it loads a skill, so every awk field in
+this file carries a backslash, which the load removes. -->
+
 ```bash
 set -euo pipefail
 dir='<run directory>'
@@ -116,8 +119,8 @@ mapfile -d '' records < <(git apply --numstat -z < patch.diff)
 # One line per `diff --git` section: its first and last line in patch.diff, then the new-side spans of its hunks.
 mapfile -t sections < <(awk '
     /^diff --git / { n++; start[n] = NR; if (n > 1) end[n - 1] = NR - 1; next }
-    n && /^@@+ / && match($0, /\+[0-9]+(,[0-9]+)?/) {
-        k = split(substr($0, RSTART + 1, RLENGTH - 1), part, ",")
+    n && /^@@+ / && match(\$0, /\+[0-9]+(,[0-9]+)?/) {
+        k = split(substr(\$0, RSTART + 1, RLENGTH - 1), part, ",")
         count = k > 1 ? part[2] + 0 : 1
         if (count > 0) spans[n] = spans[n] (spans[n] == "" ? "" : ",") part[1] "-" (part[1] + count - 1)
     }
@@ -229,13 +232,13 @@ Write to create `$dir/locations.tsv` with one line per finding: its line number,
 ```bash
 dir='<run directory>'
 awk -F'\t' '
-    { path = $0; sub(/^[^\t]*\t/, "", path) }
-    FNR == NR { if ($1 != "-") spans[path] = $1; next }
+    { path = \$0; sub(/^[^\t]*\t/, "", path) }
+    FNR == NR { if (\$1 != "-") spans[path] = \$1; next }
     {
-        line = $1 + 0; hit = 0
+        line = \$1 + 0; hit = 0
         n = split(spans[path], span, ",")
         for (i = 1; i <= n; i++) if (split(span[i], b, "-") == 2 && line >= b[1] + 0 && line <= b[2] + 0) hit = 1
-        print (hit ? "inline" : "body") "\t" $0
+        print (hit ? "inline" : "body") "\t" \$0
     }
 ' "$dir/hunks.txt" "$dir/locations.tsv"
 ```
