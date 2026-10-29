@@ -11,7 +11,7 @@ Updates are manual: run `claude plugin update <name>@runt9` when you want one.
 
 ## Harness parts
 
-The parts that cannot be plugins, such as the git hooks and the style-guide skills, are installed from a clone with `bootstrap.py`, which can
+The parts that cannot be plugins, such as the git hooks, the style-guide skills and the `CLAUDE.md` fragments, are installed from a clone with `bootstrap.py`, which can
 install the plugins too. Run it in your own shell, not in a Claude Code session, since an agent must not be the one
 writing the install. It needs Python 3.12 and git, and `claude` for plugin components; the hooks need what
 [their README](harness/githooks/README.md) lists.
@@ -30,6 +30,7 @@ With no component named it asks about each one. The components, in install order
 | `harness` | `harness/` as it is in the commit checked out (never the working tree), into `~/.claude/harness/versions/<version>/` with that commit's hash in `SOURCE_COMMIT`, then points the `~/.claude/harness/current` link at it and removes every other version. `<version>` is `harness/harness.json`'s; when it is already installed, it asks before replacing it. READMEs and tests are not installed. |
 | `hooks-path` | `core.hooksPath` set to `~/.claude/harness/current/githooks` in each `--repo`. Git then runs only those hooks there. |
 | `skills` | A link `~/.claude/skills/<name>` to `~/.claude/harness/current/skills/<name>` for each skill, and removes links to a skill the installed version no longer has. Other skills are never touched. |
+| `fragment:<name>` | The line `@~/.claude/harness/current/fragments/<name>.md`, one component per file in `harness/fragments/`, added to a block in `~/.claude/CLAUDE.md` between two `runt9-claude-harness` marker lines. It shows the diff and asks before writing, adds the block at the end when there is none, and never changes a line outside it. A missing `~/.claude/CLAUDE.md` starts from the installed harness's `CLAUDE.md` template where it has one. A file that already imports the fragment, anywhere, is left alone. A `CLAUDE.md` that links elsewhere keeps its link, and the file it names changes. |
 | `plugin:<name>` | `claude plugin marketplace add Runt9-Productions/runt9-claude-harness`, then `claude plugin install <name>@runt9`. Plugins come from GitHub, never from this clone. |
 
 Everything else goes through `current`, so a new version takes effect for hooks and skills at once, and the leak
@@ -49,13 +50,16 @@ rest stop at that component:
   stops running, and fails when git reads back another value (a `config.worktree` or an include sets it).
 - `skills`: `~/.claude/skills` resolving outside `~/.claude`, or a skill's name already taken there by anything but
   its link, which you move away yourself.
+- `fragment:<name>`: before anything installs, an installed harness without the fragment (unless `harness` is in the
+  same run), or a `~/.claude/CLAUDE.md` whose markers are not one start line followed by one end line, which you fix
+  by hand. Answering no to the diff stops the run there.
 - `plugin:<name>`: `claude` missing from `PATH`. It warns when `CLAUDE_CODE_PLUGIN_DIRS` is set, since a plugin that
   loads replaces the installed one of the same name.
 
-`hooks-path` and `skills` need the harness installed first, in the same run or an earlier one. A component installed
-before a later one failed stays installed. Git runs without `GIT_DIR`, `GIT_WORK_TREE` and the other variables that
-point it at another repository. Nothing here keeps an agent from writing to `~/.claude/harness/`; that is your
-harness's job.
+`hooks-path`, `skills` and the fragments need the harness installed first, in the same run or an earlier one. A
+component installed before a later one failed stays installed. Git runs without `GIT_DIR`, `GIT_WORK_TREE` and the
+other variables that point it at another repository. Nothing here keeps an agent from writing to `~/.claude/harness/`;
+that is your harness's job.
 
 Updating: when `harness/harness.json`'s version rises, check out `main`, pull and run
 `python3 bootstrap.py harness skills` again. For a plugin, run

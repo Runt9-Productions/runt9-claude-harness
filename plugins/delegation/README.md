@@ -14,10 +14,11 @@ Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
 /plugin install delegation@runt9
 ```
 
-Then install the harness (see the repository's README) and add this line to your `~/.claude/CLAUDE.md`:
+Then, from a clone of the repository (see its README), install the harness and the fragment, which adds the line
+`@~/.claude/harness/current/fragments/delegation.md` to your `~/.claude/CLAUDE.md` after showing you the diff:
 
 ```
-@~/.claude/harness/current/fragments/delegation.md
+python3 bootstrap.py harness fragment:delegation
 ```
 
 The fragment lives in the harness rather than in this plugin because a plugin's install path carries its version,
