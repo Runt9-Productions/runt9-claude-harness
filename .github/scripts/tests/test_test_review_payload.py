@@ -73,7 +73,8 @@ def checkout(tmp_path: Path) -> Checkout:
 
 def test_fix_inside_one_pr_hunk_is_a_suggestion_and_one_reaching_past_it_is_in_the_body(checkout: Checkout) -> None:
     # The PR's hunk spans lines 1 to 6. The first fix turns line 3 into two lines, so its hunk replaces lines 2 to 4;
-    # the second, on line 7, has a hunk of lines 6 to 8, which starts inside the PR's hunk and ends past it.
+    # the second, on line 7 (line 8 once the first fix adds a line), has a hunk of lines 6 to 8, which starts inside
+    # the PR's hunk and ends past it.
     checkout.replace_line("example.bats", 3, "line 3, fixed\nline 3, continued")
     checkout.replace_line("example.bats", 8, "line 7, fixed")
 
@@ -98,6 +99,16 @@ def test_fix_inside_one_pr_hunk_is_a_suggestion_and_one_reaching_past_it_is_in_t
     fallback = checkout.output_value("fallback")
     assert "+line 3, fixed" in fallback
     assert "+line 7, fixed" in fallback
+
+
+def test_form_feed_inside_a_line_stays_in_its_suggestion(checkout: Checkout) -> None:
+    checkout.replace_line("example.bats", 3, "line 3,\x0cfixed")
+
+    result = checkout.run()
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    [comment] = checkout.payload()["comments"]
+    assert comment["body"] == "```suggestion\nline 2\nline 3,\x0cfixed\nline 4\n```"
 
 
 def test_test_file_the_review_added_is_a_diff_in_the_body(checkout: Checkout) -> None:

@@ -23,6 +23,7 @@ from pathlib import Path
 
 # A review body holds at most 65,536 characters.
 BODY_LIMIT = 60000
+CUT_NOTE = "\n\n(The report was cut to fit.)"
 # The test files and helpers of the "Test kinds" table in .claude/test-review-profile.md, as git glob pathspecs.
 TEST_GLOBS = ("**/*.bats", "**/test_*.py", "plugins/**/*.test.ts", "plugins/**/*.test.tsx")
 TEST_HELPERS = (".github/scripts/tests/helpers.bash",)
@@ -41,7 +42,10 @@ class Hunk:
 
     @property
     def replaced(self) -> tuple[int, int]:
-        """The first and last old-side line the hunk replaces; last < first when it only inserts."""
+        """The first and last old-side line the hunk replaces; last < first when it only inserts.
+
+        A fix's old side is HEAD, which is the pull request's new side, so these are RIGHT-side lines of its review.
+        """
         return self.old_start, self.old_start + self.old_count - 1
 
     def new_text(self) -> str:
@@ -73,7 +77,11 @@ def test_pathspecs() -> list[str]:
 def parse_diff(text: str) -> list[FileDiff]:
     files: list[FileDiff] = []
     old_path = None
-    for line in text.splitlines():
+    # Only "\n" ends a diff line; splitlines() would also split one at a form feed or a Unicode line separator.
+    lines = text.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    for line in lines:
         if line.startswith("diff --git "):
             files.append(FileDiff(header=[line]))
             old_path = None
@@ -151,10 +159,13 @@ def split_fixes(fixes: list[FileDiff], spans: dict[str, list[tuple[int, int]]]) 
 
 
 def fit(report: str, sections: str) -> str:
-    """The report followed by the sections, cutting the report rather than the sections when it is too long."""
+    """The report followed by the sections, with the report cut first.
+
+    The sections are cut only when they alone pass the limit.
+    """
     room = BODY_LIMIT - len(sections)
     if len(report) > room:
-        report = report[: max(room - 40, 0)] + "\n\n(The report was cut to fit.)"
+        report = report[: max(room - len(CUT_NOTE), 0)] + CUT_NOTE
     return (report + sections)[:BODY_LIMIT]
 
 
@@ -175,7 +186,9 @@ def build(report: str, base: str) -> tuple[str, str]:
         git("add", "-N", "--", *untracked)
     fixes_text = git("diff", *DIFF_OPTIONS, "-U1", "HEAD", "--", *test_pathspecs())
     pr_text = git("diff", *DIFF_OPTIONS, base, "HEAD")
-    print(f"::group::The fixes\n{fixes_text}::endgroup::")
+    # Stopped, so a line of the diff that starts with "::" is printed rather than run as a workflow command.
+    token = secrets.token_hex(16)
+    print(f"::group::The fixes\n::stop-commands::{token}\n{fixes_text}::{token}::\n::endgroup::")
 
     stray_section = ""
     if stray:
@@ -210,8 +223,8 @@ def main() -> None:
     args = parser.parse_args()
 
     run = json.loads(args.claude_json.read_text())
-    report = "" if run.get("is_error") else run.get("result") or ""
-    if not report:
+    report = run.get("result") or ""
+    if not report or run.get("is_error"):
         print("::error::The test review wrote no report.")
         sys.exit(1)
     payload, fallback = build(report, args.base)

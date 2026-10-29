@@ -36,6 +36,7 @@ jobs:
     steps:
       # The install action comes from the default branch, not the PR: the bot can change a file under .github/actions,
       # though not a workflow, and an action run before the review could plant a command it then runs with the token.
+      # For the same reason this job never runs `npm ci`: the PR controls package.json and the lockfile.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -52,6 +53,18 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # Claude Code loads the checkout's project settings, whose env, sandbox and helper commands can undo the scrub or
+      # run a command holding the token. --setting-sources user would also drop the PR's agents and skills, so a PR
+      # that adds a settings file is not reviewed.
+      - name: Refuse project settings
+        run: |
+          for file in .claude/settings.json .claude/settings.local.json; do
+            if [[ -e $file ]]; then
+              echo "::error::The review does not run with project settings, and the PR has $file."
+              exit 1
+            fi
+          done
 
       - name: Review
         env:

@@ -5,8 +5,8 @@
 #
 # Each input is copied into <bundle-dir>, an empty directory the caller made, under its own name; an empty input is
 # left out. The agent's definition, the lens-review plugin's reviewer brief, the review profile and CLAUDE.md come from
-# <trusted-commit> in <git-dir>, never the working tree, so the change under review cannot rewrite its own review; any
-# but the agent's definition may be absent. <request> tells the agent what the inputs are. With --cache, a pass is
+# <trusted-commit> in <git-dir>, never the working tree, so the change under review cannot rewrite its own review; the
+# profile and CLAUDE.md may be absent. <request> tells the agent what the inputs are. With --cache, a pass is
 # recorded in <dir> under a hash of the bundle and of every file in the installed githooks/ and leak-scan/, and the
 # same review is not run twice; it needs githooks/ beside leak-scan/.
 #
@@ -65,8 +65,11 @@ for input in "$@"; do
     fi
 done
 
+# A repository that carries the lens-review plugin has the brief inside it; any other keeps its own copy beside its
+# agent definitions.
 for path in .claude/agents/code-review/public-leak.md \
-    plugins/lens-review/skills/lens-review/references/reviewer-brief.md .claude/code-review-profile.md CLAUDE.md; do
+    plugins/lens-review/skills/lens-review/references/reviewer-brief.md .claude/agents/references/reviewer-brief.md \
+    .claude/code-review-profile.md CLAUDE.md; do
     if git --git-dir="$git_dir" cat-file -e "$trusted:$path" 2> /dev/null; then
         git --git-dir="$git_dir" cat-file blob "$trusted:$path" > "$bundle/${path##*/}"
     fi
@@ -74,6 +77,10 @@ done
 agent_file=$bundle/public-leak.md
 if [[ ! -f $agent_file ]]; then
     echo "leak-review: $trusted has no .claude/agents/code-review/public-leak.md" >&2
+    exit 2
+fi
+if [[ ! -f $bundle/reviewer-brief.md ]]; then
+    echo "leak-review: $trusted has no reviewer brief, in plugins/lens-review or .claude/agents/references" >&2
     exit 2
 fi
 

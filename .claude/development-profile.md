@@ -138,8 +138,9 @@ pre-push gate trusts it, so a build never writes to it.
   and `main` takes changes only by pull request with `gate` passing and the branch up to date.
 - With only the remote half present there is no standing grant: commit, push and open the pull request when the owner
   says so at the end of the task, or for the whole run where the owner has granted that.
-- Pull request: `gh pr create --draft --base main --label code-review-requested --body-file <file>`. It leaves draft
-  with `gh pr ready <n>` once the review has run, its Critical and High findings are fixed and pushed, every thread is
+- Pull request: `gh pr create --draft --base main --label test-review-requested --body-file <file>`; add
+  `code-review-requested` once the test fixes wanted are committed (section 9). It leaves draft with `gh pr ready <n>`
+  once the review has run, its Critical and High findings are fixed and pushed, every thread is
   answered and the fixed ones resolved, and the reviewer guide is posted. The owner squash-merges.
 
 ## 11. Hand-off

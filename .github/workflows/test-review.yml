@@ -90,6 +90,16 @@ jobs:
             | bash -s -- "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
+      # As in code-review.yml: project settings could undo the scrub that keeps the token from the PR's tests.
+      - name: Refuse project settings
+        run: |
+          for file in .claude/settings.json .claude/settings.local.json; do
+            if [[ -e $file ]]; then
+              echo "::error::The review does not run with project settings, and the PR has $file."
+              exit 1
+            fi
+          done
+
       - name: Review
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

@@ -13,7 +13,7 @@ runs:
   steps:
     # Newest release on every run, outside the lockfile: local Claude Code auto-updates, so a check must run the
     # version users have. With scripts off the package's `claude` binary is a stub that exits 1; cli-wrapper.cjs is the
-    # package's launcher for that case. Never `npm ci` before a review: the PR controls package.json and the lockfile.
+    # package's launcher for that case.
     - name: Install Claude Code
       shell: bash
       working-directory: ${{ runner.temp }}

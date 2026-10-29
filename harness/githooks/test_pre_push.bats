@@ -54,8 +54,10 @@ EOF
     git init -q -b main "$repo"
     git -C "$repo" config user.name test
     git -C "$repo" config user.email test@example.com
-    mkdir -p "$repo/.claude/agents/code-review"
+    mkdir -p "$repo/.claude/agents/code-review" "$repo/.claude/agents/references"
     cp "$source_root/.claude/agents/code-review/public-leak.md" "$repo/.claude/agents/code-review/"
+    cp "$source_root/plugins/lens-review/skills/lens-review/references/reviewer-brief.md" \
+        "$repo/.claude/agents/references/"
     commit base
     git -C "$repo" push -q "$remote" main
     git -C "$repo" fetch -q "$remote" '+refs/heads/*:refs/remotes/bot/*'
@@ -224,6 +226,18 @@ leak="write to someone@acme-corp"".com"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 0 ]
     [[ $output == *"has no .claude/agents/code-review/public-leak.md"* ]]
+}
+
+@test "default branch without a reviewer brief: refused" {
+    git -C "$repo" switch -q main
+    git -C "$repo" rm -q -r .claude/agents/references
+    commit "drop the brief"
+    git -C "$repo" push -q "$remote" main
+    git -C "$repo" switch -q claude/change
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"has no reviewer brief"* ]]
 }
 
 @test "the review gets identities, what a merge adds, tag messages and ref names" {
