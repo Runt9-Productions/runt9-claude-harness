@@ -6,6 +6,11 @@
   },
   "plugins": [
     {
+      "name": "lens-review",
+      "source": "./plugins/lens-review",
+      "description": "Runs a repository's own panel of reviewer agents over a diff, merges their findings into one graded report and delivers it where the repository's profile says"
+    },
+    {
       "name": "reference-kb",
       "source": "./plugins/reference-kb",
       "description": "Reference knowledge bases in .claude/reference/: the note format, templates, a validator with a merge gate for CI, and a writer agent"
@@ -19,6 +24,11 @@
       "name": "teammate-delivery",
       "source": "./plugins/teammate-delivery",
       "description": "Lets a teammate that is mid-turn read a message on its next model request, not after the turn is over"
+    },
+    {
+      "name": "test-review",
+      "source": "./plugins/test-review",
+      "description": "Judges whether existing tests earn their place, proves each verdict by breaking the code under test, and fixes the tests"
     },
     {
       "name": "delegation",
