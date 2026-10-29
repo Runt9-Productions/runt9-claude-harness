@@ -1,5 +1,5 @@
-<!-- A missing file, or a kind left blank, means the chat fallback: decisions in chat, owner tasks in the final
-report, progress in the spec checklist. -->
+<!-- Names this machine's tool for each kind of output. The develop skill's "Decision tools" section says what a
+blank kind, or a tool the session does not have, falls back to. -->
 
 - decision: `mcp__example__ask_decision`
 - owner task: `mcp__example__post_owner_task`

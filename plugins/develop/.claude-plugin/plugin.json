@@ -5,5 +5,5 @@
   "author": {
     "name": "Runt9 Productions"
   },
-  "dependencies": ["lens-review", "delegation"]
+  "dependencies": ["delegation"]
 }

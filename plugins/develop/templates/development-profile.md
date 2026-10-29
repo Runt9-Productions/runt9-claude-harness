@@ -30,7 +30,8 @@ them. Whether this file is tracked in git is your repository's choice.
   because a plugin cannot set worktree options.
 - What renaming the worktree's branch changes about cleaning it up.
 - What the worktree shares with the main checkout, and whether writes through it work.
-- Where the working directory is (default `.claude/output/<ticket>/`, which must be git-excluded).
+- Where the working directory is in the main checkout (default `.claude/output/<ticket>/`, which must be
+  git-excluded).
 - Whether building needs a fresh session started in the worktree, and its start command.
 
 ## 4. Spec location
@@ -40,7 +41,8 @@ them. Whether this file is tracked in git is your repository's choice.
 
 ## 5. Agents
 
-- Implementer, verifier, doc writer, comment sweep (default `develop:comment-sweeper`) and research agents.
+- Implementer, verifier, doc writer, comment sweep (default `develop:comment-sweeper`) and research agents, each by
+  the id it is spawned as. A `delegation` template is not one until it is copied into `.claude/agents/` and filled in.
 - The ramp-up an agent spends before useful work, which task sizing in step 2 assumes.
 - Anything a brief must add to an agent's definition.
 
@@ -65,7 +67,7 @@ them. Whether this file is tracked in git is your repository's choice.
 
 ## 9. Review
 
-- Whether a lens-review profile exists.
+- The panel review: the `lens-review` skill (the default) and whether its profile exists, or the repository's own.
 - How the panel review is triggered: invoked locally with a panel, or a CI trigger such as a label. If the trigger
   skips draft pull requests, section 10's draft rule must allow for it.
 - Whether a test-review profile exists, and whether to skip test review.

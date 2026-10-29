@@ -29,9 +29,10 @@ allowed-tools: Read(~/.claude/local/develop/**)
 ## Splitting the research
 
 The lead reads the ticket and the knowledge base itself, then divides the tracing into self-contained questions, one
-per subsystem or per candidate design, each for its own research teammate. The `delegation` plugin's
-`templates/code-researcher.md` fits, because it returns the path as `file:line` hops. The comparison, the web check
-and the list of unverified points stay with the lead.
+per subsystem or per candidate design, each for its own research teammate: the research agent section 5 of the
+repository's development profile names, or else the `delegation` plugin's `templates/code-researcher.md` once it is
+copied into `.claude/agents/` and filled in, because it returns the path as `file:line` hops. The comparison, the
+web check and the list of unverified points stay with the lead.
 
 Before relying on a teammate's claim stated as certain, or one the numbers depend on, check it in the code. One
 missed caller can make an edge case look like a guaranteed failure.

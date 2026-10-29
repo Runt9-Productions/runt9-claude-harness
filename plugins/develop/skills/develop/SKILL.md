@@ -31,8 +31,10 @@ step number, start there; see "Starting mid-process".
 
   Without a knowledge base, section 4 names the location and its format.
 - **Working directory**: per-ticket scratch that section 3 names, defaulting to `.claude/output/<ticket>/` when that
-  path is git-excluded. It holds task results, saved review reports, evidence, the three lists below and the
-  handoff. Anything a later step relies on goes here, because it must outlive the teammate that produced it.
+  path is git-excluded. It always lies in the main checkout, never in a worktree, and once a worktree exists it is
+  named by its absolute path, in briefs, the handoff and resume lines alike: removing a worktree deletes everything
+  inside it. It holds task results, saved review reports, evidence, the three lists below and the handoff. Anything
+  a later step relies on goes here, because it must outlive the teammate that produced it.
 - **Decision tools**: the tools the "Decision tools" section at the end names for four kinds of output: decisions,
   owner tasks, task progress and the status line. Where it names none for a kind, decisions are asked in chat, owner
   tasks go in the final report, and progress is kept in the spec location's checklist.
@@ -98,23 +100,30 @@ present.
   `--worktree` sessions and `isolation: "worktree"` agents alike. Name the worktree after the ticket.
   - When section 3 requires a fresh build session, do not create the worktree here. The start command
     `claude --worktree <name>` creates it, and the same command later re-enters it with its commits, files and
-    renamed branch intact, so it also serves to resume. The build session renames the branch and runs the base check
-    before anything else.
-  - Otherwise create it in this session with the `EnterWorktree` tool, then rename and check.
+    renamed branch intact, so it also serves to resume. The build session renames the branch, runs the base check
+    and brings the spec into the branch before anything else.
+  - Otherwise create it in this session with the `EnterWorktree` tool, then rename, check and bring the spec in.
 - **Branch.** Rename the built-in's branch to section 2's pattern with `git branch -m`. Section 3 says what the
   rename changes about cleanup.
 - **Base check.** Before the first commit, compare the worktree's HEAD with the base ref from section 2, freshly
   fetched. The built-in starts from the remote default branch or the current HEAD and knows nothing of the ticket's
   base, so a stacked or feature base would otherwise drag foreign commits into the pull request unnoticed. On a
   mismatch, stop: report both commits and the intended base, and touch nothing until the owner replies.
+- **Spec into the branch.** A new worktree holds none of the uncommitted files in the main checkout. When the spec
+  location is tracked in git, the session in the worktree copies each file steps 1 and 2 added or changed there from
+  the main checkout to the same path, commits them as the branch's first commit, then takes them out of the main
+  checkout (deleting added files, restoring changed ones), where they would otherwise block the merge that later
+  brings the branch back. Until then, and wherever the spec is untracked, it reads the spec from the main checkout.
 - **Task progress.** The session that does the build posts the task-progress items: one per spec task, then steps 5
   to 12. When section 3 requires a fresh build session in the worktree, write the handoff and end here, giving the
-  owner the start command and the line that resumes at step 4. A session's language server stays rooted where the
-  session started, so from anywhere else it answers wrongly about the branch and raises no error.
+  owner the start command and the line that resumes at step 4, which names the handoff by its absolute path. A
+  session's language server stays rooted where the session started, so from anywhere else it answers wrongly about
+  the branch and raises no error.
 - **Handoff.** Write `handoff.md` in the working directory, because decision-tool state may not carry across
-  sessions and this file is the bridge. It holds:
-  - the ticket, the repository, the worktree path, the branch and the base commit;
-  - the spec paths and the first task;
+  sessions and this file is the bridge. Every path in it is absolute. It holds:
+  - the ticket, the repository, the main checkout, the worktree path, the branch and the base commit;
+  - the working directory;
+  - the spec paths in the main checkout, and the first task;
   - every decision so far with its id, the owner's answer and any note, quoted;
   - the ticket changes made, the estimate value included;
   - owner tasks still open, and capacity notes;
@@ -127,10 +136,12 @@ Exit: every decision answered and step 4 unblocked.
 The build session opens by reading the handoff, making one trial write into the working directory to prove it has
 access, posting the task-progress items, and making section 1's "work started" ticket update.
 
-For each task, spawn the implementer section 5 names. With none named, stop and point at the `delegation` plugin's
+For each task, spawn the implementer section 5 names. A `delegation` template is not an agent until it is copied
+into `.claude/agents/` and filled in, so with no adopted implementer named, stop and point at that plugin's
 `templates/engineer.md`. The brief holds only what the engineer cannot discover:
 
 - the spec paths, and the previous task's result file;
+- the write scope settled in step 3;
 - which decisions stay with the lead: scope, accepting a known gap, and sequencing builds;
 - stage by path and make no commits;
 - questions go to the lead;
@@ -147,8 +158,8 @@ Exit: every task committed and the relevant suites green.
 
 ### 5. Verify
 
-Section 7 picks the method: its named verifier driving the manual checks (the `delegation` plugin's
-`templates/verifier.md` is a starting point), a script over seeded data, or nothing. First check who holds any
+Section 7 picks the method: section 5's verifier driving the manual checks (the `delegation` plugin's
+`templates/verifier.md`, adopted, is a starting point), a script over seeded data, or nothing. First check who holds any
 shared server. Evidence must be something a reviewer can see: each new or altered UI state, or sample output.
 Problems found become tasks through step 4. An old bug the change exposes is a decision: repair it here, or open a
 separate issue.
@@ -164,9 +175,11 @@ the runs for the newest head.
 If the repository has `.claude/test-review-profile.md`, the `test-review` skill is installed and section 9 does not
 opt out, run `/test-review` first.
 
-Then run `lens-review` on the pull request the way section 9 says: invoked locally with a panel, or through a CI
-trigger such as a label. Invoked without a panel, it stops after proposing one, on purpose. Invoke it again with
-that proposal plus any additions, and give a reason for each proposed reviewer left out.
+Then run the panel review section 9 names on the pull request, the way it says: invoked locally with a panel, or
+through a CI trigger such as a label. Where it names none, the panel is the `lens-review` skill; if that is not
+installed, stop and name the `lens-review` plugin. Invoked without a panel, `lens-review` stops after proposing one,
+on purpose. Invoke it again with that proposal plus any additions, and give a reason for each proposed reviewer left
+out.
 
 Author notes wait until this step is done, because reviewers anchor on them. A review that runs after step 10 is
 told those notes are not established fact. The review runs in a fork and returns its report as text: save it in the
@@ -232,8 +245,9 @@ their go-ahead.
 
 ## Decision tools
 
-Tools named on this machine for each kind of output. `(none)`, or a kind left blank, means the chat fallback in
-"Definitions".
+Tools named on this machine for each kind of output. `(none)`, a kind left blank, or a named tool this session does
+not have (not in the tool list, nor loadable as a deferred tool) means the chat fallback in "Definitions" for that
+kind.
 
 !`cat ~/.claude/local/develop/decision-tools.md 2>/dev/null || echo "(none)"`
 

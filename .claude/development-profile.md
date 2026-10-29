@@ -38,9 +38,9 @@ a knowledge base note already answers a question, this file points there.
 - Renaming the branch: what it changes about the built-in worktree's cleanup has not been measured here.
 - Shared with the main checkout: the git config, so `core.hooksPath` and the `claude.*` keys the hooks read apply in
   every worktree, and commits made in one are visible to all. Writes through it work.
-- Working directory: `.claude/output/<ticket>/`, ignored by the tracked `.gitignore`. It is scratch: working
-  documents that must last go in the spec location. No comment or doc may point at it, because no other clone has
-  it.
+- Working directory: `.claude/output/<ticket>/` in the main checkout, ignored by the tracked `.gitignore`. It is
+  scratch: working documents that must last go in the spec location. No comment or doc may point at it, because no
+  other clone has it.
 - Fresh session: yes, started with `claude --worktree <name>`, because a session's language server stays rooted where
   the session started.
 
@@ -56,15 +56,13 @@ a knowledge base note already answers a question, this file points there.
 
 ## 5. Agents
 
-- Implementer, verifier and research agents: the `delegation` plugin's templates. Doc writer: `reference-kb:kb-writer`
-  for knowledge base notes; the implementer keeps the other living docs (the table in
-  `.claude/code-review-profile.md`) in step with the code. Comment sweep: `develop:comment-sweeper`.
+- Implementer `engineer`, verifier `verifier` and research agent `code-researcher`: the `delegation` plugin's
+  templates adopted into `.claude/agents/` with this repository's values. Doc writer: `reference-kb:kb-writer` for
+  knowledge base notes; the implementer keeps the other living docs (the table in `.claude/code-review-profile.md`)
+  in step with the code. Comment sweep: `develop:comment-sweeper`.
 - Ramp-up: not measured.
 - Every brief adds:
   - the "Writing here" rules in `CLAUDE.md`;
-  - the style-guide skills from this checkout's `harness/skills/`: `code-style`, `comment-style` and the skill for the
-    language changed;
-  - read the knowledge base note covering an area before its code;
   - a change to what a plugin ships raises its `version`, and a change under `harness/` raises
     `harness/harness.json`;
   - nothing is copied in from another project, and every fixture and example is synthetic.
