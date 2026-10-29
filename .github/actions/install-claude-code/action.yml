@@ -13,11 +13,11 @@ runs:
   steps:
     # Newest release on every run, outside the lockfile: local Claude Code auto-updates, so a check must run the
     # version users have. With scripts off the package's `claude` binary is a stub that exits 1; cli-wrapper.cjs is the
-    # package's launcher for that case.
+    # package's launcher for that case. The PATH entry is under the runner's temp directory, outside the checkout.
     - name: Install Claude Code
       shell: bash
       working-directory: ${{ runner.temp }}
-      run: | # zizmor: ignore[adhoc-packages] latest on purpose: the version auto-updating users run
+      run: | # zizmor: ignore[adhoc-packages,github-env] latest on purpose; PATH gains a temp dir
         npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
         mkdir -p "$RUNNER_TEMP/bin"
         printf '#!/bin/sh\nexec node "%s" "$@"\n' \
