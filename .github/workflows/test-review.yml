@@ -15,7 +15,8 @@ jobs:
   # Fork PRs get no secrets under pull_request, so they are not reviewed. The split is code-review.yml's: this job holds
   # the Claude token and a read-only GitHub token, post-review the write token and no Claude token. The reviewer runs
   # the PR's tests and code, so no step before the review runs a file the PR controls, which could plant a command the
-  # review step would then run with the token.
+  # review step would then run with the token. The install steps run from the runner's temp directory, because Python
+  # and npm pick up modules and config from the working directory, which is the PR's checkout.
   review:
     if: >-
       github.event.label.name == 'test-review-requested' &&
@@ -58,23 +59,26 @@ jobs:
       # shellcheck, and betterleaks. The pins and the betterleaks installer come from the default branch, since the PR's
       # copies would run before the review step. Wheels only, so installing runs no package's build code.
       - name: Install the test runners
+        working-directory: ${{ runner.temp }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q bats shellcheck
-          git show "origin/$DEFAULT_BRANCH:requirements-dev.txt" > "$RUNNER_TEMP/requirements-dev.txt"
+          git -C "$GITHUB_WORKSPACE" show "origin/$DEFAULT_BRANCH:requirements-dev.txt" > requirements-dev.txt
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check --no-deps --only-binary :all: \
             -r "$RUNNER_TEMP/requirements-dev.txt"
           "$RUNNER_TEMP/venv/bin/pip" check
           echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
-          git show "origin/$DEFAULT_BRANCH:.github/scripts/install-betterleaks.sh" | bash -s -- "$RUNNER_TEMP/bin"
+          git -C "$GITHUB_WORKSPACE" show "origin/$DEFAULT_BRANCH:.github/scripts/install-betterleaks.sh" \
+            | bash -s -- "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # Newest release, outside the lockfile, which the PR controls. It is also the `claude` that `claude plugin test`
       # runs.
       - name: Install Claude Code
+        working-directory: ${{ runner.temp }}
         run: | # zizmor: ignore[adhoc-packages] latest on purpose: the version auto-updating users run
           npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
           mkdir -p "$RUNNER_TEMP/bin"

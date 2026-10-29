@@ -6,13 +6,18 @@
 #   test-review-payload.sh <claude-json> <base-commit>
 #
 # <claude-json> is the run's `claude -p --output-format json` output, whose `result` is the report. The fixes are the
-# working tree's changes against HEAD, untracked files included. GitHub takes a comment only on a line inside one hunk
+# working tree's changes against HEAD to test files and helpers, untracked files included. The reviewer breaks
+# production code on purpose to prove a test fails, so a change it left anywhere else is named in the body as a
+# warning, never offered as a suggestion. GitHub takes a comment only on a line inside one hunk
 # of the pull request's diff, which is <base-commit>..HEAD, so a fix whose replaced lines are not all inside one hunk
 # goes into the body as a diff instead.
 set -Eeuo pipefail
 
 # A review body holds at most 65,536 characters.
 BODY_BYTES=60000
+# The test files and helpers of the "Test kinds" table in .claude/test-review-profile.md, as git pathspecs.
+TEST_PATHS=(':(glob)**/*.bats' ':(glob)**/test_*.py' ':(glob)plugins/**/*.test.ts' ':(glob)plugins/**/*.test.tsx'
+    .github/scripts/tests/helpers.bash)
 
 report=$(jq -r 'select(.is_error | not) | .result // empty' "$1")
 if [[ -z $report ]]; then
@@ -24,11 +29,19 @@ trap 'rm -rf "$work"' EXIT
 
 diff_options=(--no-color --no-renames --no-ext-diff --no-textconv)
 git ls-files -z --others --exclude-standard | xargs -0 -r git add -N --
-git -c core.quotePath=false diff "${diff_options[@]}" -U1 HEAD > "$work/fixes.diff"
+git -c core.quotePath=false diff "${diff_options[@]}" -U1 HEAD -- "${TEST_PATHS[@]}" > "$work/fixes.diff"
+not_tests=()
+for spec in "${TEST_PATHS[@]}"; do
+    not_tests+=(":(exclude,glob)${spec#:(glob)}")
+done
+git -c core.quotePath=false diff --name-only HEAD -- . "${not_tests[@]}" > "$work/stray.txt"
 git -c core.quotePath=false diff "${diff_options[@]}" "$2" HEAD > "$work/pr.diff"
 echo "::group::The fixes"
 cat "$work/fixes.diff"
 echo "::endgroup::"
+if [[ -s $work/stray.txt ]]; then
+    echo "::warning::Changes outside the test files, not suggested: $(paste -sd ' ' "$work/stray.txt")"
+fi
 
 # One line per file of the PR's diff: its path, a tab, and the new-side spans of its hunks, comma separated.
 awk '
@@ -119,13 +132,19 @@ fenced() {
     printf '%s%s\n%s\n%s\n' "$fence" "$2" "$(< "$1")" "$fence"
 }
 
-body=$report
+stray=
+if [[ -s $work/stray.txt ]]; then
+    stray=$'\n\n## Changes left outside the tests\n\nThe review changed these files, which are not test files or '
+    stray+=$'helpers, so nothing here suggests them. Check that its deliberate breaks were all restored.\n\n'
+    stray+=$(sed "s/^/- \`/; s/\$/\`/" "$work/stray.txt")
+fi
+body=$report$stray
 if [[ -s $work/unplaced.diff ]]; then
     body+=$'\n\n## Fixes outside the diff\n\nGitHub takes a suggestion only on lines this pull request changes, so '
     body+=$'these fixes are a diff to apply by hand.\n\n'
     body+=$(fenced "$work/unplaced.diff" diff)
 fi
-fallback=$report
+fallback=$report$stray
 if [[ -s $work/fixes.diff ]]; then
     fallback+=$'\n\n## Fixes\n\nThe suggested changes could not be posted, so every fix is in this diff.\n\n'
     fallback+=$(fenced "$work/fixes.diff" diff)
