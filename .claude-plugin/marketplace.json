@@ -18,7 +18,7 @@
     {
       "name": "delegation",
       "source": "./plugins/delegation",
-      "description": "How a lead session spawns, briefs, answers and shuts down Agent Teams teammates, with engineer and researcher agent templates"
+      "description": "How a lead session spawns, briefs, answers and shuts down Agent Teams teammates, with engineer, researcher, verifier and triager agent templates"
     }
   ]
 }

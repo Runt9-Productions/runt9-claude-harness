@@ -2,7 +2,7 @@
 name: engineer
 description: Implements one task from the lead's brief in this repository, verifies it from real build and test output, stages what it changed by path and reports to the lead. Spawned by a lead session as a teammate; one task per spawn.
 model: inherit
-# LSP for symbol questions, Bash for text search, builds and git. No Agent, so it never spawns its own helpers.
+# No Agent, so it never spawns its own helpers.
 tools: Read, Edit, Write, Bash, LSP, Skill, SendMessage
 ---
 

@@ -29,7 +29,10 @@ so an import line pointing into it would break on every update. The harness's `c
 |---|---|
 | `skills/delegation/SKILL.md` | The `delegation` skill: the lead's rules before spawning, while teammates run, on receiving work and at shutdown. Loads before a spawn and before a reply to a teammate. |
 | `templates/engineer.md` | An agent definition for an implementer that does one task, verifies it from real build output, stages by path and reports. |
-| `templates/researcher.md` | An agent definition for answering one question about something outside the repository, with a verdict and attributed sources. |
+| `templates/web-researcher.md` | An agent definition for answering one question about something outside the repository, with a verdict and attributed sources. |
+| `templates/code-researcher.md` | An agent definition for answering one question about how the codebase behaves, returning the traced path as `file:line` hops with a confidence mark on each claim. It never changes code. |
+| `templates/verifier.md` | An agent definition that drives the running application through the brief's steps to a known end state and reports what it saw at each step, with evidence. It never changes code or configuration. |
+| `templates/triager.md` | An agent definition that reads one large, noisy artifact (logs, a crash dump, build output) and returns the answer with the few lines that prove it. |
 | `local.example/additions.md` | An example of the machine-local additions, below. |
 
 The fragment itself is `harness/fragments/delegation.md` in this repository.
@@ -39,6 +42,12 @@ The fragment itself is `harness/fragments/delegation.md` in this repository.
 The templates are not loaded as agents. Copy one into a repository's `.claude/agents/`, or into `~/.claude/agents/`
 for every repository, then replace each placeholder in angle brackets (`<build command>`, `<knowledge base location>`
 and the rest) with that repository's value, and delete any line that does not apply.
+
+Each template grants its tools with `tools:`, an allow-list, so a tool added to Claude Code later is not granted until
+you add it. A tool that exists only on some machines, such as a browser or UI-driving tool, is a placeholder in that
+list: replace it with the tool names you have, or delete it. Each template states its standard in full and assumes
+nothing about your own `CLAUDE.md`. None of them says which tool answers which kind of question; that is left to your
+own setup.
 
 Keep the report section. The skill relies on every agent reporting the same way, and that holds only when the rule is
 in the definition rather than in each spawn prompt.
