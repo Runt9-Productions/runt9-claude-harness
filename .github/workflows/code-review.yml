@@ -34,31 +34,24 @@ jobs:
         shell: bash
 
     steps:
+      # The install action comes from the default branch, not the PR: the bot can change a file under .github/actions,
+      # though not a workflow, and an action run before the review could plant a command it then runs with the token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: default-branch
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - uses: ./default-branch/.github/actions/install-claude-code
+        with:
+          sandbox: "true"
+
+      # Replaces the default branch's copy, which nothing needs once the action has run.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      # Newest release, outside the lockfile. Never `npm ci` here: the PR controls package.json and the lockfile, and
-      # this job holds the Claude token.
-      - name: Install Claude Code
-        run: | # zizmor: ignore[adhoc-packages] latest on purpose: the version auto-updating users run
-          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
-          mkdir -p "$RUNNER_TEMP/bin"
-          printf '#!/bin/sh\nexec node "%s" "$@"\n' \
-            "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs" > "$RUNNER_TEMP/bin/claude"
-          chmod +x "$RUNNER_TEMP/bin/claude"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-
-      # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB runs Bash in Claude Code's sandbox, which needs bubblewrap, and socat for its
-      # network bridge; without socat no Bash command starts. Ubuntu 24.04's AppArmor stops bwrap creating the user
-      # namespace it runs in. The last line fails this step, not the review, if bwrap still cannot.
-      - name: Install the sandbox's tools
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap socat
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          bwrap --ro-bind / / true
 
       - name: Review
         env:

@@ -8,6 +8,7 @@ coverage: partial
 measured_on: "Claude Code 2.1.310, npm 11.17, oxlint 1.86.0"
 sources:
   - .github/workflows/ci.yml
+  - .github/actions/install-claude-code/action.yml
 ---
 
 # Mod CI Checks
@@ -28,7 +29,7 @@ their input is missing, which is why the job checks the input exists first.
 - [fact] A plugin named in a mod's `dependencies` needs its own `--plugin-dir` on the types run #measured
 - [trap] The job finds a mod only at `hooks/hooks.json`, so it fails a `plugin.json` that sets `hooks`: a mod that key points elsewhere would pass unchecked #silent-failure
 - [trap] Type-aware oxlint on a mod with no types exits 0 with only a warning, so the job fails when `tsconfig.json` or `.claude-plugin/types` is missing before it lints #silent-failure #measured
-- [fact] `@anthropic-ai/claude-code` installed with scripts off leaves `bin/claude.exe` as a stub that exits 1, while `node cli-wrapper.cjs` runs `--version`, `-p`, `plugin validate` and `plugin test` #measured (the job wraps `cli-wrapper.cjs` in a `claude` script)
+- [fact] `@anthropic-ai/claude-code` installed with scripts off leaves `bin/claude.exe` as a stub that exits 1, while `node cli-wrapper.cjs` runs `--version`, `-p`, `plugin validate` and `plugin test` #measured (`.github/actions/install-claude-code` wraps `cli-wrapper.cjs` in a `claude` script)
 - [trap] `npm ci` never applies `min-release-age`: the cooldown applies only when npm resolves versions, and only on npm 11.10 or newer #silent-failure #measured (with a 100-year cooldown `npm ci` exits 0 and `npm install` fails ETARGET)
 - [decision] CI generates mod types on every run and they are never committed (owner, 2026-10-24): committed types are about 845 KB per mod and churn with every Claude Code release.
 - [decision] Every plugin passes `claude plugin validate --strict`, so every `plugin.json` carries `author` (owner, 2026-10-24; no reason recorded beyond the choice).
