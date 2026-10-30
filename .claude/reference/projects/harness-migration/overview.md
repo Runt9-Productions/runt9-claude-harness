@@ -15,13 +15,13 @@ source copies of what moved.
 
 ## Where it stands
 
-- [status] Steps 01 to 05 are merged; 06 is next.
+- [status] Steps 01 to 06 are merged. 07 is in review, and 08 is under way with its first pull request merged.
 
 ## Documents
 
 - [[Harness Migration Checklist]]: the steps, in order, and which one is live
 - [[Harness Migration Decisions]]: decisions taken and questions still open
-- [[Harness Migration Spec]]: the settled design of steps 03 to 05
+- [[Harness Migration Spec]]: the settled design of steps 03 to 06
 
 ## Relations
 
