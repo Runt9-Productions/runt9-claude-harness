@@ -48,3 +48,13 @@ are in the domain notes ([[Plugin Platform]], [[Mod CI Checks]], [[Skill Loading
 - [decision] Basic Memory tools read and search, `Edit` in the working tree writes, and registering a project is the owner's step (owner, 2026-10-26): Basic Memory's write tools write into the registered checkout, which is not the agent's branch in a worktree.
 - [decision] Only the main checkout is registered with Basic Memory (owner, 2026-10-26): sessions search the merged notes through Basic Memory and edit with `Edit` in their own worktree.
 - [decision] CI runs the validator with `--stale-in` over each pull request's own commits (owner, 2026-10-26): a pull request that changes a note's sources has to re-read the note and move `verified`.
+- [decision] The dev process ships as four plugins, `delegation`, `lens-review`, `test-review` and `develop`, with no worktrees plugin (owner, 2026-10-26): Claude Code's built-in worktree settings cover what the hooks did.
+- [decision] The plugins are canonical and this repository's project copies of the review skills are deleted (owner, 2026-10-26): two copies drift.
+- [decision] code-review is renamed `lens-review` (owner, 2026-10-26): Claude Code has a built-in `/code-review`.
+- [decision] Reviewers that judge correctness or safety run on opus, pattern passes on sonnet (owner, 2026-10-26): the cheap model is enough only where the check is a pattern.
+- [decision] develop reaches its user through decision tools named in a local file, and asks in chat when none is named (owner, 2026-10-26): a public user may run none.
+- [decision] develop's standing push grant holds only when the development profile declares the guard hooks and branch rules (owner, 2026-10-26): without them an agent would push on its own judgment.
+- [decision] Delegation states 30% as where rule-following degrades on Opus 5.5 and 60% as the ceiling, both overridable (owner, 2026-10-26): a number is structure a reader can act on.
+- [decision] delegation's agent definitions ship as templates only (owner, 2026-10-26): each repository's agents carry its own project rules.
+- [decision] Test review runs in CI as a label-triggered job whose fixes arrive as suggested changes (owner, 2026-10-26): the author decides what lands.
+- [decision] Step 06 lands as three pull requests: delegation; the two review plugins with this repository's switch-over; develop with the development profile (owner, 2026-10-26): it keeps the one workflow change in one pull request.
