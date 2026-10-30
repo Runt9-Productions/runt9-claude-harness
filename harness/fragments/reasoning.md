@@ -13,6 +13,10 @@
 - Prefer the right change to the additive one. Before adding a type, layer or workaround, weigh what changing the
   existing code would cost, and when existing structure is the problem, propose the small fix rather than building
   around it. The `code-style` skill carries the detail for code.
+- Before building a mechanism yourself that feels like it should be a solved problem, look for other routes: platform
+  features, how others solve the problem, a hybrid. In many cases it is a solved problem and building it yourself is
+  not the best option. Build it only when the other options are no better. Repeat this check when reviews seem to find
+  more than you fix, or never end.
 - A surprising result from a check is first suspected as a fault in the check: run it on a case whose answer is
   known, since a check that is wrong there says nothing about the unknown case.
 - A sweep (a rename, an audit, a cleanup) ends with a search across the whole repository that returns nothing, shown
