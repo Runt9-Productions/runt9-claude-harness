@@ -55,8 +55,9 @@ lens-review plugin's, or its own at `.claude/agents/references/reviewer-brief.md
 runs under `--restricted`, so it reads only its own inputs and loads no `CLAUDE.md`.
 
 The review also runs with a fixed environment: `PATH`, `HOME`, `USER`, `LOGNAME`, the locale, and
-`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CODE_OAUTH_TOKEN` where set. Nothing else reaches it, so the
-session the push runs in (its plugin directories, `NODE_OPTIONS`, a proxy) does not change it. A login stored under
+`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CODE_OAUTH_TOKEN` where set, and the proxy variables, since a
+sandboxed shell reaches the network only through its proxy. Nothing else reaches it, so the session the push runs in
+(its plugin directories, `NODE_OPTIONS`, `ANTHROPIC_BASE_URL`) does not change it. A login stored under
 `~/.claude` works as is. Bedrock, Vertex, a custom endpoint or `CLAUDE_CONFIG_DIR` do not, and such a setting would belong in a config
 file under the install directory, which does not exist yet. Lines longer than 4000 characters reach the review split
 into overlapping pieces, because Read refuses a single line past its token cap.
