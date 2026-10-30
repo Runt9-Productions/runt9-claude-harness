@@ -80,9 +80,8 @@ does not list, and a credential file with an unremarkable name.
 ### Local allowed suffixes
 
 `~/.claude/local/guardrails/credential-allowed-suffixes.txt` lists files the hook would deny that the agent may read:
-project files whose names put them in the config-file class but which hold nothing secret, or a key the agent itself
-needs, such as the private key of a GitHub App it mints its own tokens with. One path suffix per line, with blank lines
-and `#` comments skipped.
+project files whose names put them in the config-file class but which hold nothing secret, or a key the agent needs
+for its own work. One path suffix per line, with blank lines and `#` comments skipped.
 An entry matches a path that ends in it after a `/`, or a path equal to it, so a longer file name or another
 directory's copy still denies. A missing or unreadable file allows nothing extra. The plugin never creates or changes
 the file, and an entry added there appears in no diff, so review the file itself. An entry does not exempt a file a
