@@ -275,13 +275,14 @@ leak="write to someone@acme-corp"".com"
     grep -q "^+local attributes" "$stub_dir/bundle/commits.patch"
 }
 
-@test "the caller's environment does not reach the review, but its API key does" {
+@test "the caller's environment does not reach the review, but its API key and proxy do" {
     ANTHROPIC_BASE_URL=http://127.0.0.1:9 NODE_OPTIONS=--require=/x HTTPS_PROXY=http://127.0.0.1:9 \
         ANTHROPIC_API_KEY=synthetic-key push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
-    run grep -e ANTHROPIC_BASE_URL -e NODE_OPTIONS -e HTTPS_PROXY "$stub_dir/env"
+    run grep -e ANTHROPIC_BASE_URL -e NODE_OPTIONS "$stub_dir/env"
     [ "$status" -eq 1 ]
     grep -qx ANTHROPIC_API_KEY=synthetic-key "$stub_dir/env"
+    grep -qx HTTPS_PROXY=http://127.0.0.1:9 "$stub_dir/env"
 }
 
 @test "a line too long to read in one piece reaches the review whole, in overlapping pieces" {
