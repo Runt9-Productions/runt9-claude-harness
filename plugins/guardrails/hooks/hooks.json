@@ -2,17 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/block_credential_crawl.py\"",
-            "onFailure": "block"
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Grep|Glob",
+        "matcher": "Bash|Monitor|Read|Grep|Glob",
         "hooks": [
           {
             "type": "command",
