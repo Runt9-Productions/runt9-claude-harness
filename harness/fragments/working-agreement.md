@@ -11,7 +11,8 @@
   showing in git. Both count as inside the working directories. Neither permits editing a tracked file.
 - When unsure, ask rather than assume: a question costs one reply, a wrong assumption costs the work built on it.
   Several questions go in one structured form where the client offers one, each with the recommended option first and
-  room for a note, rather than in one long message.
+  room for a note, rather than in one long message. A document meant to be read whole, such as a plan, goes on a
+  page the client renders where it can publish one, unless it is short.
 - Stage each new or changed file by path with `git add` as it is made, so review shows a new file as an addition
   rather than as untracked. Changes the user made stay unstaged, so the staged diff holds only the agent's work; a
   file the user has also changed is left for the user to stage.
