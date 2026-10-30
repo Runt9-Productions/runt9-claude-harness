@@ -50,8 +50,8 @@ fetched.
 **What it trusts.** At push time the hook fetches the remote's default branch and its branch and tag tips from the
 push URL into a temporary mirror. The agent definition, reviewer brief, review profile, `CLAUDE.md` and leak-scan
 allowlist come from that default branch, never from the branch being pushed or from the clone's remote-tracking refs.
-A repository whose default branch has no `.claude/agents/code-review/public-leak.md` cannot be pushed through this
-hook. The scan reads the mirror, so the repository's config and attributes cannot change what it reads. The review
+A repository whose default branch has no `.claude/agents/code-review/public-leak.md`, or no reviewer brief (the
+lens-review plugin's, or its own at `.claude/agents/references/reviewer-brief.md`), cannot be pushed through this hook. The scan reads the mirror, so the repository's config and attributes cannot change what it reads. The review
 runs under `--restricted`, so it reads only its own inputs and loads no `CLAUDE.md`.
 
 The review also runs with a fixed environment: `PATH`, `HOME`, `USER`, `LOGNAME`, the locale, and

@@ -103,14 +103,17 @@ pre-push gate trusts it, so a build never writes to it.
 
 ## 9. Review
 
-- Panel: this repository's own `/code-review` skill (`.claude/skills/code-review/`) with
-  `.claude/code-review-profile.md`, run in CI.
-- Trigger: the `code-review-requested` label on a same-repository pull request runs `/code-review <n> auto`, posts
+- Panel: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
+  `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run in CI.
+- Trigger: the `code-review-requested` label on a same-repository pull request runs `/lens-review <n> auto`, posts
   a comment-type review on the head and removes the label; adding it again reruns. The workflow has no draft filter,
   so a draft is reviewed. A trivial change the owner can check at a glance skips the label and opens ready.
 - Findings: the merge rule is CI green and no open Critical or High. A Normal is optional and may be declined on its
   thread with a one-line reason (`.claude/code-review-profile.md`, "Severity calibration").
-- Test review: `.claude/test-review-profile.md` exists; run this repository's own `/test-review` locally. Not skipped.
+- Test review: `.claude/test-review-profile.md` exists. The `test-review-requested` label runs the `test-review`
+  plugin in CI over the test files the head changes, posts a comment-type review with each test fix as a suggested
+  change, pushes nothing and removes the label. Add it first, and commit the fixes wanted before adding
+  `code-review-requested`, so the panel reviews the tests as they will merge. Not skipped.
 - External reviewer: none.
 - Inline comments: one `gh api repos/Runt9-Productions/runt9-claude-harness/pulls/<n>/reviews --input <file>` with
   `event: "COMMENT"`, `commit_id`, `body` and `comments[]` of `path`, `line`, `side: "RIGHT"` and `body`. GitHub
@@ -135,8 +138,9 @@ pre-push gate trusts it, so a build never writes to it.
   and `main` takes changes only by pull request with `gate` passing and the branch up to date.
 - With only the remote half present there is no standing grant: commit, push and open the pull request when the owner
   says so at the end of the task, or for the whole run where the owner has granted that.
-- Pull request: `gh pr create --draft --base main --label code-review-requested --body-file <file>`. It leaves draft
-  with `gh pr ready <n>` once the review has run, its Critical and High findings are fixed and pushed, every thread is
+- Pull request: `gh pr create --draft --base main --label test-review-requested --body-file <file>`; add
+  `code-review-requested` once the test fixes wanted are committed (section 9). It leaves draft with `gh pr ready <n>`
+  once the review has run, its Critical and High findings are fixed and pushed, every thread is
   answered and the fixed ones resolved, and the reviewer guide is posted. The owner squash-merges.
 
 ## 11. Hand-off

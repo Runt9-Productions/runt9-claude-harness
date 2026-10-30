@@ -1,7 +1,7 @@
 # Test review reference: pytest tests
 
-Read by `test-reviewer` for `test_*.py` files. The generic criteria are in the agent; this file is what is specific
-to Python tests of the scripts this repository ships.
+Read by `test-review:test-reviewer` for `test_*.py` files. The generic criteria are in the agent; this file is what
+is specific to Python tests of the scripts this repository ships.
 
 ## Why these are easy to write uselessly
 

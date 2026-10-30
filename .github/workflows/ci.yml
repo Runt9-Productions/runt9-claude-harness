@@ -194,18 +194,8 @@ jobs:
       - name: Install the pinned tools
         run: npm ci
 
-      # Newest release on every run, outside the lockfile: a mod must pass against the version its users auto-update
-      # to. With scripts off the package's `claude` binary is a stub that exits 1; cli-wrapper.cjs is the package's
-      # launcher for that case.
-      - name: Install Claude Code
-        run: | # zizmor: ignore[adhoc-packages] latest on purpose, see above
-          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
-          mkdir -p "$RUNNER_TEMP/bin"
-          printf '#!/bin/sh\nexec node "%s" "$@"\n' \
-            "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs" > "$RUNNER_TEMP/bin/claude"
-          chmod +x "$RUNNER_TEMP/bin/claude"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/bin/claude" --version
+      # The PR's own copy, since this job holds no secret: a change to the action runs here before it reaches a review.
+      - uses: $/.github/actions/install-claude-code
 
       - name: Every plugin validates strictly
         run: |

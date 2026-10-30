@@ -1,8 +1,7 @@
 # Code review profile
 
-Facts about this repository that `/code-review` and its panel need. The skill reads every section; each reviewer
-reads the sections its own file names. The pre-push hook and `review-text.sh` hand a copy of this file, named
-`code-review-profile.md`, to the `public-leak` review they run.
+Facts about this repository that `/lens-review` and its panel need. The skill reads every section; each reviewer
+reads the sections its own file names.
 
 ## What ships, and why a defect is expensive
 
@@ -82,6 +81,8 @@ removes code is worth as much as one that adds it.
 - A marketplace entry holds only `name`, `source` and `description`; CI enforces that.
 - In a plugin's `settings.json`, every key other than `agent` and `subagentStatusLine` is dropped without a warning.
 - `CLAUDE_PLUGIN_DATA` is deleted when the plugin is uninstalled, so nothing that must outlive the plugin belongs there.
+- `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is all that keeps the Claude token out of the commands a CI review runs.
+  `test-review.yml` runs the PR's own tests and code, so without it the PR can read the token.
 - A guard whose error path allows the call it was meant to judge.
 - A comment that points readers at a gitignored path (`.claude/output/`, `.claude/settings.local.json`), which no
   other clone has.
@@ -114,6 +115,8 @@ A new plugin with a contract adds its rows here.
 | a marketplace entry's `description` | the plugin's `plugin.json` `description` | hand |
 | a `# vX` comment beside a pinned action | the SHA it annotates | Dependabot |
 | the "tuned on" version in `harness/leak-scan/README.md` | `version` in `install-betterleaks.sh` | hand |
+| each request under "Other callers" | the `request` text in `harness/githooks/pre-push`, `harness/leak-scan/review-text.sh` and `harness/leak-scan/review.sh` | hand |
+| `TEST_GLOBS` and `TEST_HELPERS` in `.github/scripts/test-review-payload.py` | the "Test kinds" table in `.claude/test-review-profile.md` | hand |
 
 ## Companions
 
@@ -153,9 +156,26 @@ something the ruling did not account for.
 - The invisible-character check flagging emoji variation selectors.
 - Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
   common mistakes only. (2026-10-25)
-- CI reviewing a PR with that PR's own `.claude/` and `CLAUDE.md`. (2026-10-25)
+- CI reviewing a PR with that PR's own `.claude/` and `CLAUDE.md` (2026-10-25), and with its own
+  `plugins/lens-review` and `plugins/test-review`, which follows from CI loading the plugins with `--plugin-dir`.
 - `bootstrap.py harness` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
   (2026-10-27)
+
+## Other callers
+
+Both run `public-leak` alone through `harness/leak-scan/review.sh`, with only `Read`, in a directory holding the inputs
+and copies of the reviewer brief, this profile and `CLAUDE.md` from the default branch, named `reviewer-brief.md`,
+`code-review-profile.md` and `CLAUDE.md`.
+
+- **The pre-push leak gate** (`harness/githooks/pre-push`) asks for a review of what a push would publish. Its inputs
+  are `commits.patch`, `identities.txt`, `file-names.txt`, `binary-files.txt`, `tags.txt` and `ref-names.txt`, and it
+  asks for an open question for each binary file.
+- **The text check** (`harness/leak-scan/review-text.sh`) asks for a review of an issue or pull request before it is
+  posted. Its one input is `body.md`, the title on its first line and the body after it.
+
+`review.sh` adds to either request: lines over 4000 characters are split into pieces of 4000 that overlap by 200,
+where the copies are, that every input is read to its last line and the last line read of each reported, and that the
+answer goes in the structured output.
 
 ## Delivery
 
@@ -173,10 +193,11 @@ something the ruling did not account for.
   the inline comments and in `review.md`.
 - **Fallback.** GitHub rejects the whole review when one comment does not land on the diff. CI then posts only
   `review.md`, cut to 60,000 bytes, so `review.md` holds every finding in full, inline or not.
-- **CI flow.** Adding the `code-review-requested` label to a same-repo PR runs `/code-review <n> auto`. The reviewing
-  job never writes to GitHub. A separate job, the only one holding write permission, posts the result as a COMMENT
-  review on the head commit and removes the label. Bots that push add the label; the owner adds it again to rerun.
-  It comes before human review and never blocks a merge.
+- **CI flow.** Adding the `code-review-requested` label to a same-repo PR runs `/lens-review <n> auto`, with the
+  plugin loaded from the PR's own `plugins/lens-review`. The reviewing job never writes to GitHub. A separate job,
+  the only one holding write permission, posts the result as a COMMENT review on the head commit and removes the
+  label. Bots that push add the label; the owner adds it again to rerun. It comes before human review and never
+  blocks a merge.
 
 ## Standing instructions
 

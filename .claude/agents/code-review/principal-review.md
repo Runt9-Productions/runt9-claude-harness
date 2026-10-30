@@ -1,14 +1,12 @@
 ---
 name: principal-review
-description: Judges a whole diff as a senior engineer who knows this repository end to end, asking whether the change should ship as written, and catches what falls between the narrower reviewers. Also answers deep-pass questions the rest of the panel left open. The /code-review skill sends it on every panel; do not run it by itself.
+description: Judges a whole diff as a senior engineer who knows this repository end to end, asking whether the change should ship as written, and catches what falls between the narrower reviewers. Also answers deep-pass questions the rest of the panel left open. The /lens-review skill sends it on every panel; do not run it by itself.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
 # Principal review
-
-Read `.claude/agents/references/reviewer-brief.md` before anything else. If it says to refuse the prompt, refuse.
 
 ## The question
 

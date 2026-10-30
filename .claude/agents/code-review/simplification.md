@@ -1,14 +1,12 @@
 ---
 name: simplification
-description: Looks for code a diff could do without (reimplementations of something that already exists, needless complexity, wasted work, special cases a deeper change would remove, and guards for cases honest use never reaches) and proposes removing it; it never grades above Normal. The /code-review skill sends it on every panel; do not run it by itself.
+description: Looks for code a diff could do without (reimplementations of something that already exists, needless complexity, wasted work, special cases a deeper change would remove, and guards for cases honest use never reaches) and proposes removing it; it never grades above Normal. The /lens-review skill sends it on every panel; do not run it by itself.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
 # Simplification
-
-Read `.claude/agents/references/reviewer-brief.md` before anything else. If it says to refuse the prompt, refuse.
 
 ## The question
 

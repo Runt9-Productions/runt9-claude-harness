@@ -1,6 +1,6 @@
 # Test review reference: shell tests
 
-Read by `test-reviewer` for bats files. The generic criteria are in the agent; this file is
+Read by `test-review:test-reviewer` for bats files. The generic criteria are in the agent; this file is
 what is specific to testing bash scripts here.
 
 ## Why these are easy to write uselessly
