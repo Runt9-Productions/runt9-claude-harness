@@ -25,6 +25,9 @@ MARKETPLACE = {
 }
 MARKETPLACE_ADD = ["plugin", "marketplace", "add", "Runt9-Productions/runt9-claude-harness"]
 PRE_PUSH = b"#!/bin/sh\necho example pre-push\n"
+BLOCK_START = "<!-- runt9-claude-harness: bootstrap.py keeps the lines from here to the end marker -->"
+BLOCK_END = "<!-- runt9-claude-harness: end -->"
+EXAMPLE_IMPORT = "@~/.claude/harness/current/fragments/example-rules.md"
 ALPHA_SKILL = b"example alpha skill\n"
 STUB = """#!{python}
 import json, os, sys
@@ -41,6 +44,7 @@ class Sandbox:
         self.install = self.home / ".claude" / "harness"
         self.current = self.install / "current"
         self.skills = self.home / ".claude" / "skills"
+        self.claude_md = self.home / ".claude" / "CLAUDE.md"
         self.clone = root / "clone"
         self.log = root / "claude.log"
         bin_dir = root / "bin"
@@ -118,6 +122,8 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.write("harness/skills/example-alpha/SKILL.md", ALPHA_SKILL)
     box.write("harness/skills/example-beta/SKILL.md", b"example beta skill\n")
     box.write("harness/skills/example-beta/scripts/example.sh", b"#!/bin/sh\n", 0o755)
+    box.write("harness/fragments/README.md", b"example fragments readme\n")
+    box.write("harness/fragments/example-rules.md", b"example rules\n")
     box.commit("Example harness")
     return box
 
@@ -258,6 +264,7 @@ def test_list_works_in_a_session(sandbox: Sandbox, variable: str) -> None:
         "harness",
         "hooks-path",
         "skills",
+        "fragment:example-rules",
         "plugin:example-one",
         "plugin:example-two",
         "plugin:example-three",
@@ -450,6 +457,81 @@ def test_skills_refuses_before_the_harness_is_installed(sandbox: Sandbox) -> Non
     assert not sandbox.skills.exists()
 
 
+def test_fragment_import_goes_inside_the_block_through_a_link_only_on_yes(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    own = sandbox.root / "example-own-claude.md"
+    before = f"# Example rules\r\n\n{BLOCK_START}\n@~/example-other.md\n{BLOCK_END}\nexample last line"
+    own.write_bytes(before.encode())
+    sandbox.claude_md.symlink_to(own)
+
+    declined = sandbox.run("fragment:example-rules", stdin="n\n")
+    declined_text = own.read_bytes().decode()
+    written = sandbox.run("fragment:example-rules", stdin="y\n")
+    rerun = sandbox.run("fragment:example-rules")
+
+    assert declined.returncode == 1
+    assert f"\n+{EXAMPLE_IMPORT}\n" in declined.stdout
+    assert declined_text == before
+    assert written.returncode == 0, written.stderr
+    assert sandbox.claude_md.readlink() == own
+    after = f"# Example rules\r\n\n{BLOCK_START}\n@~/example-other.md\n{EXAMPLE_IMPORT}\n{BLOCK_END}\nexample last line"
+    assert own.read_bytes().decode() == after
+    assert rerun.returncode == 0, rerun.stderr
+    assert "already imports" in rerun.stdout
+
+
+def test_fragment_import_pasted_outside_any_block_is_left_alone(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    before = f"# Example rules\n{EXAMPLE_IMPORT}\n"
+    sandbox.claude_md.write_text(before)
+
+    result = sandbox.run("fragment:example-rules")
+
+    assert result.returncode == 0, result.stderr
+    assert "already imports" in result.stdout
+    assert sandbox.claude_md.read_text() == before
+
+
+@pytest.mark.parametrize("template", ["# Example template\n", None], ids=["template", "no-template"])
+def test_missing_claude_md_starts_from_the_harness_template(sandbox: Sandbox, template: str | None) -> None:
+    if template is not None:
+        sandbox.write("harness/claude-md-template.md", template.encode())
+        sandbox.commit("Add an example template")
+
+    result = sandbox.run("harness", "fragment:example-rules", stdin="y\n")
+
+    assert result.returncode == 0, result.stderr
+    block = f"{BLOCK_START}\n{EXAMPLE_IMPORT}\n{BLOCK_END}\n"
+    assert sandbox.claude_md.read_text() == (block if template is None else f"{template}\n{block}")
+
+
+def test_fragment_missing_from_the_installed_harness_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    sandbox.write("harness/fragments/example-later.md", b"example later rules\n")
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Add a later example fragment")
+
+    result = sandbox.run("skills", "fragment:example-later")
+
+    assert result.returncode == 1
+    assert f"the installed harness has no {sandbox.current / 'fragments/example-later.md'}" in result.stderr
+    assert not sandbox.skills.exists()
+    assert not sandbox.claude_md.exists()
+
+
+def test_unmatched_block_marker_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    before = f"{BLOCK_START}\nexample line\n"
+    sandbox.claude_md.write_text(before)
+
+    result = sandbox.run("skills", "fragment:example-rules")
+
+    assert result.returncode == 1
+    assert "fix the markers by hand" in result.stderr
+    assert not sandbox.skills.exists()
+    assert sandbox.claude_md.read_text() == before
+
+
 @pytest.mark.parametrize(
     ("args", "reason"),
     [
@@ -517,8 +599,8 @@ def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -
 
 
 def test_prompt_installs_what_was_answered_yes(sandbox: Sandbox) -> None:
-    # harness, skills, then the three plugins; hooks-path is not offered without --repo.
-    result = sandbox.run(stdin="y\nn\nn\ny\nn\n")
+    # harness, skills, the fragment, then the three plugins; hooks-path is not offered without --repo.
+    result = sandbox.run(stdin="y\nn\nn\nn\ny\nn\n")
 
     assert result.returncode == 0, result.stderr
     assert "Install hooks-path" not in result.stdout
