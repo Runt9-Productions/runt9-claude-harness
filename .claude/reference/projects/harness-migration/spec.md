@@ -7,7 +7,7 @@ tags: [migration, harness]
 
 # Harness Migration Spec
 
-The settled design of steps 03 to 05, archived as agreed. The decisions behind each are in
+The settled design of steps 03 to 06, archived as agreed. The decisions behind each are in
 [[Harness Migration Decisions]]; what the steps are and where they stand is in [[Harness Migration Checklist]].
 
 ## 03 bootstrap.py and the Python CI job
@@ -76,3 +76,47 @@ Code-style principles, language guides and a comment guide become skills a publi
 - **Order:** the plugin first, then this repository's notes, written against the shipped format and validated by it.
 - **Constraints:** private sources are read, never copied: no private project names, notes or vocabulary. A ticket
   example uses a shape the leak scan allows. No history in prose.
+
+## 06 Delegation and the dev-process plugins
+
+Four plugins carry the development process: how a lead delegates, how a change is reviewed, how its tests are
+reviewed, and the ticket-to-pull-request flow that ties them together.
+
+- **Plugins:** `delegation` (the skill and five agent templates: `engineer`, `web-researcher`, `code-researcher`,
+  `verifier` and `triager`); `lens-review` (the panel review skill, renamed from code-review so it does not collide
+  with the built-in command, with the reviewer brief and templates for a profile and a reviewer); `test-review` (the
+  skill, the `test-reviewer` agent and a profile template); `develop` (the develop and effort-estimate skills, the
+  `comment-sweeper` agent and a development-profile template), which lists `delegation` in `dependencies` and runs
+  `lens-review` as its panel unless the profile names another. Each starts at 0.1.0.
+- **Always-on fragment:** delegation's `CLAUDE.md` fragment is `harness/fragments/delegation.md`, in the harness
+  rather than the plugin, because a plugin's install path carries its version and an import line pointing into it
+  would break on every update.
+- **One copy:** the plugins are canonical. This repository's project copies of the review skills are deleted, and
+  the label-triggered review workflows load the plugins from the pull request's checkout with `--plugin-dir`.
+- **Worktrees:** no hooks ship. develop uses Claude Code's built-in `.worktreeinclude`, `worktree.symlinkDirectories`
+  and `worktree.baseRef`, which each repository sets itself, since a plugin cannot.
+- **Models:** opus for reviewers that judge whether code is correct or safe, `test-reviewer` included; sonnet for
+  pattern passes (`staleness-and-debris`, `comment-sweeper`). The templates inherit the session's model.
+- **Delegation thresholds:** rule-following degrades past about 30% of the context on Opus 5.5 and 60% is the
+  ceiling, both overridable in `~/.claude/local/delegation/additions.md`. Ramp-up cost belongs to each repository's
+  development profile.
+- **Agents as templates:** the templates are not loaded as agents. A repository copies the ones it uses into
+  `.claude/agents/` and fills them in, and develop stops and points at `templates/engineer.md` when the profile names
+  no adopted implementer.
+- **develop's decision tools:** decisions, owner tasks, task progress and the status line go through the tools named in
+  `~/.claude/local/develop/decision-tools.md`. For a kind with no tool named, or a tool the session lacks, develop asks
+  in chat, lists owner tasks in its final report and keeps progress in the spec's checklist.
+- **Push grant:** develop commits, pushes and opens the draft pull request on its own only when the development
+  profile declares both guard hooks that stop destructive git commands and remote rules that stop pushes to protected
+  branches; otherwise it asks before each push.
+- **Test review:** develop runs `/test-review` before the panel review when the repository has a test-review profile,
+  the skill is installed and the profile does not opt out. In CI it is a label-triggered job whose fixes arrive only as
+  suggested changes on the pull request.
+- **This repository:** a tracked `.claude/development-profile.md`, with `engineer`, `verifier` and `code-researcher`
+  adopted from the templates. It declares the remote rules but no guard hook, so develop holds no standing push grant
+  here.
+- **Order:** four pull requests: delegation; lens-review and test-review; this repository's switch-over to them,
+  which changes CI and is pushed by the owner; develop with the development profile.
+- **Measured first:** every Claude Code behaviour a rule rests on (plugin agent names, built-in worktree settings,
+  what a teammate's idle notification carries, how a forked skill reports, headless `--plugin-dir` in CI) is measured
+  on the current version before the rule is written; results go into the domain notes with `measured_on`.
