@@ -31,9 +31,10 @@ standard library only.
 
 | file | what it is |
 |---|---|
-| `hooks/block_credential_crawl.py` | Denies reading a credential store, and searching outside the project for credential values, through Bash, Read, Grep and Glob. |
+| `hooks/block_credential_crawl.py` | Denies reading a credential store, and searching outside the project for credential values, through Bash, Monitor, Read, Grep and Glob. |
 | `hooks/block_software_install.py` | Denies installing, removing or upgrading software through Bash and Monitor. |
-| `hooks/hooks.json` | Registers the credential hook on `Bash` and on `Read\|Grep\|Glob`, and the install hook on `Bash\|Monitor`. |
+| `hooks/shell_words.py` | Splits a shell command into the simple commands it runs, for the hooks that judge Bash and Monitor. |
+| `hooks/hooks.json` | Registers the credential hook on `Bash\|Monitor\|Read\|Grep\|Glob` and the install hook on `Bash\|Monitor`. |
 | `local.example/credential-allowed-suffixes.txt` | An example of the machine-local file, below. |
 
 The deny rules are `harness/settings/guardrails-stores.json` in this repository.
@@ -52,17 +53,22 @@ with an exception is listed there.
 
 **The hook** covers the rest:
 
-- the paths a Bash command actually reads: the file operands of known reading commands, the targets of `<` redirects,
-  and the roots of a recursive search (the working directory when it names none);
-- stores with exceptions, which only the hook can make: `.env.<suffix>`, `.pem` and other private keys, and config
-  files whose names say they hold secrets (`database`, `datasource`, `credentials`, `secrets` or `passwords` with a
-  config extension, such as `example-datasource.yml`);
-- stores the deny rules leave out: the per-user `.npmrc` (a project's own sets options), `.aws/config`, the public
-  halves of the default SSH keys, and the system password file;
-- a recursive search rooted in a credential directory (`.ssh`, `.aws`, `.docker`, `.gnupg`, `.config/gh`);
-- a search whose pattern names a credential (password, passphrase, api_key, client_secret, auth_token, bearer,
-  `jdbc:` and the like), but only when it reaches outside the working directory. Inside the project the same search
-  is ordinary work on its code.
+- the paths a Bash or Monitor command actually reads: the file operands of known reading commands (the sources only,
+  for `cp`), the targets of `<` redirects, and the roots of a recursive search (the working directory when it names
+  none). Commands inside `$(...)`, backticks, subshells, `{ ...; }` groups, `if` and loop bodies, and behind wrappers
+  such as `sudo -u`, `timeout` and `exec` count, and a relative path resolves from wherever an earlier `cd` moved to;
+- wildcards and brace lists, judged by the names they can spell, so `.env*` and `*.{pem,p12}` deny while `.*` and
+  `*rc` do not;
+- stores with exceptions, which only the hook can make: `.env.<suffix>`, `.pem`, `.key` and other private keys, and
+  config files whose names say they hold secrets (`database`, `datasource`, `credentials`, `secrets` or `passwords`
+  with a config extension, such as `example-datasource.yml`);
+- any file in a credential directory (`.ssh`, `.aws`, `.docker`, `.gnupg`, `.kube`, `.config/gh`) apart from
+  `known_hosts`, `config` and `authorized_keys` in `.ssh`, and a recursive search rooted in one;
+- stores the deny rules leave out: the per-user `.npmrc` (a project's own sets options), the public halves of the
+  default SSH keys, and the system password file;
+- a search whose pattern names a credential (password, passphrase, secret, token, api_key, private key, bearer,
+  `jdbc:` and the like) when it reaches outside the working directory, and a Grep whose `glob` covers config files
+  named for secrets (`*.properties`). Inside the project any other such search is ordinary work on its code.
 
 It judges what a call reads, never a name that only appears in its text, so `echo`, a commit message or
 `git log --grep` mentioning a store is allowed.
@@ -75,8 +81,18 @@ The hook allows:
 A command the shell tokenizer cannot split is denied only when its raw text names a store. Any error inside the hook
 denies, with a message saying the guard failed.
 
-Known gaps: a path built at run time (`$FILE`), a file read by a script or interpreter, a reading command the hook
-does not list, and a credential file with an unremarkable name.
+The Monitor tool's `command` is judged the same way as a Bash command. That the `Monitor` matcher reaches the hook
+has not been confirmed in a live session.
+
+Known gaps:
+
+- a path built at run time (`$FILE`);
+- a file read by a script or interpreter, including a command inside a quoted string (`sh -c '...'`);
+- a reading command the hook does not list, and a credential file with an unremarkable name;
+- a recursive search inside the project: `grep -rn DB_PASSWORD .` prints the matching line of a `.env` file it
+  passes, and the `--include`, `-g` and `--glob` values of a Bash search are not judged;
+- a session started in the home directory, where every path counts as inside the project, so the keyword check never
+  fires.
 
 ### Local allowed suffixes
 

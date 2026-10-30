@@ -14,6 +14,8 @@ import pytest
 HOOK = Path(__file__).resolve().parent / "block_credential_crawl.py"
 # Follows every decision's reason and no error's, so a crash that denies cannot pass for a decision.
 GUIDANCE = ". Credentials are off-limits"
+PGPASS = "`~/.pgpass` is a credential file"
+ENV_LOCAL = "`.env.production` is a credential file"
 
 
 def run_hook(stdin: str, home: Path) -> str | None:
@@ -121,6 +123,135 @@ def assert_denied_for(reason: str | None, expected: str) -> None:
             "`*` in `~/.ssh` names credential files",
             id="glob-credential-dir",
         ),
+        pytest.param("Bash", {"command": "TOKEN=$(cat ~/.pgpass)"}, PGPASS, id="command-substitution"),
+        pytest.param("Bash", {"command": 'echo "$(cat ~/.pgpass)"'}, PGPASS, id="substitution-in-double-quotes"),
+        pytest.param("Bash", {"command": "echo `cat ~/.pgpass`"}, PGPASS, id="backtick-substitution"),
+        pytest.param("Bash", {"command": "(cat ~/.pgpass)"}, PGPASS, id="subshell"),
+        pytest.param("Bash", {"command": "{ cat ~/.pgpass; }"}, PGPASS, id="brace-group"),
+        pytest.param("Bash", {"command": "ls\ncat ~/.pgpass"}, PGPASS, id="newline-between-commands"),
+        pytest.param("Bash", {"command": "if true; then cat .env.production; fi"}, ENV_LOCAL, id="then-branch"),
+        pytest.param(
+            "Bash",
+            {"command": "for f in a; do cat ~/.netrc; done"},
+            "`~/.netrc` is a credential file",
+            id="loop-body",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "sudo -u root cat /etc/shadow"},
+            "`/etc/shadow` is a credential file",
+            id="wrapper-option-value",
+        ),
+        pytest.param("Bash", {"command": "timeout 5 cat ~/.pgpass"}, PGPASS, id="wrapper-operand"),
+        pytest.param("Bash", {"command": "nice -n 5 cat .env.production"}, ENV_LOCAL, id="nice-adjustment"),
+        pytest.param("Bash", {"command": "exec cat ~/.pgpass"}, PGPASS, id="exec"),
+        pytest.param("Bash", {"command": "cat .env*"}, "`.env*` is a credential file", id="bash-wildcard-name"),
+        pytest.param(
+            "Bash", {"command": "cat ~/.ssh/*"}, "`~/.ssh/*` is a credential file", id="bash-wildcard-credential-dir"
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "cd ~/.aws && cat credentials"},
+            "`credentials` is a credential file",
+            id="relative-after-cd",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "cd ~ && rg -i api_key"},
+            "a search outside the project for a credential (`api_key`)",
+            id="search-after-cd",
+        ),
+        pytest.param(
+            "Read",
+            {"file_path": "~/.ssh/work_key"},
+            "`~/.ssh/work_key` is a credential file",
+            id="read-in-credential-dir",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "cat ~/.ssh/id_ed25519_work"},
+            "`~/.ssh/id_ed25519_work` is a credential file",
+            id="non-default-ssh-key",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "cat ~/.gnupg/private-keys-v1.d/ABC.key"},
+            "`~/.gnupg/private-keys-v1.d/ABC.key` is a credential file",
+            id="gnupg-private-key",
+        ),
+        pytest.param(
+            "Bash", {"command": "cat certs/server.key"}, "`certs/server.key` is a credential file", id="key-extension"
+        ),
+        pytest.param(
+            "Glob", {"pattern": "**/*.key"}, "`**/*.key` in `{project}` names credential files", id="glob-key-files"
+        ),
+        pytest.param(
+            "Bash", {"command": "cat ~/.kube/config"}, "`~/.kube/config` is a credential file", id="kube-config"
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "rg --max-depth 3 password ~"},
+            "a search outside the project for a credential (`password`)",
+            id="max-depth-value",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "rg --context 2 api_key ~/work"},
+            "a search outside the project for a credential (`api_key`)",
+            id="context-value",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "grep -rn --after-context 2 password /etc"},
+            "a search outside the project for a credential (`password`)",
+            id="after-context-value",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "grep -d recurse password ~"},
+            "a search outside the project for a credential (`password`)",
+            id="directories-value",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "grep -rl 'PRIVATE KEY' ~"},
+            "a search outside the project for a credential (`PRIVATE KEY`)",
+            id="keyword-with-space",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "rg -i secret ~"},
+            "a search outside the project for a credential (`secret`)",
+            id="keyword-secret",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "grep -ri token ~/.config"},
+            "a search outside the project for a credential (`token`)",
+            id="keyword-token",
+        ),
+        pytest.param(
+            "Grep",
+            {"pattern": "TODO", "glob": "*.{pem,p12}"},
+            "`*.{pem,p12}` names credential files",
+            id="grep-glob-brace-list",
+        ),
+        pytest.param(
+            "Grep",
+            {"pattern": "password", "glob": "*.properties"},
+            "a search for a credential through config files (`password` in `*.properties`)",
+            id="grep-keyword-through-config-files",
+        ),
+        pytest.param(
+            "Monitor",
+            {"command": "cat ~/.aws/credentials"},
+            "`~/.aws/credentials` is a credential file",
+            id="monitor-command",
+        ),
+        pytest.param("Bash", {"command": "cp .env /tmp/backup"}, "`.env` is a credential file", id="cp-source"),
+        pytest.param(
+            "Bash", {"command": "cat ${HOME}/.npmrc"}, "`${HOME}/.npmrc` is a credential file", id="braced-home"
+        ),
     ],
 )
 def test_denies_reading_a_store_or_hunting_outside_the_project(
@@ -128,7 +259,8 @@ def test_denies_reading_a_store_or_hunting_outside_the_project(
 ) -> None:
     reason = judge(tool, tool_input, tmp_path)
 
-    assert_denied_for(reason, expected.format(project=tmp_path / "project"))
+    # `replace`, since `format` would read the braces of `${HOME}` and `*.{pem,p12}` as fields.
+    assert_denied_for(reason, expected.replace("{project}", str(tmp_path / "project")))
 
 
 @pytest.mark.parametrize(
@@ -145,6 +277,11 @@ def test_denies_reading_a_store_or_hunting_outside_the_project(
         pytest.param("Grep", {"pattern": "PasswordEncoder", "path": "src"}, id="grep-keyword-inside"),
         pytest.param("Glob", {"pattern": "**/*.py"}, id="glob-other-extension"),
         pytest.param("Glob", {"pattern": "**/*"}, id="glob-wildcard-only"),
+        pytest.param("Glob", {"pattern": ".*"}, id="glob-dot-files"),
+        pytest.param("Glob", {"pattern": "**/.*rc"}, id="glob-rc-files"),
+        pytest.param("Bash", {"command": "cp .env.example .env"}, id="cp-destination"),
+        pytest.param("Bash", {"command": "cat ~/.ssh/known_hosts"}, id="non-secret-in-credential-dir"),
+        pytest.param("Bash", {"command": "cat <<EOF\ncat ~/.pgpass\nEOF"}, id="heredoc-body"),
     ],
 )
 def test_allows_project_work_that_only_mentions_a_credential(tool: str, tool_input: dict, tmp_path: Path) -> None:

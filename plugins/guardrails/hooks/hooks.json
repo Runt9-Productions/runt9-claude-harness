@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Monitor|Read|Grep|Glob",
         "hooks": [
           {
             "type": "command",
@@ -17,16 +17,6 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/block_software_install.py\"",
-            "onFailure": "block"
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/block_credential_crawl.py\"",
             "onFailure": "block"
           }
         ]
