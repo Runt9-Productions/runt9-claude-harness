@@ -11,8 +11,9 @@ nothing from an employer, a private project or a specific machine goes in, in co
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`), `leak-scan/` (the scan that gate and CI
   run, with its allowlist in `.leak-scan.toml`, and the `public-leak` review the gate and `review-text.sh` run),
   `fragments/` (always-on `CLAUDE.md` rules a user imports from `~/.claude/harness/current/fragments/`, so far
-  `delegation.md`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and
-  `comment-style` skills). Its version is in `harness/harness.json`.
+  `delegation.md`, `working-agreement.md`, `voice.md` and `reasoning.md`), `claude-md-template.md` (the template a
+  missing `~/.claude/CLAUDE.md` starts from) and `skills/` (the `code-style`, `python-style`, `kotlin-style`,
+  `typescript-style` and `comment-style` skills). Its version is in `harness/harness.json`.
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
   `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the
   repositories named, adds the import line of each fragment picked to a marked block in `~/.claude/CLAUDE.md`, and
@@ -62,7 +63,9 @@ Changes to this repository, fixes and new features alike, are tracked as GitHub 
 
 A plugin reads machine-local data from `~/.claude/local/<plugin>/` and treats a missing file as empty; a skill in
 `harness/skills/` does the same from `~/.claude/local/<skill>/`. Examples,
-with synthetic content only, live in `plugins/<name>/local.example/`, or beside the file in `harness/`.
+with synthetic content only, live in `plugins/<name>/local.example/`, or beside the file in `harness/`. The user's own
+machine-local rules go in `~/.claude/local/local.md`, which `harness/claude-md-template.md` imports; it is theirs to
+write, so no example ships.
 
 ## Trying a change
 
