@@ -148,6 +148,18 @@ leak="write to someone@acme-corp"".com"
     [ "$(find "$install/state" -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 ]
 }
 
+@test "a state directory the hook cannot write: every push is reviewed, and nothing is kept" {
+    mkdir "$install/state"
+    chmod a-w "$install/state"
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 0 ]
+    [ "$calls" -eq 1 ]
+    push fail "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 1 ]
+    [ "$(find "$install/state" -mindepth 1 | wc -l)" -eq 0 ]
+}
+
 @test "a pass under an earlier copy of the gate is not reused" {
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]

@@ -73,7 +73,9 @@ merge is the control there. CI on the public repository is the backstop, and it 
 already public.
 
 A passing review is cached in `<dir>/state/passed/`, keyed by the hash of what the agent read and of every file in the
-installed copy. Pushing the same commits again costs nothing; updating the installed copy reviews them again.
+installed copy. Pushing the same commits again costs nothing; updating the installed copy reviews them again. Where
+the hook cannot write `<dir>/state/`, as in a sandbox that runs it as the agent, it works in a temporary directory and
+caches nothing, so every push is reviewed in full.
 
 **Override:** `LEAK_SCAN_SKIP=1 git push` skips the scan and the review, but only on an SSH remote, and never the
 authorship check. On any other remote it refuses the push instead. It is for the owner, for example to push a binary
