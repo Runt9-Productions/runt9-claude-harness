@@ -102,6 +102,8 @@ class Sandbox:
         result = subprocess.run(
             ["git", "-C", str(repo), "config", "--get", "core.hooksPath"], env=self.env, capture_output=True, text=True
         )
+        # git config --get exits 1 for an unset key; any other failure must not read as unset.
+        assert result.returncode in (0, 1), result.stderr
         return result.stdout.strip() or None
 
 
@@ -137,9 +139,8 @@ def test_harness_installs_a_new_version_and_keeps_state(sandbox: Sandbox) -> Non
     marker = sandbox.install / "state" / "passed" / "example-pass"
     marker.parent.mkdir(parents=True)
     marker.touch()
-    (sandbox.clone / "harness/githooks/example-retired-hook").unlink()
     sandbox.set_version("0.2.0")
-    head = sandbox.commit("Drop the example hook")
+    head = sandbox.commit("Raise the example version")
 
     result = sandbox.run("harness")
 
@@ -151,8 +152,8 @@ def test_harness_installs_a_new_version_and_keeps_state(sandbox: Sandbox) -> Non
     assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
     assert installed_mode(sandbox.current / "githooks/pre-push") == 0o755
     assert installed_mode(sandbox.current / "leak-scan/scan.sh") == 0o755
+    assert installed_mode(sandbox.current / "harness.json") == 0o644
     assert not (sandbox.current / "githooks/README.md").exists()
-    assert not (sandbox.current / "githooks/example-retired-hook").exists()
     assert sorted(path.name for path in (sandbox.install / "versions").iterdir()) == ["0.2.0"]
     assert marker.exists()
 
@@ -161,9 +162,11 @@ def test_harness_replaces_an_installed_version_only_on_yes(sandbox: Sandbox) -> 
     assert sandbox.run("harness").returncode == 0
     edited = b"#!/bin/sh\necho example unbumped\n"
     sandbox.write("harness/githooks/pre-push", edited, 0o755)
-    sandbox.commit("Change the example hook without a version rise")
+    (sandbox.clone / "harness/githooks/example-retired-hook").unlink()
+    sandbox.commit("Change the example hooks without a version rise")
 
-    kept = sandbox.run("harness", stdin="n\n")
+    # A bare Enter takes the [y/N] default.
+    kept = sandbox.run("harness", stdin="\n")
     kept_hook = (sandbox.current / "githooks/pre-push").read_bytes()
     no_answer = sandbox.run("harness")
     replaced = sandbox.run("harness", stdin="y\n")
@@ -175,6 +178,7 @@ def test_harness_replaces_an_installed_version_only_on_yes(sandbox: Sandbox) -> 
     assert "run bootstrap.py in a terminal" in no_answer.stderr
     assert replaced.returncode == 0, replaced.stderr
     assert (sandbox.current / "githooks/pre-push").read_bytes() == edited
+    assert not (sandbox.current / "githooks/example-retired-hook").exists()
 
 
 def test_harness_installs_the_commit_not_a_hidden_working_tree_change(sandbox: Sandbox) -> None:
@@ -196,7 +200,7 @@ def test_symlink_in_the_harness_stops_the_install(sandbox: Sandbox) -> None:
 
     assert result.returncode == 1
     assert f"harness/leak-scan/example-link in {head} is not a regular file (mode 120000)" in result.stderr
-    assert not sandbox.current.exists()
+    assert not os.path.lexists(sandbox.current)
     assert list((sandbox.install / "versions").iterdir()) == []
 
 
@@ -254,9 +258,8 @@ def test_session_refuses(sandbox: Sandbox, variable: str) -> None:
     assert sandbox.claude_calls() == []
 
 
-@pytest.mark.parametrize("variable", ["CLAUDE_CODE_SESSION_ID", "CLAUDECODE"])
-def test_list_works_in_a_session(sandbox: Sandbox, variable: str) -> None:
-    result = sandbox.run("--list", env={variable: "1"})
+def test_list_works_in_a_session(sandbox: Sandbox) -> None:
+    result = sandbox.run("--list", env={"CLAUDE_CODE_SESSION_ID": "1", "CLAUDECODE": "1"})
 
     assert result.returncode == 0, result.stderr
     names = [line.split()[0] for line in result.stdout.splitlines()]
@@ -422,8 +425,9 @@ def test_skill_name_already_taken_refuses_with_nothing_linked(sandbox: Sandbox) 
     assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-beta"]
 
 
-def test_skill_dropped_by_a_new_version_loses_its_link(sandbox: Sandbox) -> None:
+def test_skill_dropped_by_a_new_version_loses_only_its_link(sandbox: Sandbox) -> None:
     assert sandbox.run("harness", "skills").returncode == 0
+    (sandbox.skills / "example-own-dangling").symlink_to(sandbox.root / "example-moved-skill")
     shutil.rmtree(sandbox.clone / "harness/skills/example-beta")
     sandbox.set_version("0.2.0")
     sandbox.commit("Drop the example beta skill")
@@ -432,7 +436,7 @@ def test_skill_dropped_by_a_new_version_loses_its_link(sandbox: Sandbox) -> None
 
     assert result.returncode == 0, result.stderr
     assert f"removed {sandbox.skills / 'example-beta'}" in result.stdout
-    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha"]
+    assert sorted(path.name for path in sandbox.skills.iterdir()) == ["example-alpha", "example-own-dangling"]
 
 
 def test_skills_directory_linked_outside_claude_refuses_with_nothing_written(sandbox: Sandbox) -> None:
@@ -470,9 +474,11 @@ def test_fragment_import_goes_inside_the_block_through_a_link_only_on_yes(sandbo
     rerun = sandbox.run("fragment:example-rules")
 
     assert declined.returncode == 1
+    assert f"not written, so {own} is unchanged" in declined.stderr
     assert f"\n+{EXAMPLE_IMPORT}\n" in declined.stdout
     assert declined_text == before
     assert written.returncode == 0, written.stderr
+    assert sandbox.claude_md.is_symlink()
     assert sandbox.claude_md.readlink() == own
     after = f"# Example rules\r\n\n{BLOCK_START}\n@~/example-other.md\n{EXAMPLE_IMPORT}\n{BLOCK_END}\nexample last line"
     assert own.read_bytes().decode() == after
@@ -503,6 +509,12 @@ def test_missing_claude_md_starts_from_the_harness_template(sandbox: Sandbox, te
     assert result.returncode == 0, result.stderr
     block = f"{BLOCK_START}\n{EXAMPLE_IMPORT}\n{BLOCK_END}\n"
     assert sandbox.claude_md.read_text() == (block if template is None else f"{template}\n{block}")
+
+
+def test_shipped_template_holds_the_markers_bootstrap_writes_between() -> None:
+    # A template whose markers drifted from bootstrap's would get a second block appended at its end.
+    template = (SCRIPT.parent / "harness" / "claude-md-template.md").read_text().splitlines()
+    assert template.index(BLOCK_START) + 1 == template.index(BLOCK_END)
 
 
 def test_fragment_missing_from_the_installed_harness_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
@@ -583,7 +595,23 @@ def test_plugin_dirs_warns_once(sandbox: Sandbox, in_settings: bool) -> None:
 
     assert result.returncode == 0, result.stderr
     assert result.stderr.count(f"CLAUDE_CODE_PLUGIN_DIRS is {value}") == 1
-    assert len(sandbox.claude_calls()) == 3
+    assert sandbox.claude_calls() == [
+        MARKETPLACE_ADD,
+        ["plugin", "install", "example-one@example-market"],
+        ["plugin", "install", "example-two@example-market"],
+    ]
+
+
+def test_claude_missing_from_path_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
+    git_only = sandbox.root / "example-git-only"
+    git_only.mkdir()
+    (git_only / "git").symlink_to(shutil.which("git", path=sandbox.env["PATH"]))
+
+    result = sandbox.run("harness", "plugin:example-one", env={"PATH": str(git_only)})
+
+    assert result.returncode == 1
+    assert "claude is not on PATH, and plugin components run it" in result.stderr
+    assert not sandbox.install.exists()
 
 
 def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -> None:
