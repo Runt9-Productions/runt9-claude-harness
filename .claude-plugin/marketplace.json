@@ -38,7 +38,7 @@
     {
       "name": "guardrails",
       "source": "./plugins/guardrails",
-      "description": "Hooks that deny tool calls crossing a fixed boundary, so far reading credential stores and searching outside the project for credential values"
+      "description": "Hooks that deny tool calls crossing a fixed boundary, so far reading credential stores, searching outside the project for credential values, and installing, removing or upgrading software"
     }
   ]
 }

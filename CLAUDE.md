@@ -72,8 +72,8 @@ Start a separate session with `claude --plugin-dir plugins/<name>`. It replaces 
 for that session only.
 
 To check a mod, run `npm ci` once at the root, then load the mod as above, which writes the types `tsc` needs into
-the plugin. Then run `npx tsc -p plugins/<name>`, `npx oxlint -c .oxlintrc.json plugins/<name>` and
-`claude plugin test plugins/<name>`.
+the plugin. Then run `npx --no-install tsc -p plugins/<name>`, `npx --no-install oxlint -c .oxlintrc.json
+plugins/<name>` and `claude plugin test plugins/<name>`. `--no-install` runs only what `npm ci` put in `node_modules`.
 
 To check Python, install the pinned tools into a virtual environment once, then run the checks from the root. CI adds flags that keep a config file a PR adds from changing them.
 
