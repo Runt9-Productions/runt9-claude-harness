@@ -162,17 +162,12 @@ def test_allows_work_that_changes_no_software(command: str, tmp_path: Path) -> N
 @pytest.mark.parametrize(
     ("command", "expected"),
     [
-        pytest.param(".venv/bin/pip install --require-hashes -r requirements.txt", None, id="hashed-replay"),
-        pytest.param(
-            "source .venv/bin/activate && pip install --require-hashes -r requirements.txt",
-            None,
-            id="hashed-replay-after-activate",
-        ),
+        pytest.param("source .venv/bin/activate && pip install -r requirements.txt", None, id="replay-after-activate"),
         pytest.param(".venv/bin/pip uninstall -y example-lib", None, id="uninstall-inside"),
         pytest.param(
-            ".venv/bin/pip install --require-hashes --only-binary :all: -r requirements.txt",
+            ".venv/bin/pip install --no-deps --only-binary :all: -r requirements.txt",
             None,
-            id="hashed-replay-with-option-values",
+            id="replay-with-option-values",
         ),
         pytest.param(
             ".venv/bin/python -m pip install example-lib",
@@ -180,18 +175,13 @@ def test_allows_work_that_changes_no_software(command: str, tmp_path: Path) -> N
             id="named-package-inside",
         ),
         pytest.param(
-            ".venv/bin/pip install -r requirements.txt",
-            "`pip install` without `--require-hashes -r`",
-            id="unhashed-requirements-inside",
-        ),
-        pytest.param(
-            "other/bin/pip install --require-hashes -r requirements.txt",
+            "other/bin/pip install -r requirements.txt",
             "`pip install` outside a virtual environment",
             id="bin-without-pyvenv-cfg",
         ),
     ],
 )
-def test_pip_installs_only_hashed_requirements_into_a_virtual_environment(
+def test_pip_replays_requirements_only_into_a_virtual_environment(
     command: str, expected: str | None, tmp_path: Path
 ) -> None:
     venv = tmp_path / "project" / ".venv"

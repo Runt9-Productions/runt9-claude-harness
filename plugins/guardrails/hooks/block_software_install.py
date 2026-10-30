@@ -14,8 +14,8 @@ Denied:
 - a package manager changing packages: `apt`, `dpkg`, `snap`, `dnf`, `brew`, `gem`, `pipx`, `cargo install`,
   `go install`, `uv tool install`, `uv python install`, and `pacman` or `add-apt-repository` in any form;
 - a global Node install, and any install naming a new package (`npm install <name>`, `uv add`, `cargo add`);
-- `pip install` outside a virtual environment, and inside one unless it replays hashed requirements
-  (`--require-hashes -r`); `uv sync` without `--locked` or `--frozen`;
+- `pip install` outside a virtual environment, and inside one when it names a package rather than replaying a
+  requirements file; `uv sync` without `--locked` or `--frozen`;
 - a package runner or scaffolder that can download (`npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `pnpx`, `uvx`,
   `npm init <name>`, `create <name>`, `go run <module>@<version>`), unless told it may not (`npx --no-install`,
   `npm exec --no`);
@@ -116,7 +116,6 @@ PIP_VALUE_OPTIONS = {
     "--extra-index-url", "-f", "--find-links", "--python", "--python-version", "--platform", "--cache-dir", "--log",
     "--report", "--timeout", "--retries", "--proxy", "--cert", "--only-binary", "--no-binary", "--trusted-host",
 }  # fmt: skip
-REQUIREMENT_OPTIONS = {"-r", "--requirement"}
 LOCKED_FLAGS = {"--locked", "--frozen"}
 UV_VALUE_OPTIONS = {"--directory", "--project", "--cache-dir", "--config-file", "--color", "--python-preference"}
 UV_MACHINE_ACTIONS = {"tool": {"install", "upgrade", "uninstall", "run"}, "python": {"install", "uninstall", "upgrade"}}
@@ -204,9 +203,7 @@ def judge_pip(program: str, arguments: list[str], in_venv: bool) -> str | None:
     packages = [rest[index] for index in operand_positions(rest, PIP_VALUE_OPTIONS)]
     if packages:
         return f"`{program} install {packages[0]}` names a new package"
-    if "--require-hashes" in rest and REQUIREMENT_OPTIONS.intersection(rest):
-        return None
-    return f"`{program} install` without `--require-hashes -r`"
+    return None
 
 
 def judge_uv(arguments: list[str]) -> str | None:

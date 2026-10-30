@@ -152,8 +152,8 @@ Denied:
   `add-apt-repository` in any form;
 - a global Node install (`npm`, `pnpm`, `yarn` or `bun` with `-g`, or `yarn global add`);
 - an install naming a new package: `npm install <name>`, `yarn add`, `uv add`, `cargo add`, `go get`;
-- `pip install` (also `python -m pip` and `uv pip`) outside a virtual environment, and inside one unless it replays
-  hashed requirements with `--require-hashes -r`. A virtual environment is a `pip` or `python` path whose `bin` sits
+- `pip install` (also `python -m pip` and `uv pip`) outside a virtual environment, and inside one when it names a
+  package rather than replaying a requirements file (`-r`). A virtual environment is a `pip` or `python` path whose `bin` sits
   beside a `pyvenv.cfg`, or one activated earlier in the same command;
 - `uv sync` without `--locked` or `--frozen`;
 - a package runner or scaffolder that can download: `npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `bun x`,
@@ -165,7 +165,7 @@ Denied:
 - `curl` or `wget` fetching a package file (`.deb`, `.rpm`, `.appimage`, `.msi`, `.dmg`, `.pkg`, `.snap`, `.exe`, any
   case), or in the same command as an archive extractor (`tar`, `unzip`, `bsdtar`, `cpio`, `7z`, `7za`).
 
-Allowed: lockfile replays (`npm ci`, `uv sync --locked`, a hashed `pip install` into a virtual environment), a bare
+Allowed: lockfile replays (`npm ci`, `uv sync --locked`, `pip install -r` into a virtual environment), a bare
 `npm install`, runners that cannot download (`npx --no-install`, `npm exec --no`, `pnpm exec`), build tools whose
 lifecycle says install (`mvn install`, `./gradlew installDist`), a download piped into a script as data
 (`curl ... | python3 -m json.tool`), and any command that only mentions an install in text (`echo`, `grep`,
