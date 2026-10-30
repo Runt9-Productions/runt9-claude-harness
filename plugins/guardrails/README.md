@@ -54,21 +54,26 @@ with an exception is listed there.
 **The hook** covers the rest:
 
 - the paths a Bash or Monitor command actually reads: the file operands of known reading commands (the sources only,
-  for `cp`), the targets of `<` redirects, and the roots of a recursive search (the working directory when it names
-  none). Commands inside `$(...)`, backticks, subshells, `{ ...; }` groups, `if` and loop bodies, and behind wrappers
-  such as `sudo -u`, `timeout` and `exec` count, and a relative path resolves from wherever an earlier `cd` moved to;
+  for `cp`, `rsync` and `scp`), the targets of `<` redirects, the roots of a recursive search (the working directory
+  when it names none), and the roots and name tests of `find`, judged as Glob is. Commands inside `$(...)`,
+  backticks, unquoted heredocs, subshells, `{ ...; }` groups, `if` and loop bodies, and behind wrappers such as
+  `sudo -u`, `timeout` and `exec` count, and a relative path resolves from wherever an earlier `cd` moved to (after
+  `cd -` or `popd`, from somewhere outside the project);
 - wildcards and brace lists, judged by the names they can spell, so `.env*` and `*.{pem,p12}` deny while `.*` and
-  `*rc` do not;
+  `*rc` do not. A Glob or `find -name` fragment open at both ends, such as `*env*`, lists names rather than one
+  store and is allowed;
 - stores with exceptions, which only the hook can make: `.env.<suffix>`, `.pem`, `.key` and other private keys, and
   config files whose names say they hold secrets (`database`, `datasource`, `credentials`, `secrets` or `passwords`
-  with a config extension, such as `example-datasource.yml`);
-- any file in a credential directory (`.ssh`, `.aws`, `.docker`, `.gnupg`, `.kube`, `.config/gh`) apart from
-  `known_hosts`, `config` and `authorized_keys` in `.ssh`, and a recursive search rooted in one;
+  as a word of the name, with a config extension, such as `example-datasource.yml` but not `passwordReset.json`);
+- a credential directory (`.ssh`, `.aws`, `.docker`, `.gnupg`, `.kube`, `.config/gh`) given whole, as in
+  `tar czf - ~/.ssh`, and any file in one apart from `known_hosts`, `config` and `authorized_keys` in `.ssh`, and a
+  recursive search rooted in one;
 - stores the deny rules leave out: the per-user `.npmrc` (a project's own sets options), the public halves of the
   default SSH keys, and the system password file;
 - a search whose pattern names a credential (password, passphrase, secret, token, api_key, private key, bearer,
-  `jdbc:` and the like) when it reaches outside the working directory, and a Grep whose `glob` covers config files
-  named for secrets (`*.properties`). Inside the project any other such search is ordinary work on its code.
+  `jdbc:` and the like) when it reaches outside the working directory. Every word of such a search but its roots is
+  checked, so an attached pattern (`-epassword`) or an option the hook does not know cannot hide it. Inside the
+  project such a search is ordinary work on its code.
 
 It judges what a call reads, never a name that only appears in its text, so `echo`, a commit message or
 `git log --grep` mentioning a store is allowed.
@@ -78,8 +83,8 @@ The hook allows:
 - `.env.example`, `.env.sample` and `.env.template`;
 - each path suffix in the local allowed-suffixes file, below.
 
-A command the shell tokenizer cannot split is denied only when its raw text names a store. Any error inside the hook
-denies, with a message saying the guard failed.
+A command the shell tokenizer cannot split is denied when a word of its raw text names a store, or when it runs a
+search and its text names a credential. Any error inside the hook denies, with a message saying the guard failed.
 
 The Monitor tool's `command` is judged the same way as a Bash command. That the `Monitor` matcher reaches the hook
 has not been confirmed in a live session.
@@ -89,6 +94,7 @@ Known gaps:
 - a path built at run time (`$FILE`);
 - a file read by a script or interpreter, including a command inside a quoted string (`sh -c '...'`);
 - a reading command the hook does not list, and a credential file with an unremarkable name;
+- a recursive copy or archive of a directory that holds a credential directory, such as `tar czf - ~`;
 - a recursive search inside the project: `grep -rn DB_PASSWORD .` prints the matching line of a `.env` file it
   passes, and the `--include`, `-g` and `--glob` values of a Bash search are not judged;
 - a session started in the home directory, where every path counts as inside the project, so the keyword check never

@@ -29,3 +29,4 @@ quotes a message. The mailbox escapes less than its envelope suggests.
 ## Relations
 
 - see_also [[Plugin Platform]]
+- see_also [[Teammate Lifecycle]]

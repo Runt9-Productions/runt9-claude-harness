@@ -3,7 +3,8 @@
 `parse` splits a command into simple commands the way the shell would, including those inside `$(...)`, backticks,
 `<(...)`, subshells, `{ ...; }` groups and compound statements. Quoted text stays text, apart from a `$(...)` or
 backtick substitution inside double quotes, and arithmetic (`$((...))`, `((...))`) is skipped whole. A heredoc's body
-is read from the lines after the one that opens it and becomes the text of its `<<` redirect's target. It raises
+is read from the lines after the one that opens it and becomes the text of its `<<` redirect's target, with the
+substitutions in it when its delimiter is unquoted, since the shell runs those. It raises
 ValueError on a command it cannot split, such as one with an unterminated quote. `runnable` finds the program a simple
 command runs, past leading assignments, reserved words and wrappers (`sudo`, `env`, `timeout`, `nice` and the like,
 with the values their options take).
@@ -56,7 +57,9 @@ PIPES = {"|", "|&"}
 METACHARACTERS = set(" \t\n;&|<>()")
 DOUBLE_QUOTE_ESCAPES = set('"\\$`\n')
 FD_PREFIX = re.compile(r"\d+(?=[<>])")
-RAW_WORD_SEPARATORS = re.compile(r"[\s'\"`;|&<>()$]+")
+RAW_WORD_SEPARATORS = re.compile(r"[\s'\"`;|&<>()]+")
+# A heredoc delimiter with any of these in it is quoted, and its body is not expanded.
+DELIMITER_QUOTES = set("'\"\\")
 
 
 @dataclass
@@ -82,8 +85,9 @@ class ShellParser:
     def __init__(self, text: str) -> None:
         self.text = text
         self.position = 0
-        # Heredocs opened on the current line, as (delimiter, strips leading tabs, target); bodies follow the newline.
-        self.heredocs: list[tuple[str, bool, Word]] = []
+        # Heredocs opened on the current line, as (delimiter, strips leading tabs, expands, target); bodies follow the
+        # newline.
+        self.heredocs: list[tuple[str, bool, bool, Word]] = []
 
     def at(self, prefix: str) -> bool:
         return self.text.startswith(prefix, self.position)
@@ -127,8 +131,11 @@ class ShellParser:
                     self.heredoc_bodies()
             elif operator in HEREDOC_OPERATORS:
                 self.skip_blanks()
+                start = self.position
+                delimiter = self.word(closer).text
+                expands = not DELIMITER_QUOTES.intersection(self.text[start : self.position])
                 body = Word("")
-                self.heredocs.append((self.word(closer).text, operator == "<<-", body))
+                self.heredocs.append((delimiter, operator == "<<-", expands, body))
                 current.redirects.append((operator, body))
             elif operator:
                 self.skip_blanks()
@@ -153,7 +160,7 @@ class ShellParser:
 
     def heredoc_bodies(self) -> None:
         """Reads the bodies of the heredocs opened on the line just ended, each up to its delimiter line or the end."""
-        for delimiter, strips_tabs, body in self.heredocs:
+        for delimiter, strips_tabs, expands, body in self.heredocs:
             lines = []
             while self.position < len(self.text):
                 end = self.text.find("\n", self.position)
@@ -167,6 +174,8 @@ class ShellParser:
                     break
                 lines.append(line)
             body.text = "\n".join(lines)
+            if expands:
+                ShellParser(body.text).expanded(body.substitutions, closer=None)
         self.heredocs.clear()
 
     def arithmetic(self) -> str:
@@ -233,15 +242,22 @@ class ShellParser:
         return quoted
 
     def double_quoted(self, substitutions: list[list[Command]]) -> str:
-        """The quoted text; a substitution inside it still runs, so it is added to `substitutions`."""
         self.position += 1
+        return self.expanded(substitutions, closer='"')
+
+    def expanded(self, substitutions: list[list[Command]], closer: str | None) -> str:
+        """Text in which only substitutions and arithmetic expand, up to `closer`, which is consumed, or to the end.
+
+        A substitution inside it still runs, so it is added to `substitutions`."""
         text: list[str] = []
         while True:
             if self.position >= len(self.text):
-                raise ValueError("unterminated double quote")
+                if closer:
+                    raise ValueError(f"no closing {closer}")
+                return "".join(text)
             char = self.text[self.position]
             following = self.text[self.position + 1 : self.position + 2]
-            if char == '"':
+            if char == closer:
                 self.position += 1
                 return "".join(text)
             if char == "\\" and following in DOUBLE_QUOTE_ESCAPES:

@@ -9,10 +9,11 @@ tags: [migration, harness]
 
 ## Status
 
-- **Live item:** 06, delegation, worktrees and dev-process
-- **How far along:** 01 to 05 merged; 06 not started
+- **Live item:** 08, the CLAUDE.md template and fragments: bootstrap's fragment install (#32) is merged, and #34 is in
+  review
+- **How far along:** 01 to 06 merged; 07, guardrails plus bootstrap's settings merge, in review
 - **Blocked on:** nothing
-- **Last moved:** 2026-10-27
+- **Last moved:** 2026-10-29
 
 ## Build Order
 
@@ -28,7 +29,7 @@ same process. 04 and 05 stack on 03: 04 adds a bootstrap component, and 05 needs
 - [x] 03 bootstrap.py and the Python CI job
 - [x] 04 Style-guide skills
 - [x] 05 reference-kb plugin and this repository's knowledge base
-- [ ] 06 Delegation, worktrees and dev-process
+- [x] 06 Delegation and the dev-process plugins, shipped as four pull requests
 - [ ] 07 Guardrails, plus bootstrap's settings merge
 - [ ] 08 CLAUDE.md template and fragments
 - [ ] 09 context-budget, board, handoff and away

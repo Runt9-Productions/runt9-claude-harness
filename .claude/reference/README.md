@@ -11,6 +11,8 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Mod CI Checks](domains/plugins/mod-ci.md) | changing the `plugins` CI job, or checking a mod locally |
 | [Skill Loading](domains/skills/overview.md) | relying on a skill being in context: when it loads, and what survives compaction |
 | [Teammate Mailbox](domains/agent-teams/mailbox.md) | sending text between teammates that holds tags |
+| [Teammate Lifecycle](domains/agent-teams/lifecycle.md) | writing a rule about how teammates report, wait or stop, or testing one headless |
+| [Built-in Worktrees](domains/worktrees/overview.md) | relying on a worktree's contents or base, or on a language server answer inside one |
 | [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, or anything under `.github/workflows/` |
 | [Harness Migration](projects/harness-migration/overview.md) | resuming the harness migration |
 

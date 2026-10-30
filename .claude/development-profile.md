@@ -113,7 +113,8 @@ pre-push gate trusts it, so a build never writes to it.
 - Test review: `.claude/test-review-profile.md` exists. The `test-review-requested` label runs the `test-review`
   plugin in CI over the test files the head changes, posts a comment-type review with each test fix as a suggested
   change, pushes nothing and removes the label. Add it first, and commit the fixes wanted before adding
-  `code-review-requested`, so the panel reviews the tests as they will merge. Not skipped.
+  `code-review-requested`, so the panel reviews the tests as they will merge. Skipped when the pull request changes
+  no test, or its test changes are trivial enough for the owner to check at a glance.
 - External reviewer: none.
 - Inline comments: one `gh api repos/Runt9-Productions/runt9-claude-harness/pulls/<n>/reviews --input <file>` with
   `event: "COMMENT"`, `commit_id`, `body` and `comments[]` of `path`, `line`, `side: "RIGHT"` and `body`. GitHub
