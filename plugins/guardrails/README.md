@@ -147,27 +147,38 @@ package manager's verb past the options before it (`apt-get -o Key=Value install
 
 Denied:
 
-- a package manager changing packages: `apt`, `apt-get`, `aptitude`, `dpkg`, `snap`, `yum`, `dnf`, `zypper`, `brew`,
-  `gem`, `pipx`, `cargo install`, `go install`, `uv tool install`, `uv python install`, and `pacman` or
-  `add-apt-repository` in any form;
-- a global Node install (`npm`, `pnpm`, `yarn` or `bun` with `-g`, or `yarn global add`);
-- an install naming a new package: `npm install <name>`, `yarn add`, `uv add`, `cargo add`, `go get`;
-- `pip install` (also `python -m pip` and `uv pip`) outside a virtual environment, and inside one when it names a
-  package rather than replaying a requirements file (`-r`). A virtual environment is a `pip` or `python` path whose `bin` sits
-  beside a `pyvenv.cfg`, or one activated earlier in the same command;
+- a package manager changing packages: `apt`, `apt-get` and `aptitude` (including `build-dep` and `satisfy`), `dpkg`
+  and `rpm` install and remove modes (`-i`, `-Uvh`, `-e`), `yum`, `dnf` and `zypper` (including group and module
+  installs, `localinstall`, `builddep`, `patch` and `si`), `apk`, `snap`, `flatpak`, `brew` (including `bundle` and
+  `tap`), `port`, `conda`, `mamba` and `micromamba`, `nix profile` and `nix-env`, `gem`, `pipx`, `cargo install` and
+  `binstall`, `go install`, `gh extension`, `dotnet tool` and `workload`, `uv tool`, `uv python` and `uv self update`,
+  `poetry self`, `deno upgrade`, and `pacman` or `add-apt-repository` in any form;
+- a language or toolchain version manager installing or removing a version: `nvm`, `fnm`, `volta`, `pyenv`, `rbenv`,
+  `asdf` (and `asdf plugin add`), `mise` (and `mise use`), `sdk` and `rustup` (and its `toolchain`, `target`,
+  `component` and `self` changes);
+- a global Node install (`npm`, `pnpm`, `yarn`, `bun` or `deno` with `-g`, or `yarn global add`), and `npm link`,
+  which puts a package's programs on the global path;
+- an install naming a new package: `npm install <name>`, `yarn add`, `uv add`, `poetry add`, `cargo add`, `go get`;
+- `pip install` (also `python -m pip`, `uv pip` and `pipenv`) outside a virtual environment, and inside one when it
+  names a package rather than replaying a requirements file (`-r`, `uv pip sync`, a bare `pipenv install`). A virtual
+  environment is a `pip` or `python` path whose `bin` sits beside a `pyvenv.cfg`, one activated earlier in the same
+  command, or `uv` and `pipenv` without `--system`;
 - `uv sync` without `--locked` or `--frozen`;
 - a package runner or scaffolder that can download: `npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `bun x`,
   `pnpx`, `uvx`, `uv tool run`, `pipx run`, `npm init <name>`, `npm`, `pnpm`, `yarn` or `bun` `create <name>`, and
   `go run <module>@<version>`;
 - a download or lookup (`curl`, `wget`, `dig`, `nslookup`, `host`) whose output an interpreter runs as a program:
-  piped into a shell, `python`, `node`, `perl` or `ruby` that reads its program from stdin, or substituted where one
-  reads it (`bash -c "$(curl ...)"`, `bash <(curl ...)`, `eval "$(curl ...)"`, `source <(curl ...)`);
+  followed in the same command by a shell, `python`, `node`, `perl` or `ruby` that reads its program from stdin with
+  no redirect of its own, so a pipe into or out of a group or subshell counts (`curl ... | bash`,
+  `{ curl ...; } | sh`, `curl ... | (cd /tmp && bash)`), or substituted where one reads it
+  (`bash -c "$(curl ...)"`, `bash <(curl ...)`, `eval "$(curl ...)"`, `source <(curl ...)`);
 - `curl` or `wget` fetching a package file (`.deb`, `.rpm`, `.appimage`, `.msi`, `.dmg`, `.pkg`, `.snap`, `.exe`, any
   case), or in the same command as an archive extractor (`tar`, `unzip`, `bsdtar`, `cpio`, `7z`, `7za`).
 
-Allowed: lockfile replays (`npm ci`, `uv sync --locked`, `pip install -r` into a virtual environment), a bare
-`npm install`, runners that cannot download (`npx --no-install`, `npm exec --no`, `pnpm exec`), build tools whose
-lifecycle says install (`mvn install`, `./gradlew installDist`), a download piped into a script as data
+Allowed: lockfile replays (`npm ci`, `uv sync --locked`, `pip install -r` into a virtual environment,
+`poetry install`, `dotnet tool restore`), a bare `npm install`, package manager queries (`rpm -qi`, `dpkg -l`),
+runners that cannot download (`npx --no-install`, `npm exec --no`, `pnpm exec`), build tools whose lifecycle says
+install (`mvn install`, `./gradlew installDist`), a download piped into a script as data
 (`curl ... | python3 -m json.tool`), and any command that only mentions an install in text (`echo`, `grep`,
 `git log --grep`, a commit message).
 
@@ -176,10 +187,19 @@ denies, with a message saying the guard failed.
 
 Accepted false positives: a data archive fetched and unpacked is denied like a tool, since a wrong denial costs one
 sentence and a missed install changes the machine; plain `pip` in a session started inside an activated virtual
-environment is judged as outside one. Known gaps: a command in a string run by anything but a shell or `eval`
-(`env -S`, `su -c`, `watch '...'`), text piped into a shell (`echo '...' | bash`), a download saved to a file and run
-later, project dependency updates (`npm update`, `uv run`), and installers it does not list (`make install`, `apk`,
-`conda`, `rustup`).
+environment is judged as outside one; `brew bundle` is denied in every form, `check` and `dump` included; an
+interpreter reading stdin anywhere after a download in the same command is judged as running it, piped or not.
+
+Known gaps:
+
+- a command in a string run by anything but a shell or `eval` (`env -S`, `su -c`, `watch '...'`), and text piped into
+  a shell (`echo '...' | bash`);
+- a download saved to a file and run later, and a project script that installs when run (`bash scripts/setup.sh`);
+- project dependency updates (`npm update`, `poetry update`, `uv run`) and runners that fetch on first use
+  (`deno run npm:...`, `rustup default`);
+- copying a program into place (`install`, `cp` into a `bin` directory) and building one (`make install`);
+- every installer and package manager not named above, such as Windows package managers and language tools like
+  `bundle`, `composer` or `opam`, and any verb of a named tool not listed.
 
 ## Trying a change
 

@@ -1,40 +1,11 @@
 """PreToolUse hook for Bash and Monitor: denies installing, removing or upgrading software.
 
 Changing what software is on the machine needs the user's approval every time, however small the change, so the hook
-denies it at the attempt. It is not a block on `sudo`: privileged work that installs nothing is allowed.
-
-`shell_words` splits the command into simple commands the way the shell would, including those inside `$(...)`,
-backticks, `<(...)`, subshells, `{ ...; }` groups and compound statements. Quoted text and heredoc bodies stay text,
-apart from a `$(...)` or backtick substitution inside double quotes, and apart from the text a shell or `eval` runs as
-its program (`sh -c '...'`, `eval ...`, a heredoc or here-string a shell reads), which is judged as a command of its
-own. Each command is judged by its program, found past leading assignments and wrappers (`sudo`, `env`, `timeout`,
-`nice` and the like, with the values their options take), and a package manager's verb past the options before it.
-Denied:
-
-- a package manager changing packages: `apt`, `dpkg`, `snap`, `dnf`, `brew`, `gem`, `pipx`, `cargo install`,
-  `go install`, `uv tool install`, `uv python install`, and `pacman` or `add-apt-repository` in any form;
-- a global Node install, and any install naming a new package (`npm install <name>`, `uv add`, `cargo add`);
-- `pip install` outside a virtual environment, and inside one when it names a package rather than replaying a
-  requirements file; `uv sync` without `--locked` or `--frozen`;
-- a package runner or scaffolder that can download (`npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `pnpx`, `uvx`,
-  `npm init <name>`, `create <name>`, `go run <module>@<version>`), unless told it may not (`npx --no-install`,
-  `npm exec --no`);
-- a download or lookup (`curl`, `wget`, `dig`, `nslookup`, `host`) whose output an interpreter runs: piped into one
-  that reads its program from stdin, or substituted where it reads its program (`bash -c "$(curl ...)"`,
-  `bash <(curl ...)`, `eval "$(curl ...)"`);
-- `curl` or `wget` fetching a package file, or in the same command as an archive extractor.
-
-Allowed: lockfile replays (`npm ci`, `uv sync --locked`), a bare `npm install`, `pnpm exec`, build tools whose
-lifecycle says install (`mvn install`, `installDist`), and commands that only mention an install in text. A command
-the tokenizer cannot split is denied only when its raw words name an install. Any error inside the hook denies, so
-the guard fails closed.
-
-Accepted false positives: a data archive fetched and unpacked is denied like a tool, since a wrong denial costs one
-sentence and a missed install changes the machine; plain `pip` in a session started inside an activated virtual
-environment is judged as outside one. Known gaps: a command in a string run by anything but a shell or `eval`
-(`env -S`, `su -c`, `watch '...'`), text piped into a shell (`echo '...' | bash`), a download saved to a file and run
-later, project dependency updates (`npm update`, `uv run`), and installers not listed (`make install`, `apk`, `conda`,
-`rustup`).
+denies it at the attempt. `shell_words` splits the command into the simple commands it runs, nested ones included, and
+each is judged by its program, found past assignments and wrappers, and a package manager's verb past the options before
+it. The text a shell or `eval` runs as its program is judged as a command of its own. Any error inside the hook denies,
+so the guard fails closed. The README's "Software installs" section lists what is denied, what is allowed and the known
+gaps.
 """
 
 from __future__ import annotations
@@ -44,18 +15,33 @@ import json
 import os
 import re
 import sys
+from enum import Enum, auto
 from pathlib import Path
 
-from shell_words import SHELL_TOOLS, Command, Word, command_name, nested_scripts, parse, raw_words, runnable, texts
+from shell_words import (
+    SHELL_TOOLS,
+    Command,
+    Word,
+    command_name,
+    nested_scripts,
+    parse,
+    raw_words,
+    runnable,
+    takes_value,
+    texts,
+)
 
 APT_VERBS = {
     "install", "reinstall", "remove", "purge", "autoremove", "autopurge", "upgrade", "full-upgrade", "dist-upgrade",
-    "safe-upgrade",
+    "safe-upgrade", "build-dep", "satisfy",
 }  # fmt: skip
 RPM_VERBS = {
     "install", "in", "reinstall", "remove", "rm", "erase", "update", "up", "upgrade", "dist-upgrade", "dup",
-    "downgrade", "autoremove",
+    "downgrade", "autoremove", "groupinstall", "groupupdate", "groupremove", "localinstall", "localupdate", "builddep",
+    "distro-sync", "swap", "patch", "si", "source-install", "install-new-recommends", "inr",
 }  # fmt: skip
+VERSION_MANAGER_VERBS = {"install", "uninstall"}
+CONDA_VERBS = {"install", "remove", "uninstall", "update", "upgrade"}
 MUTATING_SUBCOMMANDS = {
     "apt": APT_VERBS,
     "apt-get": APT_VERBS,
@@ -63,16 +49,62 @@ MUTATING_SUBCOMMANDS = {
     "yum": RPM_VERBS,
     "dnf": RPM_VERBS,
     "zypper": RPM_VERBS,
+    "apk": {"add", "del", "upgrade", "fix"},
     "snap": {"install", "remove", "refresh"},
-    "brew": {"install", "reinstall", "uninstall", "remove", "rm", "upgrade"},
+    "flatpak": {"install", "uninstall", "update"},
+    "brew": {"install", "reinstall", "uninstall", "remove", "rm", "upgrade", "bundle", "tap", "untap", "autoremove"},
+    "port": {"install", "uninstall", "upgrade", "selfupdate"},
+    "conda": CONDA_VERBS,
+    "mamba": CONDA_VERBS,
+    "micromamba": CONDA_VERBS,
     "gem": {"install", "uninstall", "update"},
-    "cargo": {"install", "uninstall", "add"},
+    "cargo": {"install", "uninstall", "add", "binstall"},
     "go": {"install", "get"},
+    "poetry": {"add"},
+    "deno": {"upgrade"},
     "pipx": {
         "install", "install-all", "uninstall", "uninstall-all", "upgrade", "upgrade-all", "reinstall", "reinstall-all",
         "inject", "uninject", "run",
     },
+    "rustup": {"install", "uninstall", "update"},
+    "nvm": VERSION_MANAGER_VERBS,
+    "fnm": VERSION_MANAGER_VERBS,
+    "volta": VERSION_MANAGER_VERBS,
+    "pyenv": VERSION_MANAGER_VERBS,
+    "rbenv": VERSION_MANAGER_VERBS,
+    "asdf": VERSION_MANAGER_VERBS,
+    "mise": VERSION_MANAGER_VERBS | {"use", "upgrade", "self-update"},
+    "sdk": VERSION_MANAGER_VERBS | {"upgrade"},
 }  # fmt: skip
+RPM_GROUP_ACTIONS = {"install", "remove", "upgrade", "update", "switch-to"}
+GH_EXTENSION_ACTIONS = {"install", "upgrade", "remove"}
+# Verbs whose second word picks whether they change software, as in `dnf group install`.
+MUTATING_ACTIONS = {
+    "dnf": {"group": RPM_GROUP_ACTIONS, "groups": RPM_GROUP_ACTIONS, "module": RPM_GROUP_ACTIONS},
+    "yum": {"group": RPM_GROUP_ACTIONS, "groups": RPM_GROUP_ACTIONS},
+    "uv": {
+        "tool": {"install", "upgrade", "uninstall", "run"},
+        "python": {"install", "uninstall", "upgrade"},
+        "self": {"update"},
+    },
+    "poetry": {"self": {"add", "install", "update", "remove"}},
+    "gh": {"extension": GH_EXTENSION_ACTIONS, "ext": GH_EXTENSION_ACTIONS},
+    "dotnet": {"tool": {"install", "update", "uninstall"}, "workload": {"install", "update", "uninstall"}},
+    "nix": {"profile": {"install", "add", "upgrade", "remove"}},
+    "rustup": {
+        "toolchain": {"install", "add", "uninstall", "remove"},
+        "target": {"add", "remove"},
+        "component": {"add", "remove"},
+        "self": {"update", "uninstall"},
+    },
+    "asdf": {"plugin": {"add", "remove", "update"}},
+}
+# Options that pick a changing mode of a tool whose actions are options, alone or leading a cluster (`rpm -ivh`).
+MODE_OPTIONS = {
+    "dpkg": {"-i", "--install", "--unpack", "-r", "--remove", "-P", "--purge"},
+    "rpm": {"-i", "--install", "-U", "--upgrade", "-F", "--freshen", "-e", "--erase", "--reinstall"},
+    "nix-env": {"-i", "--install", "-e", "--uninstall", "-u", "--upgrade"},
+}
 APT_VALUE_OPTIONS = {
     "-o", "--option", "-t", "--target-release", "--default-release", "-c", "--config-file", "-a", "--host-architecture",
 }  # fmt: skip
@@ -80,6 +112,7 @@ RPM_VALUE_OPTIONS = {
     "--enablerepo", "--disablerepo", "--repo", "--repoid", "--setopt", "--releasever", "--installroot", "-c",
     "--config", "-x", "--exclude", "-d", "--debuglevel", "-e", "--errorlevel", "-R", "--root", "-p", "--plus-repo",
 }  # fmt: skip
+UV_VALUE_OPTIONS = {"--directory", "--project", "--cache-dir", "--config-file", "--color", "--python-preference"}
 # Options a package manager takes before its verb, each with a separate value.
 GLOBAL_VALUE_OPTIONS = {
     "apt": APT_VALUE_OPTIONS,
@@ -90,15 +123,17 @@ GLOBAL_VALUE_OPTIONS = {
     "zypper": RPM_VALUE_OPTIONS,
     "cargo": {"-Z", "-C", "--config", "--color"},
     "go": {"-C"},
+    "uv": UV_VALUE_OPTIONS,
 }
-MACHINE_TOOLS = {"pacman", "add-apt-repository"}
+MACHINE_TOOLS = {"pacman", "add-apt-repository", "cargo-binstall"}
 RUNNERS = {"bunx", "uvx", "pnpx"}
-DPKG_CHANGES = {"-i", "--install", "--unpack", "-r", "--remove", "-P", "--purge"}
 GO_BUILD_VALUE_OPTIONS = {"-C", "-tags", "-ldflags", "-gcflags", "-exec", "-mod", "-modfile", "-o", "-p", "-toolexec"}
 
-NODE_MANAGERS = {"npm", "pnpm", "yarn", "bun"}
+NODE_MANAGERS = {"npm", "pnpm", "yarn", "bun", "deno"}
 NODE_INSTALL_VERBS = {"install", "i", "in", "add"}
 NODE_CHANGE_VERBS = NODE_INSTALL_VERBS | {"uninstall", "remove", "rm", "un", "update", "up", "upgrade"}
+# `npm link` puts the package's programs on the global path.
+NODE_LINK_VERBS = {"link", "ln"}
 # Verbs that download an initializer package named by their operand and run it.
 NODE_SCAFFOLDERS = {("npm", "init"), ("npm", "create"), ("pnpm", "create"), ("yarn", "create"), ("bun", "create")}
 GLOBAL_FLAGS = {"-g", "--global", "--location=global"}
@@ -116,22 +151,34 @@ PIP_VALUE_OPTIONS = {
     "--extra-index-url", "-f", "--find-links", "--python", "--python-version", "--platform", "--cache-dir", "--log",
     "--report", "--timeout", "--retries", "--proxy", "--cert", "--only-binary", "--no-binary", "--trusted-host",
 }  # fmt: skip
+# `sync` is uv's and pipenv's replay of a requirements or lock file.
+PIP_VERBS = {"install", "uninstall", "sync"}
 LOCKED_FLAGS = {"--locked", "--frozen"}
-UV_VALUE_OPTIONS = {"--directory", "--project", "--cache-dir", "--config-file", "--color", "--python-preference"}
-UV_MACHINE_ACTIONS = {"tool": {"install", "upgrade", "uninstall", "run"}, "python": {"install", "uninstall", "upgrade"}}
 
 DOWNLOADERS = {"curl", "wget"}
 FETCHERS = DOWNLOADERS | {"dig", "nslookup", "host"}
 EXTRACTORS = {"tar", "bsdtar", "unzip", "cpio", "7z", "7za"}
 PACKAGE_EXTENSIONS = (".deb", ".rpm", ".appimage", ".msi", ".dmg", ".pkg", ".snap", ".exe")
-SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish"}
 SOURCES = {"source", "."}
 CODE_FLAGS = {"node": {"-e", "--eval", "-p", "--print"}, "perl": {"-e", "-E"}, "ruby": {"-e"}}
 PYTHON_CODE_FLAGS = {"-c", "-m"}
+SHELL_VALUE_OPTIONS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
+PYTHON_VALUE_OPTIONS = {"-W", "-X"}
 STDIN_PATHS = {"-", "/dev/stdin"}
 STDIN_REDIRECTS = {"<", "<<<"}
 # Redirects whose target is the text fed to stdin rather than a file: here-strings and heredocs.
 TEXT_REDIRECTS = {"<<<", "<<", "<<-"}
+STDIN_INPUTS = STDIN_REDIRECTS | TEXT_REDIRECTS
+
+
+class ProgramSource(Enum):
+    """Where an interpreter reads the program it runs."""
+
+    STDIN = auto()
+    # The operand after a code flag (`bash -c`), or every word of `eval`.
+    CODE = auto()
+    SCRIPT_FILE = auto()
 
 
 def operand_positions(arguments: list[str], value_options: set[str]) -> list[int]:
@@ -153,12 +200,21 @@ def operand_positions(arguments: list[str], value_options: set[str]) -> list[int
     return positions
 
 
-def subcommand(arguments: list[str], value_options: set[str] | None = None) -> tuple[str | None, list[str]]:
+def subcommand(arguments: list[str], value_options: set[str]) -> tuple[str | None, list[str]]:
     """The first operand and the arguments after it."""
-    positions = operand_positions(arguments, value_options or set())
+    positions = operand_positions(arguments, value_options)
     if not positions:
         return None, []
     return arguments[positions[0]], arguments[positions[0] + 1 :]
+
+
+def mode_option(name: str, arguments: list[str]) -> str | None:
+    modes = MODE_OPTIONS.get(name, set())
+    for argument in arguments:
+        leading = argument if argument.startswith("--") else argument[:2]
+        if leading in modes:
+            return argument
+    return None
 
 
 def in_virtualenv(program: str, cwd: str) -> bool:
@@ -182,6 +238,8 @@ def judge_node(name: str, arguments: list[str]) -> str | None:
         return f"`{name} {verb}` can download and run a package"
     if name == "npm" and verb in ("exec", "x"):
         return None if NO_DOWNLOAD.intersection(arguments) else f"`npm {verb}` can download a package"
+    if verb in NODE_LINK_VERBS:
+        return f"`{name} {verb}` links a package onto the global path"
     if verb in NODE_CHANGE_VERBS and GLOBAL_FLAGS.intersection(arguments):
         return f"a global `{name} {verb}`"
     packages = [rest[index] for index in operand_positions(rest, NODE_VALUE_OPTIONS)]
@@ -194,11 +252,11 @@ def judge_node(name: str, arguments: list[str]) -> str | None:
 
 def judge_pip(program: str, arguments: list[str], in_venv: bool) -> str | None:
     verb, rest = subcommand(arguments, PIP_VALUE_OPTIONS)
-    if verb not in ("install", "uninstall"):
+    if verb not in PIP_VERBS:
         return None
     if not in_venv:
         return f"`{program} {verb}` outside a virtual environment"
-    if verb == "uninstall":
+    if verb != "install":
         return None
     packages = [rest[index] for index in operand_positions(rest, PIP_VALUE_OPTIONS)]
     if packages:
@@ -206,8 +264,7 @@ def judge_pip(program: str, arguments: list[str], in_venv: bool) -> str | None:
     return None
 
 
-def judge_uv(arguments: list[str]) -> str | None:
-    verb, rest = subcommand(arguments, UV_VALUE_OPTIONS)
+def judge_uv(verb: str | None, rest: list[str]) -> str | None:
     if verb == "add":
         return "`uv add` names a new package"
     if verb == "sync":
@@ -215,9 +272,6 @@ def judge_uv(arguments: list[str]) -> str | None:
     if verb == "pip":
         # uv installs into a virtual environment unless told `--system`.
         return judge_pip("uv pip", rest, "--system" not in rest)
-    action, _ = subcommand(rest, UV_VALUE_OPTIONS)
-    if action in UV_MACHINE_ACTIONS.get(verb, set()):
-        return f"`uv {verb} {action}`"
     return None
 
 
@@ -230,24 +284,30 @@ def judge_install(words: list[str], cwd: str, activated: bool) -> str | None:
         return f"`{name}`"
     if name in RUNNERS:
         return f"`{name}` can download and run a package"
-    verb, rest = subcommand(arguments, GLOBAL_VALUE_OPTIONS.get(name))
+    value_options = GLOBAL_VALUE_OPTIONS.get(name, set())
+    verb, rest = subcommand(arguments, value_options)
     if verb in MUTATING_SUBCOMMANDS.get(name, set()):
         return f"`{name} {verb}`"
+    action, _ = subcommand(rest, value_options)
+    if action in MUTATING_ACTIONS.get(name, {}).get(verb, set()):
+        return f"`{name} {verb} {action}`"
+    mode = mode_option(name, arguments)
+    if mode:
+        return f"`{name} {mode}`"
     if name == "go" and verb == "run":
         packages = [rest[index] for index in operand_positions(rest, GO_BUILD_VALUE_OPTIONS)]
         # A module path with a version (`example.com/cmd@latest`) is fetched; a package in the module is not.
         if packages and "@" in packages[0]:
             return f"`go run {packages[0]}` can download and run a module"
         return None
-    if name == "dpkg":
-        flag = next((argument for argument in arguments if argument in DPKG_CHANGES), None)
-        return f"`dpkg {flag}`" if flag else None
     if name in NODE_MANAGERS:
         return judge_node(name, arguments)
     if name == "npx":
         return None if NO_DOWNLOAD.intersection(arguments) else "`npx` can download a package"
     if name == "uv":
-        return judge_uv(arguments)
+        return judge_uv(verb, rest)
+    if name == "pipenv":
+        return judge_pip(name, arguments, "--system" not in arguments)
     if PIP.fullmatch(name):
         return judge_pip(name, arguments, activated or in_virtualenv(program, cwd))
     if PYTHON.fullmatch(name) and "-m" in arguments:
@@ -261,30 +321,69 @@ def is_interpreter(name: str) -> bool:
     return name in SHELLS or name in SOURCES or name in CODE_FLAGS or name == "eval" or bool(PYTHON.fullmatch(name))
 
 
-def is_code_flag(name: str, word: str) -> bool:
+def short_letters(option: str) -> str:
+    """The letters of a cluster of short options (`-lc`); empty for a long option or an operand."""
+    if option.startswith("--") or not option.startswith("-"):
+        return ""
+    return option[1:]
+
+
+def is_code_flag(name: str, option: str) -> bool:
     if name in SHELLS:
         # `-c` may share a cluster with other single-letter options, as in `bash -lc`.
-        return word.startswith("-") and not word.startswith("--") and "c" in word
+        return "c" in short_letters(option)
     if PYTHON.fullmatch(name):
-        return word in PYTHON_CODE_FLAGS
-    return word in CODE_FLAGS.get(name, set())
+        return option in PYTHON_CODE_FLAGS
+    return option in CODE_FLAGS.get(name, set())
 
 
-def code_input(name: str, arguments: list[Word]) -> tuple[bool, list[Word]]:
-    """Whether an interpreter reads its program from stdin, and the words it reads its program from otherwise."""
+def interpreter_value_options(name: str) -> set[str]:
+    if name in SHELLS:
+        return SHELL_VALUE_OPTIONS
+    if PYTHON.fullmatch(name):
+        return PYTHON_VALUE_OPTIONS
+    return set()
+
+
+def is_interpreter_option(name: str, word: str) -> bool:
+    if word in STDIN_PATHS:
+        return False
+    # A shell takes `+o pipefail` and `+x` as options too.
+    return word.startswith("-") or (name in SHELLS and word.startswith("+"))
+
+
+def split_options(name: str, arguments: list[Word]) -> tuple[list[str], list[Word]]:
+    """An interpreter's options and its operands, which begin at `--` or at the first word that is not an option."""
+    value_options = interpreter_value_options(name)
+    options = []
+    index = 0
+    while index < len(arguments):
+        word = arguments[index].text
+        if word == "--":
+            return options, arguments[index + 1 :]
+        if not is_interpreter_option(name, word):
+            break
+        options.append(word)
+        index += 2 if takes_value(word, value_options) else 1
+    return options, arguments[index:]
+
+
+def program_input(name: str, arguments: list[Word]) -> tuple[ProgramSource, list[Word]]:
+    """Where an interpreter reads its program, with the words it reads it from (none for stdin)."""
     if name == "eval":
-        return False, arguments
+        return ProgramSource.CODE, arguments
     if name in SOURCES:
-        return bool(arguments) and arguments[0].text in STDIN_PATHS, arguments[:1]
-    for index, word in enumerate(arguments):
-        if is_code_flag(name, word.text):
-            return False, arguments[index + 1 : index + 2]
-    operands = [word for word in arguments if not word.text.startswith("-") or word.text in STDIN_PATHS]
-    if name in SHELLS and "-s" in texts(arguments):
-        return True, []
+        if arguments and arguments[0].text in STDIN_PATHS:
+            return ProgramSource.STDIN, []
+        return ProgramSource.SCRIPT_FILE, arguments[:1]
+    options, operands = split_options(name, arguments)
+    if any(is_code_flag(name, option) for option in options):
+        return ProgramSource.CODE, operands[:1]
+    if name in SHELLS and any("s" in short_letters(option) for option in options):
+        return ProgramSource.STDIN, []
     if not operands or operands[0].text in STDIN_PATHS:
-        return True, []
-    return False, operands[:1]
+        return ProgramSource.STDIN, []
+    return ProgramSource.SCRIPT_FILE, operands[:1]
 
 
 def first_fetcher(script: list[Command]) -> str | None:
@@ -301,23 +400,21 @@ def redirected_input(command: Command, operators: set[str]) -> list[Word]:
 
 def shell_program(name: str, command: Command, arguments: list[Word]) -> str | None:
     """The text a shell or `eval` runs as commands; None for another program, or a shell running a script file."""
-    if name == "eval":
-        return " ".join(texts(arguments))
-    if name not in SHELLS and name not in SOURCES:
+    if name != "eval" and name not in SHELLS | SOURCES:
         return None
-    reads_stdin, program_words = code_input(name, arguments)
-    if reads_stdin:
+    source, program_words = program_input(name, arguments)
+    if source is ProgramSource.STDIN:
         return "\n".join(texts(redirected_input(command, TEXT_REDIRECTS)))
-    if any(is_code_flag(name, word.text) for word in arguments):
+    if source is ProgramSource.CODE:
         return " ".join(texts(program_words))
     return None
 
 
 def judge_program_source(name: str, command: Command, arguments: list[Word]) -> str | None:
     """Whether an interpreter runs a fetcher's output substituted where it reads its program."""
-    reads_stdin, program_words = code_input(name, arguments)
-    if reads_stdin:
-        program_words = [*program_words, *redirected_input(command, STDIN_REDIRECTS)]
+    source, program_words = program_input(name, arguments)
+    if source is ProgramSource.STDIN:
+        program_words = redirected_input(command, STDIN_REDIRECTS)
     for word in program_words:
         for substitution in word.substitutions:
             fetcher = first_fetcher(substitution)
@@ -353,17 +450,26 @@ def judge_command(command: Command, cwd: str, activated: bool) -> str | None:
     return None
 
 
+def reads_program_from_pipe(name: str, command: Command, arguments: list[Word]) -> bool:
+    """Whether an interpreter reads its program from a stdin no redirect of its own supplies."""
+    if not is_interpreter(name):
+        return False
+    source, _ = program_input(name, arguments)
+    return source is ProgramSource.STDIN and not redirected_input(command, STDIN_INPUTS)
+
+
 def judge_pipes(script: list[Command]) -> str | None:
-    """A fetcher piped, at any later stage of its pipeline, into an interpreter that reads its program from stdin."""
+    """A fetcher before an interpreter that reads its program from stdin, anywhere later in the same script.
+
+    The parser keeps no grouping, and a pipe into a `{ ...; }` group or subshell feeds every command inside it, so any
+    such interpreter after a fetcher counts as reading the fetcher's output."""
     fetcher = None
     for command in script:
-        if not command.piped:
-            fetcher = None
         words = runnable(command)
         if not words:
             continue
         name = command_name(words[0].text)
-        if fetcher and is_interpreter(name) and code_input(name, words[1:])[0]:
+        if fetcher and reads_program_from_pipe(name, command, words[1:]):
             return f"`{fetcher}` piped into `{name}`"
         if name in FETCHERS:
             fetcher = name
@@ -445,9 +551,9 @@ def main() -> None:
     if matched:
         deny(
             f"{matched}. Installing, removing or upgrading software always needs the user's explicit approval first,"
-            " however small or reversible the change: ask them to run it with a `!` prefix, or to grant it. If this"
-            " changes no software (a data download, a lockfile replay), say so and ask for an exception; running it"
-            " again through another tool, wrapper, interpreter or script is routing around the guard."
+            " however small or reversible the change: ask the user to run it themselves with a `!` prefix, and say so"
+            " if you believe it changes no software. Running it again through another tool, wrapper, interpreter or"
+            " script is routing around the guard."
         )
 
 

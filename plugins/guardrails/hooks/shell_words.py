@@ -53,7 +53,6 @@ OPERATORS = (
 )  # fmt: skip
 CONTROL_OPERATORS = {"&&", "||", "|&", ";;", "|", "&", ";", "\n"}
 HEREDOC_OPERATORS = {"<<", "<<-"}
-PIPES = {"|", "|&"}
 METACHARACTERS = set(" \t\n;&|<>()")
 DOUBLE_QUOTE_ESCAPES = set('"\\$`\n')
 FD_PREFIX = re.compile(r"\d+(?=[<>])")
@@ -72,11 +71,10 @@ class Word:
 
 @dataclass
 class Command:
-    """A simple command; `piped` when its stdin is the previous command's stdout."""
+    """A simple command."""
 
     words: list[Word] = field(default_factory=list)
     redirects: list[tuple[str, Word]] = field(default_factory=list)
-    piped: bool = False
 
 
 class ShellParser:
@@ -115,7 +113,7 @@ class ShellParser:
             if char in "()":
                 # A `)` with no `(` ends a `case` pattern.
                 self.position += 1
-                current = finish(commands, current, piped=False)
+                current = finish(commands, current)
                 if char == "(":
                     commands.extend(self.script(")"))
                 continue
@@ -126,7 +124,7 @@ class ShellParser:
                 continue
             operator = self.operator()
             if operator in CONTROL_OPERATORS:
-                current = finish(commands, current, piped=operator in PIPES)
+                current = finish(commands, current)
                 if operator == "\n":
                     self.heredoc_bodies()
             elif operator in HEREDOC_OPERATORS:
@@ -142,7 +140,7 @@ class ShellParser:
                 current.redirects.append((operator, self.word(closer)))
             else:
                 current.words.append(self.word(closer))
-        finish(commands, current, piped=False)
+        finish(commands, current)
         return commands
 
     def skip_blanks(self) -> None:
@@ -281,11 +279,11 @@ class ShellParser:
         return self.script(")")
 
 
-def finish(commands: list[Command], current: Command, piped: bool) -> Command:
+def finish(commands: list[Command], current: Command) -> Command:
     """Adds `current` to `commands` unless it is empty, and starts the next command."""
     if current.words or current.redirects:
         commands.append(current)
-    return Command(piped=piped)
+    return Command()
 
 
 def parse(command: str) -> list[Command]:
