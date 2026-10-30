@@ -128,6 +128,7 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.write("harness/skills/example-alpha/SKILL.md", ALPHA_SKILL)
     box.write("harness/skills/example-beta/SKILL.md", b"example beta skill\n")
     box.write("harness/skills/example-beta/scripts/example.sh", b"#!/bin/sh\n", 0o755)
+    box.write("harness/skills/example-shared/example.txt", b"example file outside any skill\n")
     box.write("harness/fragments/README.md", b"example fragments readme\n")
     box.write("harness/fragments/example-rules.md", b"example rules\n")
     box.write("harness/settings/example-deny.json", json.dumps(SETTINGS_FRAGMENT).encode())

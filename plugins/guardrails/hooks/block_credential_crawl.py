@@ -7,30 +7,18 @@ appear in the command:
 - Read reads `file_path`; Glob lists `path` and the names its `pattern` spells; Grep reads `path` and the files its
   `glob` names.
 - A Bash or Monitor command is split into simple commands by `shell_words`, which finds each one's program past
-  assignments and wrappers, inside substitutions, subshells and compound statements too. A known file-reading command
-  reads its file operands (after the script or pattern for `sed`, `awk`, `jq` and the search commands, and before the
-  destination for `cp`), and any command reads the target of a `<` redirect. A recursive search reads its roots, the
-  working directory when it names none. Relative paths resolve from wherever a `cd` or `pushd` before them moved to.
+  assignments and wrappers, inside substitutions, subshells, compound statements and unquoted heredocs too. A known
+  file-reading command reads its file operands (after the script or pattern for `sed`, `awk`, `jq` and the search
+  commands, and before the destination for `cp`, `rsync` and `scp`), and any command reads the target of a `<`
+  redirect. A recursive search reads its roots, the working directory when it names none, and `find` lists its roots
+  and the names its name tests spell. Relative paths resolve from wherever a `cd` or `pushd` before them moved to;
+  after `cd -` or `popd` they count as outside the project.
 
-A path is a store when it is a well-known credential file, a file in a credential directory such as `~/.ssh` (apart
-from the non-secret files listed for it), a private key or keystore, a `.env` file, or a config file whose name says
-it holds secrets; a recursive search rooted in a credential directory reads stores too. A brace list is judged by each
-spelling, and a wildcard counts when the path as written is a store, or when it matches a store's name and holds a
-literal run of at least three characters (`id_*` and `.env*` do; `.*` and `*rc` do not). A search whose pattern names
-a credential (password, secret, token, api_key, jdbc: and the like) is denied when it reaches outside the working
-directory, where it reads as a hunt rather than work on the project, and in Grep when its `glob` covers config files
-named for secrets.
-
-Allowed: `.env.example`, `.env.sample` and `.env.template`, and the path suffixes listed one per line in
-`~/.claude/local/guardrails/credential-allowed-suffixes.txt` (blank lines and `#` comments skipped). A command the
-shell tokenizer cannot split is denied only when its raw text names a store. Any error inside the hook denies, so the
-guard fails closed.
-
-Known gaps: a path built at run time (`$FILE`); a file read by a script or interpreter, including a command inside a
-quoted string (`sh -c '...'`); a reading command not on the list; a credential file with an unremarkable name; a
-recursive search inside the project, which prints the matching lines of any store it passes, with Bash's `--include`
-and `--glob` values unjudged; and a session started in the home directory, where every path is inside the project.
-The sandbox's `credentials` setting covers interpreters.
+The plugin README lists the stores, the keywords, what is allowed and the known gaps. Two choices here are easy to
+undo by accident: a search reaching outside the project is checked for a keyword in
+every word but its roots, since an option the parser does not know can move the pattern; and a command the tokenizer
+cannot split is denied when a raw word names a store, or when it runs a search and its text holds a keyword. Any
+error inside the hook denies, so the guard fails closed.
 """
 
 from __future__ import annotations
@@ -58,25 +46,26 @@ SHADOW_FILE = "/etc/shadow"
 HOME_STORES = (".npmrc",)
 KEY_EXTENSIONS = (".jks", ".p12", ".pfx", ".pem", ".key", ".keytab", ".keystore", ".truststore")
 CREDENTIAL_DIRS = (".ssh", ".aws", ".docker", ".gnupg", ".kube", ".config/gh")
+CREDENTIAL_DIR_ENDINGS = tuple(f"/{directory}" for directory in CREDENTIAL_DIRS)
 # Files in a credential directory that hold no secret.
 CREDENTIAL_DIR_EXCEPTIONS = ("/.ssh/known_hosts", "/.ssh/known_hosts.old", "/.ssh/config", "/.ssh/authorized_keys")
 ENV_TEMPLATES = {".env.example", ".env.sample", ".env.template"}
 SECRET_WORDS = ("database", "datasource", "credential", "secret", "password")
 SECRET_EXTENSIONS = ("properties", "yml", "yaml", "xml", "json", "conf", "cnf", "ini", "toml", "env")
-SECRET_CONFIG = re.compile(rf"({'|'.join(SECRET_WORDS)})[^/]*\.({'|'.join(SECRET_EXTENSIONS)})$")
+# The secret word stands as a word of the name, so `secrets.prod.yaml` counts and `passwordReset.json` does not.
+SECRET_CONFIG = re.compile(rf"(^|[._-])({'|'.join(SECRET_WORDS)})s?([._-][^/]*)?\.({'|'.join(SECRET_EXTENSIONS)})$")
 ENV_FILE = re.compile(r"\.env(\.[^/]+)?$")
 
 # Names a wildcard is matched against, so `id_*` and `*.pem` count; a file in a credential directory is caught by
 # its path instead.
 GLOB_CANDIDATES = [*STORE_NAMES, ".env", *(f"x{extension}" for extension in KEY_EXTENSIONS)]
-SECRET_CONFIG_CANDIDATES = [
-    f"{word}.{extension}" for word, extension in itertools.product(SECRET_WORDS, SECRET_EXTENSIONS)
-]
 GLOB_CHARACTERS = re.compile(r"[*?\[]")
 GLOB_WILDCARDS = re.compile(r"\[[^\]]*\]|[*?]")
 # Below this, a wildcard's literal part is too generic to say which file it is after: `.*` and `*rc` also spell
 # `.pgpass` and `.envrc`.
 MIN_LITERAL_RUN = 3
+# A name search for a fragment open at both ends (`*env*`) is after names, not one store.
+NAME_FRAGMENT = re.compile(r"\*[^/*]+\*")
 BRACE_LIST = re.compile(r"\{([^{}]*,[^{}]*)\}")
 
 KEYWORD = re.compile(
@@ -86,14 +75,25 @@ KEYWORD = re.compile(
 # Commands that read their file operands, and those whose first operand is a script or pattern rather than a file.
 READERS = {
     "cat", "tac", "nl", "head", "tail", "less", "more", "bat", "cut", "sort", "uniq", "wc", "strings", "xxd", "od",
-    "hexdump", "base64", "diff", "cmp", "cp", "tar", "zip", "source", ".", "vi", "vim", "nano", "yq",
+    "hexdump", "base64", "diff", "cmp", "cp", "tar", "zip", "rsync", "scp", "source", ".", "vi", "vim", "nano", "yq",
 }  # fmt: skip
 SCRIPT_FIRST = {"sed", "awk", "jq"}
 # With one of these the script arrives through the option, so every operand is a file.
 SCRIPT_OPTIONS = {"-e", "-f", "--expression", "--file"}
-# `cp` writes its last operand, unless the destination arrives through `-t`.
+# Options of the reading commands whose separate value is not a file they read: `scp -i ~/.ssh/key` signs in with
+# the key rather than copying it.
+READER_VALUE_OPTIONS = {
+    "scp": {"-i", "-F", "-o", "-P", "-c", "-J", "-l", "-S"},
+    "rsync": {"-e", "--rsh"},
+}
+# These write their last operand; `cp` writes elsewhere when the destination arrives through `-t`.
+DESTINATION_LAST = {"cp", "rsync", "scp"}
 CP_TARGET_OPTION = re.compile(r"-t|--target-directory")
-DIRECTORY_CHANGERS = {"cd", "pushd"}
+DIRECTORY_CHANGERS = {"cd", "pushd", "popd"}
+# Where `cd -`, `popd` and a bare `pushd` lead is not tracked; from here every relative path is outside the project.
+UNTRACKED_DIRECTORY = "/"
+FIND_LEADING_OPTIONS = {"-H", "-L", "-P"}
+FIND_NAME_TESTS = {"-name", "-iname", "-path", "-ipath", "-wholename", "-iwholename"}
 SEARCHES = {"grep", "egrep", "fgrep", "rg", "ag", "ack"}
 # rg, ag and ack recurse by default; grep only when told to.
 RECURSIVE_BY_DEFAULT = {"rg", "ag", "ack"}
@@ -129,10 +129,10 @@ def is_allowed(full: str) -> bool:
 
 
 def in_credential_dir(lowered: str) -> bool:
-    """Whether a lowercased absolute path is a file below a credential directory that may hold a secret."""
+    """Whether a lowercased absolute path is a credential directory, or anything below one that may hold a secret."""
     if lowered.endswith(CREDENTIAL_DIR_EXCEPTIONS):
         return False
-    return any(f"/{directory}/" in lowered for directory in CREDENTIAL_DIRS)
+    return any(f"/{directory}/" in lowered + "/" for directory in CREDENTIAL_DIRS)
 
 
 def is_store(path: str, here: str) -> bool:
@@ -192,72 +192,120 @@ def names_store(path: str, here: str) -> bool:
     return any(spelling_names_store(spelling, here) for spelling in expand_braces(path))
 
 
-def covers_secret_config(glob: str) -> bool:
-    """Whether a glob's last component matches a config file named for secrets, such as `*.properties`."""
-    last = glob.rsplit("/", 1)[-1].lower()
-    pairs = itertools.product(SECRET_CONFIG_CANDIDATES, expand_braces(last))
-    return any(fnmatch.fnmatchcase(candidate, spelling) for candidate, spelling in pairs)
+def lists_stores(pattern: str, here: str) -> bool:
+    """Whether a search that returns names only, for `pattern`, lists stores; a fragment such as `*env*` does not."""
+    last = pattern.rstrip("/").rsplit("/", 1)[-1]
+    return names_store(pattern, here) and not NAME_FRAGMENT.fullmatch(last)
 
 
 def first_store(paths: list[str], here: str) -> str | None:
+    """The denial for the first path that is, or can spell, a store."""
     for path in paths:
-        if names_store(path, here):
-            return f"`{path}` is a credential file"
+        if not names_store(path, here):
+            continue
+        if resolve(path, here).lower().endswith(CREDENTIAL_DIR_ENDINGS):
+            return f"`{path}` holds credential files"
+        return f"`{path}` is a credential file"
     return None
 
 
-def search_parts(name: str, arguments: list[str]) -> tuple[list[str], list[str], bool]:
-    """A search command's patterns, its path operands, and whether it recurses."""
-    patterns = []
+def option_value(word: str) -> tuple[str, str | None]:
+    """An option and the value attached to it: `--regexp=x` and `-rnex` both give `x`, and None is no attached value.
+
+    In a cluster of short options, the first that takes a value takes the rest of the cluster."""
+    if word.startswith("--"):
+        option, equals, value = word.partition("=")
+        return option, value if equals else None
+    for index, letter in enumerate(word[1:], start=2):
+        if f"-{letter}" in SEARCH_VALUE_OPTIONS:
+            return f"-{letter}", word[index:] or None
+    return word, None
+
+
+def search_parts(name: str, arguments: list[str]) -> tuple[list[str], bool, bool]:
+    """A search command's operands, whether its pattern came through an option rather than the first operand, and
+    whether it recurses."""
+    pattern_given = False
     operands = []
     recursive = name in RECURSIVE_BY_DEFAULT
     index = 0
     while index < len(arguments):
         word = arguments[index]
-        if word == "--":
-            operands += arguments[index + 1 :]
-            break
-        if word in SEARCH_VALUE_OPTIONS:
-            value = arguments[index + 1] if index + 1 < len(arguments) else ""
-            if word in PATTERN_OPTIONS:
-                patterns.append(value)
-            # `grep -d recurse` recurses like `-r`.
-            recursive = recursive or value == "recurse"
-            index += 2
-            continue
-        if word.startswith("-"):
-            recursive = recursive or bool(GREP_RECURSIVE.match(word))
-            index += 1
-            continue
-        operands.append(word)
         index += 1
-    if not patterns and operands:
-        patterns.append(operands.pop(0))
-    return patterns, operands, recursive
+        if word == "--":
+            operands += arguments[index:]
+            break
+        if not word.startswith("-"):
+            operands.append(word)
+            continue
+        option, value = option_value(word)
+        flags = word.removesuffix(value) if value else word
+        recursive = recursive or bool(GREP_RECURSIVE.match(flags))
+        if value is None and option in SEARCH_VALUE_OPTIONS:
+            value = arguments[index] if index < len(arguments) else ""
+            index += 1
+        pattern_given = pattern_given or option in PATTERN_OPTIONS
+        # `grep -d recurse` recurses like `-r`.
+        recursive = recursive or value == "recurse"
+    return operands, pattern_given, recursive
 
 
 def judge_search(name: str, arguments: list[str], here: str, project: str) -> str | None:
-    patterns, operands, recursive = search_parts(name, arguments)
-    reason = first_store(operands, here)
+    operands, pattern_given, recursive = search_parts(name, arguments)
+    paths = operands if pattern_given else operands[1:]
+    reason = first_store(paths, here)
     if reason:
         return reason
-    roots = operands or ["."]
+    roots = paths or ["."]
     if recursive and any(is_credential_dir(root, here) for root in roots):
         return f"`{' '.join(roots)}` holds credential files"
-    outside = [root for root in roots if not inside(root, here, project)]
-    if outside and any(KEYWORD.search(pattern) for pattern in patterns):
-        return f"a search outside the project for a credential (`{' '.join(patterns)}`)"
-    return None
+    # An option this parser does not know can shift a root into the pattern's place or the pattern into the roots, so
+    # any operand outside the project counts, and every word but the roots outside it is checked for a keyword.
+    outside_roots = [root for root in roots if not inside(root, here, project)]
+    operand_outside = any(not inside(operand, here, project) for operand in operands)
+    if not outside_roots and not operand_outside:
+        return None
+    hits = [word for word in arguments if word not in outside_roots and KEYWORD.search(word)]
+    return f"a search outside the project for a credential (`{' '.join(hits)}`)" if hits else None
 
 
 def read_operands(name: str, arguments: list[str]) -> list[str]:
     """The operands of a reading command that name files it reads."""
-    operands = [word for word in arguments if not word.startswith("-")]
+    value_options = READER_VALUE_OPTIONS.get(name, set())
+    operands = []
+    index = 0
+    while index < len(arguments):
+        word = arguments[index]
+        index += 1
+        if word in value_options:
+            index += 1
+        elif not word.startswith("-"):
+            operands.append(word)
     if name in SCRIPT_FIRST and not SCRIPT_OPTIONS.intersection(arguments):
         operands = operands[1:]
-    if name == "cp" and not any(CP_TARGET_OPTION.match(word) for word in arguments):
+    targeted = name == "cp" and any(CP_TARGET_OPTION.match(word) for word in arguments)
+    if name in DESTINATION_LAST and not targeted:
         operands = operands[:-1]
     return operands
+
+
+def judge_find(arguments: list[str], here: str) -> str | None:
+    """Judges `find` like Glob: its roots, and the names its name tests spell."""
+    roots = []
+    for word in arguments:
+        if word in FIND_LEADING_OPTIONS:
+            continue
+        if word.startswith(("-", "(", "!")):
+            break
+        roots.append(word)
+    for root in roots or ["."]:
+        if is_credential_dir(root, here):
+            return f"`{root}` holds credential files"
+    tested = [value for test, value in itertools.pairwise(arguments) if test in FIND_NAME_TESTS]
+    for value in tested:
+        if lists_stores(value, here):
+            return f"`{value}` names credential files"
+    return None
 
 
 def judge_command(command: Command, here: str, project: str) -> str | None:
@@ -271,21 +319,24 @@ def judge_command(command: Command, here: str, project: str) -> str | None:
     name = command_name(words[0])
     if name in SEARCHES:
         return judge_search(name, words[1:], here, project)
+    if name == "find":
+        return judge_find(words[1:], here)
     if name in READERS or name in SCRIPT_FIRST:
         return first_store(read_operands(name, words[1:]), here)
     return None
 
 
 def directory_after(command: Command, here: str) -> str:
-    """Where the shell is after `command`: moved by `cd` or `pushd`, and left alone by `cd -` and anything else."""
+    """Where the shell is after `command`, which only `cd`, `pushd` and `popd` change."""
     words = texts(runnable(command))
     if not words or words[0] not in DIRECTORY_CHANGERS:
         return here
+    name = words[0]
     operands = [word for word in words[1:] if not word.startswith("-") or word == "-"]
-    if not operands:
+    if name == "cd" and not operands:
         return str(Path.home())
-    if operands[0] == "-":
-        return here
+    if name == "popd" or not operands or operands[0] == "-":
+        return UNTRACKED_DIRECTORY
     return resolve(operands[0], here)
 
 
@@ -307,16 +358,27 @@ def judge_bash(command: str, cwd: str) -> str | None:
     try:
         script = parse(command)
     except ValueError:
-        # Unparseable: deny only when a word of the raw text names a store.
-        hits = [word for word in raw_words(command) if is_store(word, cwd)]
-        return f"`{hits[0]}` is a credential file, in a command that does not parse" if hits else None
+        return judge_unparsed(command, cwd)
     return judge_script(script, cwd, cwd)
+
+
+def judge_unparsed(command: str, cwd: str) -> str | None:
+    """Judges a command the tokenizer cannot split by its raw words, since which of them are read is unknown."""
+    words = raw_words(command)
+    store = next((word for word in words if names_store(word, cwd)), None)
+    if store:
+        return f"`{store}` is a credential file, in a command that does not parse"
+    searches = any(command_name(word) in SEARCHES for word in words)
+    keyword = KEYWORD.search(command)
+    if searches and keyword:
+        return f"a search for a credential (`{keyword.group()}`), in a command that does not parse"
+    return None
 
 
 def judge_glob(tool_input: dict, cwd: str) -> str | None:
     path = str(tool_input.get("path") or cwd)
     pattern = str(tool_input.get("pattern", ""))
-    if is_credential_dir(path, cwd) or names_store(pattern, resolve(path, cwd)):
+    if is_credential_dir(path, cwd) or lists_stores(pattern, resolve(path, cwd)):
         return f"`{pattern}` in `{path}` names credential files"
     return None
 
@@ -325,14 +387,11 @@ def judge_grep(tool_input: dict, cwd: str) -> str | None:
     path = str(tool_input.get("path") or cwd)
     glob = str(tool_input.get("glob") or "")
     pattern = str(tool_input.get("pattern", ""))
-    hunting = bool(KEYWORD.search(pattern))
     if is_store(path, cwd) or is_credential_dir(path, cwd):
         return f"`{path}` holds credentials"
     if glob and names_store(glob, cwd):
         return f"`{glob}` names credential files"
-    if hunting and covers_secret_config(glob):
-        return f"a search for a credential through config files (`{pattern}` in `{glob}`)"
-    if hunting and not inside(path, cwd, cwd):
+    if KEYWORD.search(pattern) and not inside(path, cwd, cwd):
         return f"a search outside the project for a credential (`{pattern}`)"
     return None
 

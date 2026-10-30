@@ -1,10 +1,13 @@
 """Shell parsing shared by the guardrails hooks that judge Bash and Monitor commands.
 
 `parse` splits a command into simple commands the way the shell would, including those inside `$(...)`, backticks,
-`<(...)`, subshells, `{ ...; }` groups and compound statements. Quoted text and heredoc bodies stay text, apart from a
-`$(...)` or backtick substitution inside double quotes. It raises ValueError on a command it cannot split, such as one
-with an unterminated quote. `runnable` finds the program a simple command runs, past leading assignments, reserved
-words and wrappers (`sudo`, `env`, `timeout`, `nice` and the like, with the values their options take).
+`<(...)`, subshells, `{ ...; }` groups and compound statements. Quoted text stays text, apart from a `$(...)` or
+backtick substitution inside double quotes, and arithmetic (`$((...))`, `((...))`) is skipped whole. A heredoc's body
+is read from the lines after the one that opens it and becomes the text of its `<<` redirect's target, with the
+substitutions in it when its delimiter is unquoted, since the shell runs those. It raises
+ValueError on a command it cannot split, such as one with an unterminated quote. `runnable` finds the program a simple
+command runs, past leading assignments, reserved words and wrappers (`sudo`, `env`, `timeout`, `nice` and the like,
+with the values their options take).
 """
 
 from __future__ import annotations
@@ -31,6 +34,10 @@ WRAPPERS = {
     "stdbuf": {"-i", "-o", "-e", "--input", "--output", "--error"},
     "xargs": {"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "--arg-file", "--delimiter", "--eof", "--replace",
               "--max-lines", "--max-args", "--max-procs", "--max-chars"},
+    "pkexec": {"--user"},
+    "arch": {"-arch", "-d", "-e"},
+    "watch": {"-n", "-q", "--interval", "--equexit"},
+    "ionice": {"-c", "-n", "-p", "-P", "-u", "--class", "--classdata", "--pid", "--pgid", "--uid"},
 }  # fmt: skip
 # Operands a wrapper takes before the command it runs: the duration of `timeout`.
 WRAPPER_OPERANDS = {"timeout": 1}
@@ -45,12 +52,14 @@ OPERATORS = (
     "|", "&", ";", "\n", "<", ">",
 )  # fmt: skip
 CONTROL_OPERATORS = {"&&", "||", "|&", ";;", "|", "&", ";", "\n"}
+HEREDOC_OPERATORS = {"<<", "<<-"}
 PIPES = {"|", "|&"}
 METACHARACTERS = set(" \t\n;&|<>()")
 DOUBLE_QUOTE_ESCAPES = set('"\\$`\n')
 FD_PREFIX = re.compile(r"\d+(?=[<>])")
-HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z0-9_.-]+)\1")
-RAW_WORD_SEPARATORS = re.compile(r"[\s'\"`;|&<>()$]+")
+RAW_WORD_SEPARATORS = re.compile(r"[\s'\"`;|&<>()]+")
+# A heredoc delimiter with any of these in it is quoted, and its body is not expanded.
+DELIMITER_QUOTES = set("'\"\\")
 
 
 @dataclass
@@ -76,6 +85,9 @@ class ShellParser:
     def __init__(self, text: str) -> None:
         self.text = text
         self.position = 0
+        # Heredocs opened on the current line, as (delimiter, strips leading tabs, expands, target); bodies follow the
+        # newline.
+        self.heredocs: list[tuple[str, bool, bool, Word]] = []
 
     def at(self, prefix: str) -> bool:
         return self.text.startswith(prefix, self.position)
@@ -97,6 +109,9 @@ class ShellParser:
             if char == "#":
                 self.skip_comment()
                 continue
+            if self.at("(("):
+                current.words.append(Word(self.arithmetic()))
+                continue
             if char in "()":
                 # A `)` with no `(` ends a `case` pattern.
                 self.position += 1
@@ -112,6 +127,16 @@ class ShellParser:
             operator = self.operator()
             if operator in CONTROL_OPERATORS:
                 current = finish(commands, current, piped=operator in PIPES)
+                if operator == "\n":
+                    self.heredoc_bodies()
+            elif operator in HEREDOC_OPERATORS:
+                self.skip_blanks()
+                start = self.position
+                delimiter = self.word(closer).text
+                expands = not DELIMITER_QUOTES.intersection(self.text[start : self.position])
+                body = Word("")
+                self.heredocs.append((delimiter, operator == "<<-", expands, body))
+                current.redirects.append((operator, body))
             elif operator:
                 self.skip_blanks()
                 current.redirects.append((operator, self.word(closer)))
@@ -132,6 +157,42 @@ class ShellParser:
     def skip_comment(self) -> None:
         end = self.text.find("\n", self.position)
         self.position = len(self.text) if end < 0 else end
+
+    def heredoc_bodies(self) -> None:
+        """Reads the bodies of the heredocs opened on the line just ended, each up to its delimiter line or the end."""
+        for delimiter, strips_tabs, expands, body in self.heredocs:
+            lines = []
+            while self.position < len(self.text):
+                end = self.text.find("\n", self.position)
+                if end < 0:
+                    end = len(self.text)
+                line = self.text[self.position : end]
+                self.position = min(end + 1, len(self.text))
+                if strips_tabs:
+                    line = line.lstrip("\t")
+                if line == delimiter:
+                    break
+                lines.append(line)
+            body.text = "\n".join(lines)
+            if expands:
+                ShellParser(body.text).expanded(body.substitutions, closer=None)
+        self.heredocs.clear()
+
+    def arithmetic(self) -> str:
+        """Skips `$((...))` or `((...))` whole, since a `<<` inside is a shift, not a heredoc."""
+        start = self.position
+        self.position += 3 if self.at("$") else 2
+        depth = 2
+        while depth:
+            if self.position >= len(self.text):
+                raise ValueError("unterminated arithmetic")
+            char = self.text[self.position]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            self.position += 1
+        return self.text[start : self.position]
 
     def operator(self) -> str | None:
         if self.at("<(") or self.at(">("):
@@ -161,6 +222,8 @@ class ShellParser:
             elif char == "\\":
                 text.append(self.text[self.position + 1 : self.position + 2].strip("\n"))
                 self.position += 2
+            elif self.at("$(("):
+                text.append(self.arithmetic())
             elif self.at("$(") or char == "`":
                 begin = self.position
                 substitutions.append(self.substitution())
@@ -179,20 +242,29 @@ class ShellParser:
         return quoted
 
     def double_quoted(self, substitutions: list[list[Command]]) -> str:
-        """The quoted text; a substitution inside it still runs, so it is added to `substitutions`."""
         self.position += 1
+        return self.expanded(substitutions, closer='"')
+
+    def expanded(self, substitutions: list[list[Command]], closer: str | None) -> str:
+        """Text in which only substitutions and arithmetic expand, up to `closer`, which is consumed, or to the end.
+
+        A substitution inside it still runs, so it is added to `substitutions`."""
         text: list[str] = []
         while True:
             if self.position >= len(self.text):
-                raise ValueError("unterminated double quote")
+                if closer:
+                    raise ValueError(f"no closing {closer}")
+                return "".join(text)
             char = self.text[self.position]
             following = self.text[self.position + 1 : self.position + 2]
-            if char == '"':
+            if char == closer:
                 self.position += 1
                 return "".join(text)
             if char == "\\" and following in DOUBLE_QUOTE_ESCAPES:
                 text.append(following.strip("\n"))
                 self.position += 2
+            elif self.at("$(("):
+                text.append(self.arithmetic())
             elif self.at("$(") or char == "`":
                 begin = self.position
                 substitutions.append(self.substitution())
@@ -216,21 +288,8 @@ def finish(commands: list[Command], current: Command, piped: bool) -> Command:
     return Command(piped=piped)
 
 
-def remove_heredoc_bodies(command: str) -> str:
-    kept = []
-    delimiters: list[str] = []
-    for line in command.split("\n"):
-        if delimiters:
-            if line.strip() == delimiters[0]:
-                delimiters.pop(0)
-            continue
-        kept.append(line)
-        delimiters = [delimiter for _, delimiter in HEREDOC.findall(line)]
-    return "\n".join(kept)
-
-
 def parse(command: str) -> list[Command]:
-    return ShellParser(remove_heredoc_bodies(command)).script(None)
+    return ShellParser(command).script(None)
 
 
 def raw_words(command: str) -> list[str]:
@@ -261,6 +320,21 @@ def texts(words: list[Word]) -> list[str]:
     return [word.text for word in words]
 
 
+def takes_value(option: str, value_options: set[str]) -> bool:
+    """Whether the word after `option` is its value: a listed option, or a cluster of short ones (`-iu`) ending in one.
+
+    A value option earlier in a cluster takes the rest of the cluster as its value, as `-uroot` does."""
+    if option in value_options:
+        return True
+    if option.startswith("--"):
+        return False
+    letters = option[1:]
+    for index, letter in enumerate(letters):
+        if f"-{letter}" in value_options:
+            return index == len(letters) - 1
+    return False
+
+
 def prefix_length(words: list[str]) -> int:
     """How many leading words are assignments, reserved words, and wrappers with their options and operands.
 
@@ -282,7 +356,7 @@ def prefix_length(words: list[str]) -> int:
             if option == "--":
                 break
             options.append(option)
-            if option in WRAPPERS[name]:
+            if takes_value(option, WRAPPERS[name]):
                 index += 1
         if name == "command" and DESCRIBE_OPTIONS.intersection(options):
             return len(words)

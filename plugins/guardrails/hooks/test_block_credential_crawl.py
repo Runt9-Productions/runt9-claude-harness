@@ -61,7 +61,9 @@ def assert_denied_for(reason: str | None, expected: str) -> None:
             id="reader-of-store-path",
         ),
         pytest.param("Bash", {"command": "sed -n 1p .env"}, "`.env` is a credential file", id="file-after-script"),
-        pytest.param("Bash", {"command": "wc -l < ~/.netrc"}, "`~/.netrc` is a credential file", id="input-redirect"),
+        pytest.param(
+            "Bash", {"command": "tr a-z A-Z < ~/.netrc"}, "`~/.netrc` is a credential file", id="input-redirect"
+        ),
         pytest.param(
             "Bash",
             {"command": "LC_ALL=C sudo -n cat /etc/shadow"},
@@ -237,10 +239,56 @@ def assert_denied_for(reason: str | None, expected: str) -> None:
             id="grep-glob-brace-list",
         ),
         pytest.param(
-            "Grep",
-            {"pattern": "password", "glob": "*.properties"},
-            "a search for a credential through config files (`password` in `*.properties`)",
-            id="grep-keyword-through-config-files",
+            "Bash", {"command": "tar czf - ~/.ssh"}, "`~/.ssh` holds credential files", id="credential-dir-operand"
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "find ~/.aws -type f -exec cat {} +"},
+            "`~/.aws` holds credential files",
+            id="find-in-credential-dir",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "rsync -a ~/.ssh/ /tmp/s/"},
+            "`~/.ssh/` holds credential files",
+            id="rsync-source",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "grep -rnepassword ~"},
+            "a search outside the project for a credential (`-rnepassword`)",
+            id="attached-pattern",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "rg --color never -n password ~"},
+            "a search outside the project for a credential (`password`)",
+            id="unlisted-value-option",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "cd -; grep -r password ."},
+            "a search outside the project for a credential (`password`)",
+            id="search-after-cd-back",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "echo $'it\\'s'; grep -rn password ~"},
+            "a search for a credential (`password`), in a command that does not parse",
+            id="unparseable-keyword-search",
+        ),
+        pytest.param(
+            "Bash",
+            {"command": "echo $'it\\'s'; cat $HOME/.npmrc"},
+            "`$HOME/.npmrc` is a credential file, in a command that does not parse",
+            id="unparseable-variable-path",
+        ),
+        pytest.param("Bash", {"command": 'echo "<<EOF"\ncat ~/.pgpass'}, PGPASS, id="quoted-heredoc-operator"),
+        pytest.param(
+            "Bash",
+            {"command": "cat <<EOF >> notes.md\n$(cat ~/.pgpass)\nEOF"},
+            PGPASS,
+            id="unquoted-heredoc-substitution",
         ),
         pytest.param(
             "Monitor",
@@ -269,7 +317,6 @@ def test_denies_reading_a_store_or_hunting_outside_the_project(
         pytest.param("Bash", {"command": "sed -n 1,20p notes/credential-rotation.md"}, id="keyword-in-file-name"),
         pytest.param("Bash", {"command": "jq '.env' package.json"}, id="script-naming-a-store"),
         pytest.param("Bash", {"command": "rg password src"}, id="keyword-search-inside"),
-        pytest.param("Bash", {"command": "grep -n TODO ~/.ssh"}, id="non-recursive-search-of-credential-dir"),
         pytest.param("Bash", {"command": "printf 'A=1\\n' > .env"}, id="output-redirect"),
         pytest.param("Bash", {"command": "echo 'unterminated"}, id="unparseable-naming-nothing"),
         pytest.param("Read", {"file_path": "config/.env.template"}, id="env-template"),
@@ -282,6 +329,10 @@ def test_denies_reading_a_store_or_hunting_outside_the_project(
         pytest.param("Bash", {"command": "cp .env.example .env"}, id="cp-destination"),
         pytest.param("Bash", {"command": "cat ~/.ssh/known_hosts"}, id="non-secret-in-credential-dir"),
         pytest.param("Bash", {"command": "cat <<EOF\ncat ~/.pgpass\nEOF"}, id="heredoc-body"),
+        pytest.param("Grep", {"pattern": "GH_TOKEN", "glob": "*.yml"}, id="grep-keyword-with-config-glob-inside"),
+        pytest.param("Glob", {"pattern": "**/*env*"}, id="glob-name-fragment"),
+        pytest.param("Read", {"file_path": "src/passwordReset.json"}, id="secret-word-inside-a-name"),
+        pytest.param("Bash", {"command": "scp -i ~/.ssh/deploy_key build.tar host:/srv"}, id="scp-sign-in-key"),
     ],
 )
 def test_allows_project_work_that_only_mentions_a_credential(tool: str, tool_input: dict, tmp_path: Path) -> None:
