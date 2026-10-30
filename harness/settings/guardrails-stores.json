@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(//**/.pgpass)",
+      "Read(//**/.netrc)",
+      "Read(//**/.git-credentials)",
+      "Read(//**/.pypirc)",
+      "Read(//**/.my.cnf)",
+      "Read(//**/.htpasswd)",
+      "Read(//**/.envrc)",
+      "Read(//**/.aws/credentials)",
+      "Read(//**/.docker/config.json)",
+      "Read(//**/.config/gh/hosts.yml)",
+      "Read(//**/id_rsa)",
+      "Read(//**/id_ed25519)",
+      "Read(//**/id_ecdsa)",
+      "Read(//**/id_dsa)",
+      "Read(//**/*.jks)",
+      "Read(//**/*.p12)",
+      "Read(//**/*.pfx)",
+      "Read(//**/*.keytab)",
+      "Read(//**/*.keystore)",
+      "Read(//**/*.truststore)",
+      "Read(//**/.env)"
+    ]
+  }
+}
