@@ -1,6 +1,6 @@
 {
   "name": "guardrails",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Hooks that deny tool calls crossing a fixed boundary, so far reading credential stores, searching outside the project for credential values, and installing, removing or upgrading software",
   "author": {
     "name": "Runt9 Productions"

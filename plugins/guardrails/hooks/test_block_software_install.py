@@ -89,6 +89,29 @@ def assert_denied_for(reason: str | None, expected: str) -> None:
             "`brew install`, in a command that does not parse",
             id="unparseable-naming-install",
         ),
+        pytest.param("sudo sh -c 'apt-get update && apt-get install -y jq'", "`apt-get install`", id="shell-c-string"),
+        pytest.param("eval npm install -g example-cli", "a global `npm install`", id="eval-words"),
+        pytest.param("sudo bash <<'EOF'\nbrew install example\nEOF", "`brew install`", id="heredoc-read-by-shell"),
+        pytest.param(
+            "npm init example@latest app",
+            "`npm init example@latest` downloads and runs a package",
+            id="node-scaffolder",
+        ),
+        pytest.param(
+            "go run example.com/tool@latest",
+            "`go run example.com/tool@latest` can download and run a module",
+            id="go-run-versioned-module",
+        ),
+        pytest.param("apt-get -o Debug::Example=1 install jq", "`apt-get install`", id="option-value-before-verb"),
+        pytest.param("cargo +nightly install example-tool", "`cargo install`", id="toolchain-before-verb"),
+        pytest.param("sudo -iu root apt-get install jq", "`apt-get install`", id="clustered-wrapper-options"),
+        pytest.param("arch -arm64 brew install example", "`brew install`", id="arch-wrapper"),
+        pytest.param("echo $((1<<4))\nnpm install -g example-cli", "a global `npm install`", id="shift-is-no-heredoc"),
+        pytest.param(
+            'python3 -c "print(1<<4)"\nnpm install -g example-cli',
+            "a global `npm install`",
+            id="quoted-shift-is-no-heredoc",
+        ),
     ],
 )
 def test_denies_changing_software(command: str, expected: str, tmp_path: Path) -> None:
@@ -114,6 +137,10 @@ def test_denies_changing_software(command: str, expected: str, tmp_path: Path) -
         pytest.param("curl -s https://example.com/api | python3 -m json.tool", id="download-piped-as-data"),
         pytest.param("command -v brew", id="command-describes"),
         pytest.param("echo 'unterminated", id="unparseable-naming-nothing"),
+        pytest.param("sh -c 'echo \"npm install -g example-cli\"'", id="shell-c-string-only-mentions"),
+        pytest.param("npm init -y", id="npm-init-without-initializer"),
+        pytest.param("go run ./cmd/example", id="go-run-local-package"),
+        pytest.param("x=$(cat <<EOF\nbrew install example\nEOF\n)\necho done", id="heredoc-in-substitution"),
     ],
 )
 def test_allows_work_that_changes_no_software(command: str, tmp_path: Path) -> None:
@@ -130,6 +157,11 @@ def test_allows_work_that_changes_no_software(command: str, tmp_path: Path) -> N
             id="hashed-replay-after-activate",
         ),
         pytest.param(".venv/bin/pip uninstall -y example-lib", None, id="uninstall-inside"),
+        pytest.param(
+            ".venv/bin/pip install --require-hashes --only-binary :all: -r requirements.txt",
+            None,
+            id="hashed-replay-with-option-values",
+        ),
         pytest.param(
             ".venv/bin/python -m pip install example-lib",
             "`python -m pip install example-lib` names a new package",

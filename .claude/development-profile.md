@@ -72,8 +72,8 @@ a knowledge base note already answers a question, this file points there.
 - There is no build. The checks, from the root (`CLAUDE.md`, "Trying a change", has the setup):
   - Python: `ruff check .`, `ruff format --check .` and `python -m pytest -p no:cacheprovider` from the virtual
     environment.
-  - A mod: load it once with `claude --plugin-dir plugins/<name>`, then `npx tsc -p plugins/<name>`,
-    `npx oxlint -c .oxlintrc.json plugins/<name>` and `claude plugin test plugins/<name>`.
+  - A mod: load it once with `claude --plugin-dir plugins/<name>`, then `npx --no-install tsc -p plugins/<name>`,
+    `npx --no-install oxlint -c .oxlintrc.json plugins/<name>` and `claude plugin test plugins/<name>`.
   - Any plugin: `claude plugin validate --strict plugins/<name>`.
   - Shell: `shellcheck` over the changed scripts, and `bats` over the `.bats` files.
   - The knowledge base: section 4's validator.

@@ -134,8 +134,10 @@ a block on `sudo`: privileged work that installs nothing is allowed.
 
 It splits the command the way the shell would, so a command inside `$(...)`, backticks, `<(...)`, a subshell, a
 `{ ...; }` group, an `if` or a loop, or on a later line is judged too. Quoted text and heredoc bodies are text,
-except a substitution inside double quotes, which still runs. The program is found past assignments and wrappers
-(`sudo -u root`, `env`, `timeout 60`, `nice -n 5` and the like).
+except a substitution inside double quotes, which still runs, and the text a shell or `eval` runs as its program
+(`sh -c '...'`, `eval ...`, a heredoc or here-string a shell reads), which is judged as a command. The program is found
+past assignments and wrappers (`sudo -iu root`, `env`, `timeout 60`, `nice -n 5`, `arch -arm64` and the like), and a
+package manager's verb past the options before it (`apt-get -o Key=Value install`, `cargo +nightly install`).
 
 Denied:
 
@@ -148,8 +150,9 @@ Denied:
   hashed requirements with `--require-hashes -r`. A virtual environment is a `pip` or `python` path whose `bin` sits
   beside a `pyvenv.cfg`, or one activated earlier in the same command;
 - `uv sync` without `--locked` or `--frozen`;
-- a package runner that can download: `npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `bun x`, `uvx`,
-  `uv tool run`, `pipx run`;
+- a package runner or scaffolder that can download: `npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `bun x`,
+  `pnpx`, `uvx`, `uv tool run`, `pipx run`, `npm init <name>`, `npm`, `pnpm`, `yarn` or `bun` `create <name>`, and
+  `go run <module>@<version>`;
 - a download or lookup (`curl`, `wget`, `dig`, `nslookup`, `host`) whose output an interpreter runs as a program:
   piped into a shell, `python`, `node`, `perl` or `ruby` that reads its program from stdin, or substituted where one
   reads it (`bash -c "$(curl ...)"`, `bash <(curl ...)`, `eval "$(curl ...)"`, `source <(curl ...)`);
@@ -167,9 +170,10 @@ denies, with a message saying the guard failed.
 
 Accepted false positives: a data archive fetched and unpacked is denied like a tool, since a wrong denial costs one
 sentence and a missed install changes the machine; plain `pip` in a session started inside an activated virtual
-environment is judged as outside one. Known gaps: a command inside a quoted string (`sh -c '...'`, `env -S`), a
-download saved to a file and run later, project dependency updates (`npm update`, `uv run`), and installers it does
-not list (`make install`, `apk`, `conda`, `rustup`).
+environment is judged as outside one. Known gaps: a command in a string run by anything but a shell or `eval`
+(`env -S`, `su -c`, `watch '...'`), text piped into a shell (`echo '...' | bash`), a download saved to a file and run
+later, project dependency updates (`npm update`, `uv run`), and installers it does not list (`make install`, `apk`,
+`conda`, `rustup`).
 
 ## Trying a change
 

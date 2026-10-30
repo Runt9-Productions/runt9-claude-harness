@@ -5,17 +5,20 @@ denies it at the attempt. It is not a block on `sudo`: privileged work that inst
 
 `shell_words` splits the command into simple commands the way the shell would, including those inside `$(...)`,
 backticks, `<(...)`, subshells, `{ ...; }` groups and compound statements. Quoted text and heredoc bodies stay text,
-apart from a `$(...)` or backtick substitution inside double quotes. Each command is judged by its program, found past
-leading assignments and wrappers (`sudo`, `env`, `timeout`, `nice` and the like, with the values their options
-take). Denied:
+apart from a `$(...)` or backtick substitution inside double quotes, and apart from the text a shell or `eval` runs as
+its program (`sh -c '...'`, `eval ...`, a heredoc or here-string a shell reads), which is judged as a command of its
+own. Each command is judged by its program, found past leading assignments and wrappers (`sudo`, `env`, `timeout`,
+`nice` and the like, with the values their options take), and a package manager's verb past the options before it.
+Denied:
 
 - a package manager changing packages: `apt`, `dpkg`, `snap`, `dnf`, `brew`, `gem`, `pipx`, `cargo install`,
   `go install`, `uv tool install`, `uv python install`, and `pacman` or `add-apt-repository` in any form;
 - a global Node install, and any install naming a new package (`npm install <name>`, `uv add`, `cargo add`);
 - `pip install` outside a virtual environment, and inside one unless it replays hashed requirements
   (`--require-hashes -r`); `uv sync` without `--locked` or `--frozen`;
-- a package runner that can download (`npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `uvx`), unless told it may
-  not (`npx --no-install`, `npm exec --no`);
+- a package runner or scaffolder that can download (`npx`, `npm exec`, `pnpm dlx`, `yarn dlx`, `bunx`, `pnpx`, `uvx`,
+  `npm init <name>`, `create <name>`, `go run <module>@<version>`), unless told it may not (`npx --no-install`,
+  `npm exec --no`);
 - a download or lookup (`curl`, `wget`, `dig`, `nslookup`, `host`) whose output an interpreter runs: piped into one
   that reads its program from stdin, or substituted where it reads its program (`bash -c "$(curl ...)"`,
   `bash <(curl ...)`, `eval "$(curl ...)"`);
@@ -28,9 +31,10 @@ the guard fails closed.
 
 Accepted false positives: a data archive fetched and unpacked is denied like a tool, since a wrong denial costs one
 sentence and a missed install changes the machine; plain `pip` in a session started inside an activated virtual
-environment is judged as outside one. Known gaps: a command inside a quoted string (`sh -c '...'`, `env -S`), a
-download saved to a file and run later, project dependency updates (`npm update`, `uv run`), and installers not listed
-(`make install`, `apk`, `conda`, `rustup`).
+environment is judged as outside one. Known gaps: a command in a string run by anything but a shell or `eval`
+(`env -S`, `su -c`, `watch '...'`), text piped into a shell (`echo '...' | bash`), a download saved to a file and run
+later, project dependency updates (`npm update`, `uv run`), and installers not listed (`make install`, `apk`, `conda`,
+`rustup`).
 """
 
 from __future__ import annotations
@@ -69,13 +73,34 @@ MUTATING_SUBCOMMANDS = {
         "inject", "uninject", "run",
     },
 }  # fmt: skip
+APT_VALUE_OPTIONS = {
+    "-o", "--option", "-t", "--target-release", "--default-release", "-c", "--config-file", "-a", "--host-architecture",
+}  # fmt: skip
+RPM_VALUE_OPTIONS = {
+    "--enablerepo", "--disablerepo", "--repo", "--repoid", "--setopt", "--releasever", "--installroot", "-c",
+    "--config", "-x", "--exclude", "-d", "--debuglevel", "-e", "--errorlevel", "-R", "--root", "-p", "--plus-repo",
+}  # fmt: skip
+# Options a package manager takes before its verb, each with a separate value.
+GLOBAL_VALUE_OPTIONS = {
+    "apt": APT_VALUE_OPTIONS,
+    "apt-get": APT_VALUE_OPTIONS,
+    "aptitude": APT_VALUE_OPTIONS,
+    "yum": RPM_VALUE_OPTIONS,
+    "dnf": RPM_VALUE_OPTIONS,
+    "zypper": RPM_VALUE_OPTIONS,
+    "cargo": {"-Z", "-C", "--config", "--color"},
+    "go": {"-C"},
+}
 MACHINE_TOOLS = {"pacman", "add-apt-repository"}
-RUNNERS = {"bunx", "uvx"}
+RUNNERS = {"bunx", "uvx", "pnpx"}
 DPKG_CHANGES = {"-i", "--install", "--unpack", "-r", "--remove", "-P", "--purge"}
+GO_BUILD_VALUE_OPTIONS = {"-C", "-tags", "-ldflags", "-gcflags", "-exec", "-mod", "-modfile", "-o", "-p", "-toolexec"}
 
 NODE_MANAGERS = {"npm", "pnpm", "yarn", "bun"}
 NODE_INSTALL_VERBS = {"install", "i", "in", "add"}
 NODE_CHANGE_VERBS = NODE_INSTALL_VERBS | {"uninstall", "remove", "rm", "un", "update", "up", "upgrade"}
+# Verbs that download an initializer package named by their operand and run it.
+NODE_SCAFFOLDERS = {("npm", "init"), ("npm", "create"), ("pnpm", "create"), ("yarn", "create"), ("bun", "create")}
 GLOBAL_FLAGS = {"-g", "--global", "--location=global"}
 NODE_VALUE_OPTIONS = {
     "--prefix", "-C", "--dir", "--cwd", "-w", "--workspace", "--filter", "--registry", "--cache", "--userconfig",
@@ -89,10 +114,11 @@ PYTHON = re.compile(r"python[0-9.]*")
 PIP_VALUE_OPTIONS = {
     "-r", "--requirement", "-c", "--constraint", "-t", "--target", "--prefix", "--root", "-i", "--index-url",
     "--extra-index-url", "-f", "--find-links", "--python", "--python-version", "--platform", "--cache-dir", "--log",
-    "--report", "--timeout", "--retries", "--proxy", "--cert",
+    "--report", "--timeout", "--retries", "--proxy", "--cert", "--only-binary", "--no-binary", "--trusted-host",
 }  # fmt: skip
 REQUIREMENT_OPTIONS = {"-r", "--requirement"}
 LOCKED_FLAGS = {"--locked", "--frozen"}
+UV_VALUE_OPTIONS = {"--directory", "--project", "--cache-dir", "--config-file", "--color", "--python-preference"}
 UV_MACHINE_ACTIONS = {"tool": {"install", "upgrade", "uninstall", "run"}, "python": {"install", "uninstall", "upgrade"}}
 
 DOWNLOADERS = {"curl", "wget"}
@@ -105,6 +131,8 @@ CODE_FLAGS = {"node": {"-e", "--eval", "-p", "--print"}, "perl": {"-e", "-E"}, "
 PYTHON_CODE_FLAGS = {"-c", "-m"}
 STDIN_PATHS = {"-", "/dev/stdin"}
 STDIN_REDIRECTS = {"<", "<<<"}
+# Redirects whose target is the text fed to stdin rather than a file: here-strings and heredocs.
+TEXT_REDIRECTS = {"<<<", "<<", "<<-"}
 
 
 def operand_positions(arguments: list[str], value_options: set[str]) -> list[int]:
@@ -119,7 +147,8 @@ def operand_positions(arguments: list[str], value_options: set[str]) -> list[int
         if word in value_options:
             index += 2
             continue
-        if not word.startswith("-") or word == "-":
+        # A leading `+` selects a toolchain, as in `cargo +nightly install`.
+        if not word.startswith(("-", "+")) or word == "-":
             positions.append(index)
         index += 1
     return positions
@@ -157,6 +186,8 @@ def judge_node(name: str, arguments: list[str]) -> str | None:
     if verb in NODE_CHANGE_VERBS and GLOBAL_FLAGS.intersection(arguments):
         return f"a global `{name} {verb}`"
     packages = [rest[index] for index in operand_positions(rest, NODE_VALUE_OPTIONS)]
+    if (name, verb) in NODE_SCAFFOLDERS and packages:
+        return f"`{name} {verb} {packages[0]}` downloads and runs a package"
     if verb in NODE_INSTALL_VERBS and packages:
         return f"`{name} {verb} {packages[0]}` names a new package"
     return None
@@ -179,7 +210,7 @@ def judge_pip(program: str, arguments: list[str], in_venv: bool) -> str | None:
 
 
 def judge_uv(arguments: list[str]) -> str | None:
-    verb, rest = subcommand(arguments)
+    verb, rest = subcommand(arguments, UV_VALUE_OPTIONS)
     if verb == "add":
         return "`uv add` names a new package"
     if verb == "sync":
@@ -187,7 +218,7 @@ def judge_uv(arguments: list[str]) -> str | None:
     if verb == "pip":
         # uv installs into a virtual environment unless told `--system`.
         return judge_pip("uv pip", rest, "--system" not in rest)
-    action, _ = subcommand(rest)
+    action, _ = subcommand(rest, UV_VALUE_OPTIONS)
     if action in UV_MACHINE_ACTIONS.get(verb, set()):
         return f"`uv {verb} {action}`"
     return None
@@ -202,9 +233,15 @@ def judge_install(words: list[str], cwd: str, activated: bool) -> str | None:
         return f"`{name}`"
     if name in RUNNERS:
         return f"`{name}` can download and run a package"
-    verb, _ = subcommand(arguments)
+    verb, rest = subcommand(arguments, GLOBAL_VALUE_OPTIONS.get(name))
     if verb in MUTATING_SUBCOMMANDS.get(name, set()):
         return f"`{name} {verb}`"
+    if name == "go" and verb == "run":
+        packages = [rest[index] for index in operand_positions(rest, GO_BUILD_VALUE_OPTIONS)]
+        # A module path with a version (`example.com/cmd@latest`) is fetched; a package in the module is not.
+        if packages and "@" in packages[0]:
+            return f"`go run {packages[0]}` can download and run a module"
+        return None
     if name == "dpkg":
         flag = next((argument for argument in arguments if argument in DPKG_CHANGES), None)
         return f"`dpkg {flag}`" if flag else None
@@ -261,12 +298,29 @@ def first_fetcher(script: list[Command]) -> str | None:
     return None
 
 
+def redirected_input(command: Command, operators: set[str]) -> list[Word]:
+    return [target for operator, target in command.redirects if operator in operators]
+
+
+def shell_program(name: str, command: Command, arguments: list[Word]) -> str | None:
+    """The text a shell or `eval` runs as commands; None for another program, or a shell running a script file."""
+    if name == "eval":
+        return " ".join(texts(arguments))
+    if name not in SHELLS and name not in SOURCES:
+        return None
+    reads_stdin, program_words = code_input(name, arguments)
+    if reads_stdin:
+        return "\n".join(texts(redirected_input(command, TEXT_REDIRECTS)))
+    if any(is_code_flag(name, word.text) for word in arguments):
+        return " ".join(texts(program_words))
+    return None
+
+
 def judge_program_source(name: str, command: Command, arguments: list[Word]) -> str | None:
     """Whether an interpreter runs a fetcher's output substituted where it reads its program."""
     reads_stdin, program_words = code_input(name, arguments)
     if reads_stdin:
-        redirected = [target for operator, target in command.redirects if operator in STDIN_REDIRECTS]
-        program_words = [*program_words, *redirected]
+        program_words = [*program_words, *redirected_input(command, STDIN_REDIRECTS)]
     for word in program_words:
         for substitution in word.substitutions:
             fetcher = first_fetcher(substitution)
@@ -288,6 +342,11 @@ def judge_command(command: Command, cwd: str, activated: bool) -> str | None:
     if reason:
         return reason
     name = command_name(words[0].text)
+    program = shell_program(name, command, words[1:])
+    if program:
+        reason = judge_bash(program, cwd)
+        if reason:
+            return reason
     if is_interpreter(name):
         return judge_program_source(name, command, words[1:])
     if name in DOWNLOADERS:
