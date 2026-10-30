@@ -106,6 +106,8 @@ class Sandbox:
         result = subprocess.run(
             ["git", "-C", str(repo), "config", "--get", "core.hooksPath"], env=self.env, capture_output=True, text=True
         )
+        # 1 is git's exit for an unset key; anything else is an error, which must not read as unset.
+        assert result.returncode in (0, 1), result.stderr
         return result.stdout.strip() or None
 
 
@@ -155,7 +157,7 @@ def test_harness_installs_a_new_version_and_keeps_state(sandbox: Sandbox) -> Non
     assert (sandbox.current / "SOURCE_COMMIT").read_text() == f"{head}\n"
     assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
     assert installed_mode(sandbox.current / "githooks/pre-push") == 0o755
-    assert installed_mode(sandbox.current / "leak-scan/scan.sh") == 0o755
+    assert installed_mode(sandbox.current / "harness.json") == 0o644
     assert not (sandbox.current / "githooks/README.md").exists()
     assert not (sandbox.current / "githooks/example-retired-hook").exists()
     assert sorted(path.name for path in (sandbox.install / "versions").iterdir()) == ["0.2.0"]
@@ -259,9 +261,8 @@ def test_session_refuses(sandbox: Sandbox, variable: str) -> None:
     assert sandbox.claude_calls() == []
 
 
-@pytest.mark.parametrize("variable", ["CLAUDE_CODE_SESSION_ID", "CLAUDECODE"])
-def test_list_works_in_a_session(sandbox: Sandbox, variable: str) -> None:
-    result = sandbox.run("--list", env={variable: "1"})
+def test_list_works_in_a_session(sandbox: Sandbox) -> None:
+    result = sandbox.run("--list", env={"CLAUDE_CODE_SESSION_ID": "1", "CLAUDECODE": "1"})
 
     assert result.returncode == 0, result.stderr
     names = [line.split()[0] for line in result.stdout.splitlines()]
@@ -511,18 +512,28 @@ def test_missing_claude_md_starts_from_the_harness_template(sandbox: Sandbox, te
     assert sandbox.claude_md.read_text() == (block if template is None else f"{template}\n{block}")
 
 
-def test_fragment_missing_from_the_installed_harness_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
+@pytest.mark.parametrize(
+    ("component", "relative", "content", "target"),
+    [
+        ("fragment:example-later", "fragments/example-later.md", b"example later rules\n", ".claude/CLAUDE.md"),
+        ("settings:example-later", "settings/example-later.json", b"{}\n", ".claude/settings.json"),
+    ],
+    ids=["fragment", "settings"],
+)
+def test_fragment_missing_from_the_installed_harness_refuses_with_nothing_installed(
+    sandbox: Sandbox, component: str, relative: str, content: bytes, target: str
+) -> None:
     assert sandbox.run("harness").returncode == 0
-    sandbox.write("harness/fragments/example-later.md", b"example later rules\n")
+    sandbox.write(f"harness/{relative}", content)
     sandbox.set_version("0.2.0")
     sandbox.commit("Add a later example fragment")
 
-    result = sandbox.run("skills", "fragment:example-later")
+    result = sandbox.run("skills", component)
 
     assert result.returncode == 1
-    assert f"the installed harness has no {sandbox.current / 'fragments/example-later.md'}" in result.stderr
+    assert f"the installed harness has no {sandbox.current / relative}" in result.stderr
     assert not sandbox.skills.exists()
-    assert not sandbox.claude_md.exists()
+    assert not (sandbox.home / target).exists()
 
 
 def test_unmatched_block_marker_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
@@ -582,23 +593,29 @@ def test_missing_settings_file_is_written_from_the_fragment(sandbox: Sandbox) ->
     assert (sandbox.home / ".claude/settings.json").read_text() == json.dumps(SETTINGS_FRAGMENT, indent=2) + "\n"
 
 
-@pytest.mark.parametrize(
-    ("content", "reason"),
-    [
-        ("[]", "settings.json is not a JSON object"),
-        ('{"permissions": {"deny": "example"}}', "permissions.deny in {settings} is not a list"),
-    ],
-    ids=["not-an-object", "not-a-list"],
-)
-def test_settings_the_fragment_cannot_merge_into_refuses_unchanged(sandbox: Sandbox, content: str, reason: str) -> None:
+def test_settings_not_an_object_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
     assert sandbox.run("harness").returncode == 0
     settings = sandbox.home / ".claude/settings.json"
+    settings.write_text("[]")
+
+    result = sandbox.run("skills", "settings:example-deny", stdin="y\n")
+
+    assert result.returncode == 1
+    assert f"{settings} is not a JSON object" in result.stderr
+    assert not sandbox.skills.exists()
+    assert settings.read_text() == "[]"
+
+
+def test_settings_the_fragment_cannot_merge_into_refuses_unchanged(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    settings = sandbox.home / ".claude/settings.json"
+    content = '{"permissions": {"deny": "example"}}'
     settings.write_text(content)
 
     result = sandbox.run("settings:example-deny", stdin="y\n")
 
     assert result.returncode == 1
-    assert reason.format(settings=settings) in result.stderr
+    assert f"permissions.deny in {settings} is not a list" in result.stderr
     assert settings.read_text() == content
 
 
@@ -653,7 +670,11 @@ def test_plugin_dirs_warns_once(sandbox: Sandbox, in_settings: bool) -> None:
 
     assert result.returncode == 0, result.stderr
     assert result.stderr.count(f"CLAUDE_CODE_PLUGIN_DIRS is {value}") == 1
-    assert len(sandbox.claude_calls()) == 3
+    assert sandbox.claude_calls() == [
+        MARKETPLACE_ADD,
+        ["plugin", "install", "example-one@example-market"],
+        ["plugin", "install", "example-two@example-market"],
+    ]
 
 
 def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -> None:
