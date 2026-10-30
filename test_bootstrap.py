@@ -505,6 +505,12 @@ def test_missing_claude_md_starts_from_the_harness_template(sandbox: Sandbox, te
     assert sandbox.claude_md.read_text() == (block if template is None else f"{template}\n{block}")
 
 
+def test_shipped_template_holds_the_markers_bootstrap_writes_between() -> None:
+    # A template whose markers drifted from bootstrap's would get a second block appended at its end.
+    template = (SCRIPT.parent / "harness" / "claude-md-template.md").read_text().splitlines()
+    assert template.index(BLOCK_START) + 1 == template.index(BLOCK_END)
+
+
 def test_fragment_missing_from_the_installed_harness_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
     assert sandbox.run("harness").returncode == 0
     sandbox.write("harness/fragments/example-later.md", b"example later rules\n")

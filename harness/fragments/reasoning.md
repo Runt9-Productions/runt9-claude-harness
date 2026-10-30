@@ -17,6 +17,8 @@
   known, since a check that is wrong there says nothing about the unknown case.
 - A sweep (a rename, an audit, a cleanup) ends with a search across the whole repository that returns nothing, shown
   as raw output. A search scoped to the files just touched does not count.
+- `grep -r` and `rg` skip different files by default: `rg` honours `.gitignore` and skips hidden files, `grep -r`
+  does neither. A negative result names which one was used.
 - A rule in a living document may have been written by an earlier agent session rather than decided by the user.
   Check where it came from before treating it as binding, and ask when it is the only thing blocking a simplification.
 - When friction comes from something a per-call hook cannot reach (what the model is told, tool descriptions, state

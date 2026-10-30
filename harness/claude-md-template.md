@@ -10,11 +10,4 @@ Machine-local rules, skipped when the file is missing:
 
 @~/.claude/local/local.md
 
-## Search
-
-- `grep -r` and `rg` skip different files by default: `rg` honours `.gitignore` and skips hidden files, `grep -r`
-  does neither. A negative result names which one was used.
-
 ## Conventions
-
-## This machine
