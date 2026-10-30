@@ -1,14 +1,12 @@
 ---
 name: mod-contract
-description: Checks a diff to a TypeScript mod (a plugin whose hooks/hooks.json lists modules) against what the real Claude Code engine does and what sibling plugins expect of it, which CI's stubbed kit tests cannot show. The /code-review skill sends it when the profile's routing matches; do not run it by itself.
+description: Checks a diff to a TypeScript mod (a plugin whose hooks/hooks.json lists modules) against what the real Claude Code engine does and what sibling plugins expect of it, which CI's stubbed kit tests cannot show. The /lens-review skill sends it when the profile's routing matches; do not run it by itself.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
 # Mod contract
-
-Read `.claude/agents/references/reviewer-brief.md` before anything else. If it says to refuse the prompt, refuse.
 
 ## The question
 

@@ -1,14 +1,12 @@
 ---
 name: staleness-and-debris
-description: Runs quick text checks over a diff against the profile's lists of living docs, mirrors, companion files and debris, reporting docs the change made stale, copies left out of step, companions missing and debugging leftovers. The /code-review skill sends it on every panel; do not run it by itself.
-model: opus
+description: Runs quick text checks over a diff against the profile's lists of living docs, mirrors, companion files and debris, reporting docs the change made stale, copies left out of step, companions missing and debugging leftovers. The /lens-review skill sends it on every panel; do not run it by itself.
+model: sonnet
 effort: medium
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
 # Staleness and debris
-
-Read `.claude/agents/references/reviewer-brief.md` before anything else. If it says to refuse the prompt, refuse.
 
 ## The question
 

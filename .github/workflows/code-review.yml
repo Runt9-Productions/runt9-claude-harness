@@ -13,8 +13,8 @@ permissions:
 jobs:
   # Fork PRs get no secrets under pull_request, so they are not reviewed. This job holds the Claude token and a
   # read-only GitHub token; post-review holds the write token and no Claude token, so a prompt-injected reviewer has
-  # nothing that can write. The review runs with the PR's own .claude/, so a change to a reviewer is reviewed by the
-  # changed reviewer.
+  # nothing that can write. The review runs with the PR's own .claude/ and plugins/lens-review, so a change to a
+  # reviewer or to the skill is reviewed by the changed version.
   review:
     if: >-
       github.event.label.name == 'code-review-requested' &&
@@ -34,31 +34,38 @@ jobs:
         shell: bash
 
     steps:
+      # The install action comes from the default branch, not the PR: the bot can change a file under .github/actions,
+      # though not a workflow, and an action run before the review could plant a command it then runs with the token.
+      # For the same reason this job never runs `npm ci`: the PR controls package.json and the lockfile. `$/` would
+      # load the action from the running commit, which is the PR's.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: default-branch
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - uses: ./default-branch/.github/actions/install-claude-code # zizmor: ignore[self-repository] default branch copy
+        with:
+          sandbox: "true"
+
+      # Replaces the default branch's copy, which nothing needs once the action has run.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      # Newest release, outside the lockfile. Never `npm ci` here: the PR controls package.json and the lockfile, and
-      # this job holds the Claude token.
-      - name: Install Claude Code
-        run: | # zizmor: ignore[adhoc-packages] latest on purpose: the version auto-updating users run
-          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-fund --ignore-scripts @anthropic-ai/claude-code@latest
-          mkdir -p "$RUNNER_TEMP/bin"
-          printf '#!/bin/sh\nexec node "%s" "$@"\n' \
-            "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs" > "$RUNNER_TEMP/bin/claude"
-          chmod +x "$RUNNER_TEMP/bin/claude"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-
-      # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB runs Bash in Claude Code's sandbox, which needs bubblewrap, and socat for its
-      # network bridge; without socat no Bash command starts. Ubuntu 24.04's AppArmor stops bwrap creating the user
-      # namespace it runs in. The last line fails this step, not the review, if bwrap still cannot.
-      - name: Install the sandbox's tools
+      # Claude Code loads the checkout's project settings, whose env, sandbox and helper commands can undo the scrub or
+      # run a command holding the token. --setting-sources user would also drop the PR's agents and skills, so a PR
+      # that adds a settings file is not reviewed.
+      - name: Refuse project settings
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q bubblewrap socat
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          bwrap --ro-bind / / true
+          for file in .claude/settings.json .claude/settings.local.json; do
+            if [[ -e $file ]]; then
+              echo "::error::The review does not run with project settings, and the PR has $file."
+              exit 1
+            fi
+          done
 
       - name: Review
         env:
@@ -70,7 +77,8 @@ jobs:
           CODE_REVIEW_OUTPUT: ${{ runner.temp }}/code-review
           PR: ${{ github.event.pull_request.number }}
         run: |
-          claude -p "/code-review $PR auto" --settings '{"disableAllHooks": true}' --strict-mcp-config \
+          claude -p "/lens-review $PR auto" --plugin-dir plugins/lens-review \
+            --settings '{"disableAllHooks": true}' --strict-mcp-config \
             --permission-mode dontAsk --allowedTools Bash Read Write Agent Skill --disallowedTools WebFetch WebSearch \
             --no-session-persistence --output-format json < /dev/null > "$RUNNER_TEMP/review.json"
           jq '{is_error, num_turns, total_cost_usd, duration_ms, permission_denials}' "$RUNNER_TEMP/review.json"
