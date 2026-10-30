@@ -132,10 +132,13 @@ effort=$(frontmatter_field effort)
 jq -n --arg description "$(frontmatter_field description)" --arg prompt "$(sed '1,/^---$/d' "$agent_file")" \
     '{"public-leak": {description: $description, prompt: $prompt}}' > "$scratch/agents.json"
 
-# The review gets only these variables, so nothing the caller sets can redirect or alter it: not ANTHROPIC_BASE_URL, a
-# proxy, NODE_OPTIONS or a plugin directory. The auth variables name a credential, never where it is sent.
+# The review gets only these variables, so nothing the caller sets can alter it: not ANTHROPIC_BASE_URL, NODE_OPTIONS
+# or a plugin directory. The auth variables name a credential, never where it is sent. The proxy variables pass through
+# because a sandboxed shell reaches the network only through its proxy; a caller able to aim them at a fake endpoint
+# could as easily skip the hook, so the review guards against accidents, not against its caller.
 review_env=(PATH="$PATH" HOME="$HOME")
-for name in USER LOGNAME LANG LC_ALL LC_CTYPE ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN; do
+for name in USER LOGNAME LANG LC_ALL LC_CTYPE ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN \
+    HTTPS_PROXY https_proxy HTTP_PROXY http_proxy ALL_PROXY all_proxy NO_PROXY no_proxy; do
     if [[ -n ${!name:-} ]]; then
         review_env+=("$name=${!name}")
     fi
