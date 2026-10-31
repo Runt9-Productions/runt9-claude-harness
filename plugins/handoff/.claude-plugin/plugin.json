@@ -5,5 +5,23 @@
   "author": {
     "name": "Runt9 Productions"
   },
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "warn_percent": {
+      "type": "number",
+      "title": "Context warning (%)",
+      "description": "The context fill at which the band turns yellow",
+      "default": 30,
+      "min": 1,
+      "max": 100
+    },
+    "ceiling_percent": {
+      "type": "number",
+      "title": "Context ceiling (%)",
+      "description": "The context fill at which the band turns red, and at which the away plugin hands off",
+      "default": 60,
+      "min": 1,
+      "max": 100
+    }
+  }
 }

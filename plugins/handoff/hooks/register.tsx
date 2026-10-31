@@ -1,11 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, ToolSpec } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register, ToolSpec } from 'claude-code'
 
 import type { HandoffPhase } from '../types'
 
-// Where the band turns yellow and red. The away plugin hands off at CEILING_PERCENT, read from state.
-const WARN_PERCENT = 40
-const CEILING_PERCENT = 60
 // compact() rejects while a turn runs, and turn.complete fires before the turn has let go.
 const COMPACT_RETRY_MS = 500
 const COMPACT_ATTEMPTS = 10
@@ -17,7 +14,18 @@ const handoffTurnId = atom({ plugin: 'handoff', key: 'turnId' } as const, '')
 const handoffNonce = atom({ plugin: 'handoff', key: 'nonce' } as const, '')
 const percent = atom({ plugin: 'handoff', key: 'percent' } as const, 0)
 const isUnattended = atom({ plugin: 'handoff', key: 'isUnattended' } as const, false)
-const ceilingPercent = atom({ plugin: 'handoff', key: 'ceilingPercent' } as const, CEILING_PERCENT)
+const ceilingPercent = atom({ plugin: 'handoff', key: 'ceilingPercent' } as const, 0)
+
+/**
+ * Where the band turns yellow and red, from the manifest's userConfig (defaults 30 and 60, the points the delegation
+ * rules give for where rule-following degrades and its ceiling). The away plugin hands off at the ceiling, read
+ * from state.
+ */
+type Thresholds = { warnPercent: number; ceilingPercent: number }
+
+function thresholds(options: PluginOptions): Thresholds {
+  return { warnPercent: Number(options.warn_percent), ceilingPercent: Number(options.ceiling_percent) }
+}
 
 /** owner: the button, or /handoff typed or run by any plugin but away. unattended: away ran it, and nobody is there. */
 type Audience = 'owner' | 'unattended'
@@ -36,8 +44,8 @@ const HANDOFF_STEPS =
   'compacts when the turn ends.'
 
 const RESUME_OPENING =
-  '[resume] The session just compacted after a handoff. First do what the post-compaction notice asks, then read ' +
-  'the handoff file your summary names and any plan or spec it points to.'
+  '[resume] The session just compacted after a handoff. Read the handoff file your summary names, and any plan, ' +
+  'spec or project file it points to.'
 const RESUME_PROMPT =
   `${RESUME_OPENING} Then reply in a few lines with what you are about to do next, and end the turn: ` +
   'the owner confirms before you start.'
@@ -217,13 +225,15 @@ async function tellClaudeItFailed($: EngineInterface, why: string) {
   if (refusal !== undefined) $.ui.toast(`Could not tell Claude the handoff failed: ${refusal}`)
 }
 
-async function publishSharedState($: EngineInterface) {
-  await update($, ceilingPercent, () => CEILING_PERCENT)
+async function publishSharedState($: EngineInterface, limits: Thresholds) {
+  await update($, ceilingPercent, () => limits.ceilingPercent)
   // Written back unchanged: a key never written reads undefined to another plugin, whatever the atom's initial.
   await update($, phase, current => current)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const limits = thresholds(options)
+
   on('session.start', async ($, e, next) => {
     await $.tool.register(COMPACT_WITH)
     await $.command.register({
@@ -232,7 +242,7 @@ export const register: Register = on => {
     })
     // A hot reload stops module timers, and compacting is driven by one, so it would never finish.
     if ((await read($, phase)) === 'compacting') await reset($)
-    await publishSharedState($)
+    await publishSharedState($, limits)
     await refreshPercent($)
     return next(e)
   })
@@ -264,7 +274,7 @@ export const register: Register = on => {
   // the text: a prefix match never finds the handoff's turn, which leaves the handoff stuck in 'queued'.
   on('turn.start', async ($, e, next) => {
     // Every turn, not once: $.state resets when the session id changes, and the away plugin reads it.
-    await publishSharedState($)
+    await publishSharedState($, limits)
     // A subagent's or teammate's turn is never the handoff's, and the compaction does not wait for one to end.
     if (e.agentId !== undefined) return next(e)
     runningTurnIds.add(e.turnId)
@@ -296,7 +306,7 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const fill: number = await read($, percent)
     const current: HandoffPhase = await read($, phase)
-    const color = fill >= CEILING_PERCENT ? 'red' : fill >= WARN_PERCENT ? 'yellow' : undefined
+    const color = fill >= limits.ceilingPercent ? 'red' : fill >= limits.warnPercent ? 'yellow' : undefined
     const line = (
       <Box key="handoff">
         <Text color={color}>Context {fill}% </Text>

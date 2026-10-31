@@ -167,6 +167,12 @@ test('each turn publishes the ceiling the away plugin hands off at', { plugins: 
   expect(await handoffState($, 'ceilingPercent')).toBe(60)
 })
 
+test('the ceiling the away plugin reads follows the ceiling_percent option', { plugins: [PROBE], options: { ceiling_percent: 50 } }, async ($, on) => {
+  engine(on)
+  await turnStart($, 'go', 't1')
+  expect(await handoffState($, 'ceilingPercent')).toBe(50)
+})
+
 test('another plugin reads the phase as idle before any handoff', { plugins: [PROBE] }, async ($, on) => {
   engine(on)
   await turnStart($, 'go', 't1')

@@ -2,7 +2,7 @@
 
 Hands a session off to its own next context. One press, or `/handoff`, asks Claude to write the session's state to a
 handoff file and give a compaction message; when that turn ends the session compacts with the message, and a resume
-prompt has Claude read the handoff file back. There are no settings.
+prompt has Claude read the handoff file back.
 
 ## Installing
 
@@ -13,8 +13,9 @@ prompt has Claude read the handoff file back. There are no settings.
 
 ## The band
 
-A line above the prompt shows how full the context window is, yellow from 40% and red from 60%, with a
-**Hand off and compact** button. While a handoff runs, the button gives way to its phase: waiting for the current
+A line above the prompt shows how full the context window is, yellow from 30% and red from 60%, with a
+**Hand off and compact** button. The two points are the plugin's `warn_percent` and `ceiling_percent` options, set in
+`/config`; the defaults match the delegation rules' figures for where rule-following degrades and its ceiling. While a handoff runs, the button gives way to its phase: waiting for the current
 turn to end, Claude writing it, or compacting.
 
 ## A handoff
@@ -38,8 +39,8 @@ The press or the command queues a `[handoff]` prompt behind any turn that is run
 
 The session then compacts with that message. A turn of the main conversation that starts in the meantime, such as
 one a teammate's message starts, is waited out; a subagent's or teammate's own turn is not. After the compaction a
-`[resume]` prompt asks Claude to do what the post-compaction notice asks, read the handoff file and any plan or spec
-it names, and reply with its next step. Claude then waits for you to confirm.
+`[resume]` prompt asks Claude to read the handoff file and any plan, spec or project file it names, and reply with its
+next step. Claude then waits for you to confirm.
 
 Add `.claude/output/` to each repository's `.gitignore`, or to `.git/info/exclude`, so handoff files stay out of
 commits.
@@ -73,5 +74,5 @@ ways:
 Interrupting its turn still compacts nothing.
 
 `away` reads this plugin's state, typed in `types/index.d.ts`: `phase` (`idle`, `queued`, `writing`, `compacting`),
-`isUnattended`, and `ceilingPercent`, the fill at which it hands off. `phase` and `ceilingPercent` (set to 60) are
-written on every session start and every turn.
+`isUnattended`, and `ceilingPercent`, the fill at which it hands off (the `ceiling_percent` option). `phase` and
+`ceilingPercent` are written on every session start and every turn.
