@@ -10,4 +10,10 @@ fi
 scanner=$(mktemp -d)
 trap 'rm -rf "$scanner"' EXIT
 git archive HEAD^1 harness/leak-scan | tar -x -C "$scanner" --strip-components=2
-bash "$scanner/scan.sh" . HEAD^1 HEAD^1..HEAD^2
+# Dependabot's messages name the old and new commit of a dependency by full hash. PR_AUTHOR must come from the
+# pull_request event: a commit's author fields are whatever the PR's author set them to.
+options=()
+if [[ ${PR_AUTHOR:-} == 'dependabot[bot]' ]]; then
+    options+=(--allow-message-hex)
+fi
+bash "$scanner/scan.sh" "${options[@]}" . HEAD^1 HEAD^1..HEAD^2

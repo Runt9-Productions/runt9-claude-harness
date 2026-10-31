@@ -64,6 +64,18 @@ trust_repo_allowlist() {
     [[ $output != *"(identity)"* ]]
 }
 
+@test "--allow-message-hex drops hex ids from commit messages only" {
+    hex=$(printf '0a%.0s' {1..20})
+    commit_file pinned "$hex"
+    git_dev commit -q --allow-empty -m "compare $hex" -m "mail $leak"
+    run "$scan" --allow-message-hex --ref "refs/heads/$hex" "$repo" none trusted..main
+    [ "$status" -eq 1 ]
+    [[ $output == *"pinned:1  $hex"* ]]
+    [[ $output == *"(ref names):1  $hex"* ]]
+    [[ $output == *"(message):3  $leak"* ]]
+    [[ $output != *"(message):1"* ]]
+}
+
 @test "binary content is not scanned, and --export lists the file" {
     printf 'x\0mail %s\n' "$leak" > "$repo/blob"
     git_dev add blob

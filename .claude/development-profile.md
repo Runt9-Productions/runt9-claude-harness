@@ -82,6 +82,22 @@ a knowledge base note already answers a question, this file points there.
   leak scan, then a `public-leak` review through `claude -p` costing about $0.10 to $0.50. Any finding above Normal,
   or any open question, refuses the push. It reads commit messages too. What CI fails that is cheapest to catch first:
   a missing version rise, `ruff format`, and a note left unverified after its sources changed.
+- CI watch: with `GH_TOKEN` set (section 1) and `sha` the pushed commit,
+
+  ```
+  while id=$(gh run list --commit "$sha" --workflow CI --json databaseId,createdAt \
+      --jq 'max_by(.createdAt) | .databaseId // empty') && [ -z "$id" ]; do sleep 10; done
+  gh run watch "$id" --exit-status
+  ```
+
+  It waits for the commit's `CI` run to exist, takes the newest because `edited` can start a second run on one head,
+  and follows that run until every job, `gate` included, has finished. A `gh` error ends it non-zero. `CI` is the
+  only workflow in `.github/workflows/`; CodeQL runs as GitHub's default setup outside `gate`, and the watch does not
+  follow it.
+- The bot cannot rerun a job, since its App lacks Actions write, so a run failed by the runner rather than the code
+  is rerun by the owner or by the next push. It cannot push a change to `.github/workflows/` either (section 10). Nor
+  can it command Dependabot: `@dependabot rebase` and the other commands are taken only from a user with push access,
+  so the owner posts them.
 - Duration: `CI` takes about 1.5 minutes (recent runs, 2026-10-28); a local code review took 8 and 16 minutes
   (two runs, 2026-10-31).
 
