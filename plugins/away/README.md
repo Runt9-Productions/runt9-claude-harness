@@ -3,7 +3,7 @@
 Tells Claude how present you are, as one of three modes, and has it work accordingly: `present` (at the computer and
 reading everything), `distracted` (on another monitor, glancing now and then) or `away` (not at the computer). While
 away it keeps the session working through ended turns, permission prompts and a filling context window, and turns the
-Bash sandbox on. There are no settings.
+Bash sandbox on with auto-allow off. There are no settings.
 
 ## Installing
 
@@ -21,8 +21,8 @@ the `guardrails-sandbox` settings fragment as well, as [The sandbox](#the-sandbo
 reports the mode. The line above the prompt shows the mode with a button for each of the other two, and the status
 line shows the mode while it is not present.
 
-The mode is kept per session id, for the 20 most recent sessions left distracted or away; present is the default and
-is not kept. A restart or a resume of a session left that way restores its mode, with a "Restored <mode> mode" toast.
+The mode is kept per session id for each session left distracted or away; present is the default and is not kept. A
+restart or a resume of a session left that way restores its mode, with a "Restored <mode> mode" toast.
 `/clear`, a resume inside the session and moving it to the background carry the mode to the new session id.
 
 ## What each mode does
@@ -37,7 +37,7 @@ is not kept. A restart or a resume of a session left that way restores its mode,
 | An auto mode denial | nothing | posted as a board decision | posted as a board decision |
 | Context past handoff's ceiling | handoff's button | handoff's button | handed off and compacted unattended |
 | Switching to present | nothing | nothing | a return report, if away since the last one |
-| The Bash sandbox | as your settings set it | as your settings set it | on |
+| The Bash sandbox | as your settings set it | as your settings set it | on, with auto-allow off |
 
 The first three rows are what Claude is told; the rest are what the plugin does. In every mode, Claude is told to put
 a question to the board rather than to AskUserQuestion.
@@ -78,30 +78,48 @@ forgets that a report is owed.
 
 ## The sandbox
 
-Switching to away writes `sandbox.enabled: true` into the session root's `.claude/settings.local.json`, keeping every
-other key, and Claude Code applies it to the running session. A file that does not hold a JSON object, or whose
-`sandbox` is not one, is left alone, with a toast saying the sandbox is off.
+Switching to away writes `sandbox.enabled: true` and `sandbox.autoAllowBashIfSandboxed: false` into the session
+root's `.claude/settings.local.json`, keeping every other key, and Claude Code applies them to the running session.
+With auto-allow off, a sandboxed command still needs an allow rule, so any Bash call no allow rule covers prompts,
+and while away that prompt is refused and posted. A file that does not hold a JSON object, or whose `sandbox` is not
+one, is left alone, with a toast saying the sandbox is off.
 
-Sessions in one checkout share that file, so away records which of them hold the sandbox on. When the last of them
-leaves away, for either mode, the value the file had before is put back: `true`, `false`, or no key, in which case the
-key and an emptied `sandbox` object are removed. A file away created stays behind holding `{}`. A session that
-moves to another root while away, by `/cd` or a worktree move, moves its hold there at its next model request; a
-command in the same response as the move runs before that.
+The session root's file applies in a worktree and in a session started in a subdirectory too, but three sources win
+over it: the repository root's local file (the main checkout's, for a worktree), `--settings`, and managed settings.
+When going away finds one of them setting `enabled` to `false` or `autoAllowBashIfSandboxed` to `true`, a toast says
+so, since the sandbox would otherwise stay off, or sandboxed Bash run without a prompt, unannounced. Away changes none
+of them.
 
-`/mode present` typed while already present puts back the value recorded for the session's root, for a session that
-died while away and left the sandbox on. It does so whoever holds it, so another session in the same checkout that
-is still away loses its sandbox too, until it leaves away and returns, or restarts.
+Sessions in one checkout share the session root's file, so away records which of them hold the sandbox on. When the
+last of them leaves away, for either mode, both keys are put back as the file had them: each value as it was, or the
+key removed where there was none, with a `sandbox` object left empty. A file away created and left holding `{}` is
+deleted, or kept holding `{}` where `rm` cannot run. A session that moves to another root while away, by `/cd` or a
+worktree move, moves its hold there at its next model request; a command in the same response as the move runs
+before that.
+
+A session that ends while away leaves the sandbox on, and the next session started present in that checkout says so
+in a toast. `/mode present` typed while already present puts back the values recorded for the session's root,
+whoever holds it.
+
+An away session does not check its hold or the file again until it restarts. Two things therefore leave it
+unsandboxed for the rest of its time away:
+
+- a `/mode present` typed while present in another session in the same checkout, as above;
+- an Edit or Write to the session root's local settings file, which the sandbox does not cover (see
+  [What it does not cover](#what-it-does-not-cover)).
 
 ### What it needs
 
-Only `enabled` is set locally; the rest of the sandbox configuration comes from your user settings, since a local key
-overrides only that key. With no configuration there, `enabled: true` turns on Claude Code's default sandbox: commands
-can read credential files, one that fails in the sandbox can be retried outside it, and a host outside the allowlist,
-which starts empty, is left to the permission mode. The `guardrails-sandbox` fragment closes these with credential
-denies, `allowUnsandboxedCommands: false` and a strict allowlist. Install it from a clone of this repository with
-`python3 bootstrap.py harness settings:guardrails-sandbox`, as the root README describes; it ships with
-`enabled: false`, so the sandbox stays off until away turns it on. Away does not check that the sandbox can run on
-the machine; check that once with `/sandbox`.
+Only `enabled` and `autoAllowBashIfSandboxed` are set locally; the rest of the sandbox configuration comes from your
+user settings, since a local key overrides only that key. With no configuration there, `enabled: true` turns on Claude
+Code's default sandbox: commands can read credential files, one that fails in the sandbox can be retried outside it,
+and a host outside the allowlist, which starts empty, is left to the permission mode. The `guardrails-sandbox`
+fragment closes these with credential denies, `allowUnsandboxedCommands: false` and a strict allowlist. Install it
+from a clone of this repository with `python3 bootstrap.py harness settings:guardrails-sandbox`, as the root README
+describes; it ships with `enabled: false`, so the sandbox stays off until away turns it on. Since auto-allow is off
+while away, a Bash command runs unattended only where an allow rule covers it, sandboxed or not. Away does not check
+that the sandbox can run on the machine; check that once with `/sandbox` while present, since it writes its choice
+into the same local file.
 
 ### What it does not cover
 

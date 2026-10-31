@@ -34,6 +34,10 @@ type World = {
   writes: string[]
   /** What $.session.root() answers. */
   root: string
+  /** The root of the repository $.session.repo() answers. */
+  repoRoot: string
+  /** What `--settings` and managed settings hold, as $.settings.read({ source }) answers. */
+  sources: { flag: Record<string, unknown>; policy: Record<string, unknown> }
   /** Each slash command the mod registered. */
   commands: CommandSpec[]
 }
@@ -43,6 +47,8 @@ const ROOT = '/work/repo'
 const LOCAL_SETTINGS = `${ROOT}/.claude/settings.local.json`
 
 const HOLD_KEY = `sandbox:${ROOT}`
+
+const HELD_ROOT_KEY = 'held:test-session'
 
 /** The engine nouns the mod calls, answered in memory; `seed` is what the store holds before the test starts. */
 function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
@@ -67,9 +73,19 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     files: new Map(),
     writes: [],
     root: ROOT,
+    repoRoot: ROOT,
+    sources: { flag: {}, policy: {} },
     commands: [],
   }
   on('session.root', () => ({ value: world.root }) as never)
+  on('session.repo', () => ({ value: { root: world.repoRoot, remote: null, internal: false, repository: null } }) as never)
+  on('settings.read', ($, e) => ({ value: world.sources[(e as { source: 'flag' | 'policy' }).source] }) as never)
+  on('process.run', ($, e) => {
+    const [command, , path] = (e as { argv: string[] }).argv
+    if (command !== 'rm' || path === undefined || !world.files.has(path)) return { value: { exitCode: 1, stdout: '', stderr: 'no such file' } } as never
+    world.files.delete(path)
+    return { value: { exitCode: 0, stdout: '', stderr: '' } } as never
+  })
   on('fs.exists', ($, e) => ({ value: world.files.has((e as { path: string }).path) }) as never)
   on('fs.read', ($, e) => {
     const { path } = e as { path: string }
@@ -174,11 +190,9 @@ const compact = ($: Engine, agentId?: string) =>
 
 test('/mode away shows in the status line, is kept for the session, and sends the away rules once', async ($, on) => {
   const world = buildWorld(on)
-  await world.clock.set(1_000)
-  const savedAt = world.clock.now()
   expect(await setMode($, world, 'away')).toBe('Mode: away.')
   expect(world.statuses.at(-1)).toBe('away')
-  expect(world.store.get(SESSION_KEY)).toEqual({ mode: 'away', savedAt, sandboxRoot: ROOT })
+  expect(world.store.get(SESSION_KEY)).toBe('away')
   expect(rulesSent(world, 'away')).toBe(1)
 
   expect(await setMode($, world, 'away')).toBe('Already away.')
@@ -202,18 +216,6 @@ test('an unknown mode is refused and changes nothing, and a bare /mode reports t
   expect(world.appended()).toEqual([])
   await setMode($, world, 'distracted')
   expect(await setMode($, world, '')).toContain('Mode: distracted.')
-})
-
-test('only the 20 most recently saved sessions keep a stored mode, and other keys are left alone', async ($, on) => {
-  const old = Array.from({ length: 25 }, (_, i) => [`session:old-${i}`, { mode: 'away', savedAt: i }])
-  const world = buildWorld(on, { ...Object.fromEntries(old), 'other:key': true })
-  await world.clock.set(1_000)
-  await setMode($, world, 'away')
-  expect([...world.store.keys()].filter(key => key.startsWith('session:')).length).toBe(20)
-  expect(world.store.has(SESSION_KEY)).toBe(true)
-  expect(world.store.has('session:old-5')).toBe(false)
-  expect(world.store.has('session:old-6')).toBe(true)
-  expect(world.store.has('other:key')).toBe(true)
 })
 
 test('rules the session refuses to append are toasted, so the owner can pass them on', async ($, on) => {
@@ -250,7 +252,7 @@ test('coming back from away by way of distracted still asks for the return repor
 })
 
 test('a mode stored for the session is restored with a toast, and a return from it still reports', async ($, on) => {
-  const world = buildWorld(on, { [SESSION_KEY]: { mode: 'away', savedAt: 1 } })
+  const world = buildWorld(on, { [SESSION_KEY]: 'away' })
   await mainTurnStart($)
   expect(world.statuses.at(-1)).toBe('away')
   expect(world.toasts).toContain('Restored away mode')
@@ -264,7 +266,7 @@ test('a conversation moved to a new session id keeps its mode and is sent the ru
   await setMode($, world, 'away')
   world.session.id = 'moved-session'
   await mainTurnStart($)
-  expect(world.store.get('session:moved-session')).toMatchObject({ mode: 'away' })
+  expect(world.store.get('session:moved-session')).toBe('away')
   expect(rulesSent(world, 'away')).toBe(2)
   expect(world.toasts.filter(toast => toast.startsWith('Restored'))).toEqual([])
 })
@@ -635,36 +637,51 @@ test('past the ceiling while distracted, the turn is neither asked to end nor ha
   expect(world.handoffs).toEqual([])
 })
 
+
 const localSettings = (world: World): unknown => JSON.parse(world.files.get(LOCAL_SETTINGS) ?? 'null')
 
 const writeLocalSettings = (world: World, settings: unknown) => world.files.set(LOCAL_SETTINGS, JSON.stringify(settings))
 
-const OWN_SETTINGS = { permissions: { allow: ['Bash(ls)'] }, sandbox: { enabled: false, network: { allowedDomains: ['example.com'] } } }
+const AWAY_SANDBOX = { enabled: true, autoAllowBashIfSandboxed: false }
 
-test('away turns the sandbox on in the local settings, keeping every other key, and leaving it puts back the value found', async ($, on) => {
+const OWN_SANDBOX = { enabled: false, autoAllowBashIfSandboxed: true }
+
+const OWN_SETTINGS = { permissions: { allow: ['Bash(ls)'] }, sandbox: { ...OWN_SANDBOX, network: { allowedDomains: ['example.com'] } } }
+
+/** A hold no session took through away, as the store keeps it. */
+const heldBy = (holders: string[], earlier: unknown = { enabled: false }) => ({ holders, earlier, isFileCreated: false })
+
+test('away turns the sandbox on with auto-allow off, keeping every other key, and leaving it puts back both values found', async ($, on) => {
   const world = buildWorld(on)
   writeLocalSettings(world, OWN_SETTINGS)
   await setMode($, world, 'away')
-  expect(localSettings(world)).toEqual({ ...OWN_SETTINGS, sandbox: { ...OWN_SETTINGS.sandbox, enabled: true } })
-  expect(world.store.get(HOLD_KEY)).toEqual({ holders: ['test-session'], earlier: false })
+  expect(localSettings(world)).toEqual({ ...OWN_SETTINGS, sandbox: { ...OWN_SETTINGS.sandbox, ...AWAY_SANDBOX } })
+  expect(world.store.get(HOLD_KEY)).toEqual({ holders: ['test-session'], earlier: OWN_SANDBOX, isFileCreated: false })
+  // The repository root's file is this one, so nothing above it sets the sandbox off.
+  expect(world.toasts).toEqual([])
 
   await setMode($, world, 'present')
   expect(localSettings(world)).toEqual(OWN_SETTINGS)
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
-test('a key away added is removed again, with a sandbox object it leaves empty, and a missing file counts as empty', async ($, on) => {
+test('keys away added are removed again, with a sandbox object they leave empty, and a file away created is deleted', async ($, on) => {
   const world = buildWorld(on)
   await setMode($, world, 'away')
-  expect(localSettings(world)).toEqual({ sandbox: { enabled: true } })
+  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
   await setMode($, world, 'present')
-  expect(localSettings(world)).toEqual({})
+  expect(world.files.has(LOCAL_SETTINGS)).toBe(false)
 
   const network = { sandbox: { network: { allowedDomains: ['example.com'] } } }
   writeLocalSettings(world, network)
   await setMode($, world, 'away')
   await setMode($, world, 'present')
   expect(localSettings(world)).toEqual(network)
+
+  writeLocalSettings(world, {})
+  await setMode($, world, 'away')
+  await setMode($, world, 'present')
+  expect(localSettings(world)).toEqual({})
 })
 
 test('a local settings file that does not hold a JSON object is left untouched, and the owner is told the sandbox is off', async ($, on) => {
@@ -677,6 +694,24 @@ test('a local settings file that does not hold a JSON object is left untouched, 
   expect(world.statuses.at(-1)).toBe('away')
 })
 
+const WORKTREE_ROOT = '/work/worktree'
+
+const WORKTREE_SETTINGS = `${WORKTREE_ROOT}/.claude/settings.local.json`
+
+test('going away toasts each value above the session root\'s file that undoes the sandbox or its prompts, and no other', async ($, on) => {
+  const world = buildWorld(on)
+  world.root = WORKTREE_ROOT
+  writeLocalSettings(world, { sandbox: { enabled: false } })
+  world.sources.flag = { sandbox: { autoAllowBashIfSandboxed: true } }
+  world.sources.policy = { sandbox: { enabled: true, autoAllowBashIfSandboxed: false } }
+  await setMode($, world, 'away')
+  expect(JSON.parse(world.files.get(WORKTREE_SETTINGS) ?? 'null')).toEqual({ sandbox: AWAY_SANDBOX })
+  expect(world.toasts).toEqual([
+    `${LOCAL_SETTINGS} sets sandbox.enabled to false, which wins over ${WORKTREE_SETTINGS}, so the sandbox stays off while away`,
+    `--settings sets sandbox.autoAllowBashIfSandboxed to true, which wins over ${WORKTREE_SETTINGS}, so sandboxed Bash runs without a prompt while away`,
+  ])
+})
+
 test('leaving away for distracted puts the sandbox back too, and distracted from present leaves the settings alone', async ($, on) => {
   const world = buildWorld(on)
   const ownText = '{"sandbox":{"enabled":false}}'
@@ -685,27 +720,24 @@ test('leaving away for distracted puts the sandbox back too, and distracted from
   expect(world.files.get(LOCAL_SETTINGS)).toBe(ownText)
 
   await setMode($, world, 'away')
-  expect(localSettings(world)).toEqual({ sandbox: { enabled: true } })
+  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
   await setMode($, world, 'distracted')
   expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
-test('sessions sharing a root keep the sandbox on until the last leaves away, which puts back the value from before the first', async ($, on) => {
-  const world = buildWorld(on, {
-    [HOLD_KEY]: { holders: ['other-session'], earlier: false },
-    'session:other-session': { mode: 'away', savedAt: 1, sandboxRoot: ROOT },
-  })
-  writeLocalSettings(world, { sandbox: { enabled: true } })
+test('sessions sharing a root keep the sandbox on until the last leaves away, which puts back the values from before the first', async ($, on) => {
+  const world = buildWorld(on, { [HOLD_KEY]: heldBy(['other-session']), 'session:other-session': 'away', 'held:other-session': ROOT })
+  writeLocalSettings(world, { sandbox: AWAY_SANDBOX })
   const heldText = world.files.get(LOCAL_SETTINGS)
   await setMode($, world, 'away')
-  expect(world.store.get(HOLD_KEY)).toEqual({ holders: ['other-session', 'test-session'], earlier: false })
+  expect(world.store.get(HOLD_KEY)).toEqual(heldBy(['other-session', 'test-session']))
   // Nothing to change, so the owner's own formatting stays.
   expect(world.files.get(LOCAL_SETTINGS)).toBe(heldText)
 
   await setMode($, world, 'present')
-  expect(world.store.get(HOLD_KEY)).toEqual({ holders: ['other-session'], earlier: false })
-  expect(localSettings(world)).toEqual({ sandbox: { enabled: true } })
+  expect(world.store.get(HOLD_KEY)).toEqual(heldBy(['other-session']))
+  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
 
   // The other session, still away, resumed in this process.
   world.session.id = 'other-session'
@@ -715,60 +747,57 @@ test('sessions sharing a root keep the sandbox on until the last leaves away, wh
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
-test('/mode present typed while present puts back the value a session that died away left on', async ($, on) => {
-  const world = buildWorld(on, { [HOLD_KEY]: { holders: ['dead-session'], earlier: false } })
-  writeLocalSettings(world, { sandbox: { enabled: true } })
+test('a session starting present on a held root is told, and /mode present there puts back the values a session that died away left', async ($, on) => {
+  const world = buildWorld(on, { [HOLD_KEY]: heldBy(['dead-session']) })
+  writeLocalSettings(world, { sandbox: AWAY_SANDBOX })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(world.toasts).toEqual([`The sandbox is held on in ${ROOT} for a session that is away or ended while away; /mode present puts it back`])
+
   expect(await setMode($, world, 'present')).toContain('put back')
   expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
   expect(world.store.has(HOLD_KEY)).toBe(false)
-
   expect(await setMode($, world, 'present')).toBe('Already present.')
 })
 
-test('a settings file broken while away keeps the earlier value, for /mode present to put back once it is fixed', async ($, on) => {
+test('a settings file broken while away keeps the earlier values, for /mode present to put back once it is fixed', async ($, on) => {
   const world = buildWorld(on)
   writeLocalSettings(world, { sandbox: { enabled: false } })
   await setMode($, world, 'away')
   world.files.set(LOCAL_SETTINGS, '[]')
   await setMode($, world, 'present')
   expect(world.toasts).toContain(`The sandbox stays on until /mode present can put it back: ${LOCAL_SETTINGS} does not hold a JSON object`)
-  expect(world.store.get(HOLD_KEY)).toEqual({ holders: [], earlier: false })
+  expect(world.store.get(HOLD_KEY)).toEqual(heldBy([]))
 
-  writeLocalSettings(world, { sandbox: { enabled: true } })
+  writeLocalSettings(world, { sandbox: AWAY_SANDBOX })
   await setMode($, world, 'present')
   expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
 test('a conversation moved to a new session id while away moves its hold with no write in between, and one resumed distracted gives it up', async ($, on) => {
-  const world = buildWorld(on, { 'session:resumed-session': { mode: 'distracted', savedAt: 1 } })
+  const world = buildWorld(on, { 'session:resumed-session': 'distracted' })
   await setMode($, world, 'away')
   world.session.id = 'moved-session'
   await mainTurnStart($)
-  expect(world.store.get(HOLD_KEY)).toEqual({ holders: ['moved-session'] })
+  expect(world.store.get(HOLD_KEY)).toMatchObject({ holders: ['moved-session'] })
   // One write, so the file never held the sandbox off while away.
-  expect(world.writes.map(text => JSON.parse(text) as unknown)).toEqual([{ sandbox: { enabled: true } }])
+  expect(world.writes.map(text => JSON.parse(text) as unknown)).toEqual([{ sandbox: AWAY_SANDBOX }])
 
   world.session.id = 'resumed-session'
   await mainTurnStart($)
-  expect(localSettings(world)).toEqual({})
+  expect(world.files.has(LOCAL_SETTINGS)).toBe(false)
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
-
-const MOVED_ROOT = '/work/worktree'
-
-const MOVED_SETTINGS = `${MOVED_ROOT}/.claude/settings.local.json`
 
 test('a session whose root moved while away puts the sandbox back under the root it held, not the new one', async ($, on) => {
   const world = buildWorld(on)
   writeLocalSettings(world, { sandbox: { enabled: false } })
   await setMode($, world, 'away')
-  expect(localSettings(world)).toEqual({ sandbox: { enabled: true } })
-  world.root = MOVED_ROOT
+  world.root = WORKTREE_ROOT
   await setMode($, world, 'present')
   expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
   expect(world.store.has(HOLD_KEY)).toBe(false)
-  expect(world.files.has(MOVED_SETTINGS)).toBe(false)
+  expect(world.files.has(WORKTREE_SETTINGS)).toBe(false)
 })
 
 test("a session's root moved mid-turn while away takes the hold with it at the main loop's next request, not a teammate's", async ($, on) => {
@@ -777,35 +806,32 @@ test("a session's root moved mid-turn while away takes the hold with it at the m
   await setMode($, world, 'away')
   await mainTurnStart($)
   await step($, 0)
-  world.root = MOVED_ROOT
+  world.root = WORKTREE_ROOT
   await step($, 1, 'scout-1')
-  expect(world.files.has(MOVED_SETTINGS)).toBe(false)
+  expect(world.files.has(WORKTREE_SETTINGS)).toBe(false)
 
   await step($, 2)
-  expect(JSON.parse(world.files.get(MOVED_SETTINGS) ?? 'null')).toEqual({ sandbox: { enabled: true } })
-  expect(world.store.get(`sandbox:${MOVED_ROOT}`)).toEqual({ holders: ['test-session'] })
-  expect(world.store.get(SESSION_KEY)).toMatchObject({ sandboxRoot: MOVED_ROOT })
+  expect(JSON.parse(world.files.get(WORKTREE_SETTINGS) ?? 'null')).toEqual({ sandbox: AWAY_SANDBOX })
+  expect(world.store.get(`sandbox:${WORKTREE_ROOT}`)).toMatchObject({ holders: ['test-session'] })
+  expect(world.store.get(HELD_ROOT_KEY)).toBe(WORKTREE_ROOT)
   expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
 test('a session restarted away under another root gives up the hold it left in the old one', async ($, on) => {
-  const world = buildWorld(on, {
-    [SESSION_KEY]: { mode: 'away', savedAt: 1, sandboxRoot: MOVED_ROOT },
-    [`sandbox:${MOVED_ROOT}`]: { holders: ['test-session'], earlier: false },
-  })
-  world.files.set(MOVED_SETTINGS, JSON.stringify({ sandbox: { enabled: true } }))
+  const world = buildWorld(on, { [SESSION_KEY]: 'away', [HELD_ROOT_KEY]: WORKTREE_ROOT, [`sandbox:${WORKTREE_ROOT}`]: heldBy(['test-session']) })
+  world.files.set(WORKTREE_SETTINGS, JSON.stringify({ sandbox: AWAY_SANDBOX }))
   await mainTurnStart($)
-  expect(JSON.parse(world.files.get(MOVED_SETTINGS) ?? 'null')).toEqual({ sandbox: { enabled: false } })
-  expect(world.store.has(`sandbox:${MOVED_ROOT}`)).toBe(false)
-  expect(localSettings(world)).toEqual({ sandbox: { enabled: true } })
-  expect(world.store.get(SESSION_KEY)).toMatchObject({ sandboxRoot: ROOT })
+  expect(JSON.parse(world.files.get(WORKTREE_SETTINGS) ?? 'null')).toEqual({ sandbox: { enabled: false } })
+  expect(world.store.has(`sandbox:${WORKTREE_ROOT}`)).toBe(false)
+  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
+  expect(world.store.get(HELD_ROOT_KEY)).toBe(ROOT)
 })
 
 test('a session restarted away turns the sandbox on again where the owner turned it off', async ($, on) => {
-  const world = buildWorld(on, { [SESSION_KEY]: { mode: 'away', savedAt: 1, sandboxRoot: ROOT }, [HOLD_KEY]: { holders: ['test-session'], earlier: false } })
+  const world = buildWorld(on, { [SESSION_KEY]: 'away', [HELD_ROOT_KEY]: ROOT, [HOLD_KEY]: heldBy(['test-session']) })
   writeLocalSettings(world, { sandbox: { enabled: false } })
   await mainTurnStart($)
-  expect(localSettings(world)).toEqual({ sandbox: { enabled: true } })
-  expect(world.store.get(HOLD_KEY)).toEqual({ holders: ['test-session'], earlier: false })
+  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
+  expect(world.store.get(HOLD_KEY)).toEqual(heldBy(['test-session']))
 })

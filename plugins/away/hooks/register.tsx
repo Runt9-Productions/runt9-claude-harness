@@ -3,8 +3,7 @@ import type { AgentInfo, AgentStatus, EngineInterface, Register, Timer, TurnComp
 
 import type { AttentionMode } from '../types'
 import { isBoardTool, postDenial, refuse } from './board-posts'
-import type { LocalSettings } from './settings-file'
-import { parseLocalSettings, renderLocalSettings, withSandboxEnabled } from './settings-file'
+import { followRoot, holdSandbox, putSandboxBackForEveryHolder, releaseSandbox, toastIfHeld } from './sandbox-hold'
 
 const mode = atom({ plugin: 'away', key: 'mode' } as const, 'present')
 const isRulesOwed = atom({ plugin: 'away', key: 'isRulesOwed' } as const, false)
@@ -93,11 +92,7 @@ const IS_ENDED: Record<AgentStatus, boolean> = {
 // command.run or turn.complete would wait on the turn the hook holds, and is refused.
 const AFTER_HOOK_RETURNS_MS = 1
 
-const KEPT_SESSIONS = 20
-
 const SESSION_PREFIX = 'session:'
-
-const SANDBOX_PREFIX = 'sandbox:'
 
 // The session id the mode was last loaded for. $.state resets when the id changes, with no session.start to say so.
 let boundSessionId: string | undefined
@@ -116,54 +111,20 @@ let continuationTimer: Timer | undefined
 // The main turn last asked to end for a handoff, so a turn of many requests is asked once.
 let endAskedTurnId: string | undefined
 
-/** `sandboxRoot` is the root whose sandbox the session holds on, which a /cd or a worktree move can leave behind. */
-type SavedMode = { mode: AttentionMode; savedAt: number; sandboxRoot?: string }
-
 const storeKey = (sessionId: string) => `${SESSION_PREFIX}${sessionId}`
 
 const isMode = (value: unknown): value is AttentionMode => MODES.includes(value as AttentionMode)
 
-function isSavedMode(value: unknown): value is SavedMode {
-  if (typeof value !== 'object' || value === null) return false
-  const saved = value as Partial<SavedMode>
-  if (typeof saved.savedAt !== 'number') return false
-  if (saved.sandboxRoot !== undefined && typeof saved.sandboxRoot !== 'string') return false
-  return isMode(saved.mode)
-}
-
-async function loadSaved($: EngineInterface, key: string): Promise<SavedMode | undefined> {
-  const value: unknown = await $.store.get(key)
-  return isSavedMode(value) ? value : undefined
-}
-
 async function loadMode($: EngineInterface, sessionId: string): Promise<AttentionMode | undefined> {
-  const saved = await loadSaved($, storeKey(sessionId))
-  return saved?.mode
+  const value: unknown = await $.store.get(storeKey(sessionId))
+  return isMode(value) ? value : undefined
 }
 
 // Present is the default and keeps no key, so only sessions left distracted or away are stored.
 async function save($: EngineInterface, current: AttentionMode) {
   const key = storeKey(await $.session.id())
-  if (current === 'present') {
-    await $.store.delete(key)
-    return
-  }
-  const saved: SavedMode = { mode: current, savedAt: await $.clock.now() }
-  await $.store.set(key, saved)
-  await prune($)
-}
-
-async function prune($: EngineInterface) {
-  const allKeys = await $.store.keys()
-  const sessionKeys = allKeys.filter(key => key.startsWith(SESSION_PREFIX))
-  if (sessionKeys.length <= KEPT_SESSIONS) return
-  const dated: { key: string; savedAt: number }[] = []
-  for (const key of sessionKeys) {
-    const saved = await loadSaved($, key)
-    dated.push({ key, savedAt: saved?.savedAt ?? 0 })
-  }
-  dated.sort((a, b) => b.savedAt - a.savedAt)
-  for (const { key } of dated.slice(KEPT_SESSIONS)) await $.store.delete(key)
+  if (current === 'present') await $.store.delete(key)
+  else await $.store.set(key, current)
 }
 
 function showStatus($: EngineInterface, current: AttentionMode) {
@@ -189,6 +150,7 @@ async function bind($: EngineInterface) {
   } else if (previousId === undefined) {
     // A fresh session, or a hot reload, whose state already holds the mode.
     current = await read($, mode)
+    if (current === 'present') await toastIfHeld($)
   } else {
     current = await carryOver($, previousId)
   }
@@ -220,14 +182,17 @@ async function carryOver($: EngineInterface, previousId: string): Promise<Attent
 async function setMode($: EngineInterface, next: AttentionMode): Promise<string> {
   await bind($)
   const previous: AttentionMode = await read($, mode)
-  if (next === previous) return await alreadyIn($, next)
+  if (next !== previous) return await switchMode($, previous, next)
+  if (next !== 'present') return `Already ${next}.`
+  return await presentAgainPuttingSandboxBack($)
+}
+
+async function switchMode($: EngineInterface, previous: AttentionMode, next: AttentionMode): Promise<string> {
   dropContinuation()
   await update($, mode, () => next)
-  const sessionId = await $.session.id()
-  // Before save, which replaces the record naming the root held.
-  if (previous === 'away') await releaseSandbox($, sessionId)
   await save($, next)
-  // After save, since the hold names its root in the record save writes.
+  const sessionId = await $.session.id()
+  if (previous === 'away') await releaseSandbox($, sessionId)
   if (next === 'away') await holdSandbox($, sessionId)
   showStatus($, next)
   await sendRules($, next)
@@ -236,159 +201,11 @@ async function setMode($: EngineInterface, next: AttentionMode): Promise<string>
   return `Mode: ${next}.`
 }
 
-// Present typed while present is the owner's way to undo a hold left by a session that died away.
-async function alreadyIn($: EngineInterface, current: AttentionMode): Promise<string> {
-  const already = `Already ${current}.`
-  if (current !== 'present') return already
-  if (!(await clearSandbox($))) return already
-  return `${already} The sandbox setting a session left behind while away is put back.`
-}
-
-/**
- * The sessions holding the sandbox on in one root, and what `sandbox.enabled` held before the first of them did.
- * `earlier` is absent where the file had no such key.
- */
-type SandboxHold = { holders: string[]; earlier?: unknown }
-
-const sandboxKey = (root: string) => `${SANDBOX_PREFIX}${root}`
-
-const localSettingsPath = (root: string) => `${root}/.claude/settings.local.json`
-
-function isSandboxHold(value: unknown): value is SandboxHold {
-  if (typeof value !== 'object' || value === null) return false
-  const { holders } = value as Partial<SandboxHold>
-  if (!Array.isArray(holders)) return false
-  return holders.every(holder => typeof holder === 'string')
-}
-
-async function loadHold($: EngineInterface, key: string): Promise<SandboxHold | undefined> {
-  const value: unknown = await $.store.get(key)
-  return isSandboxHold(value) ? value : undefined
-}
-
-/**
- * Turns the sandbox on in the session root's local settings, where a key overrides only that key, so the rest of the
- * sandbox config still comes from the user's settings. `sessionId` joins the holders, the first holder records the
- * value it found, and the session's record names the root. Needs that record written first.
- */
-async function holdSandbox($: EngineInterface, sessionId: string) {
-  const root = await $.session.root()
-  const saved = await loadSaved($, storeKey(sessionId))
-  const heldRoot = saved?.sandboxRoot
-  // A session restarted or resumed under another root gives up the hold it left there.
-  if (heldRoot !== undefined && heldRoot !== root) await releaseSandbox($, sessionId)
-  const key = sandboxKey(root)
-  const path = localSettingsPath(root)
-  await editLocalSettings($, path, 'The sandbox is off while away', async settings => {
-    const hold: SandboxHold = (await loadHold($, key)) ?? { holders: [], earlier: settings.sandbox?.enabled }
-    const others = hold.holders.filter(holder => holder !== sessionId)
-    // Recorded before the file changes: a file changed with no record would keep the sandbox on for good.
-    await $.store.set(key, { ...hold, holders: [...others, sessionId] })
-    await recordSandboxRoot($, sessionId, root)
-    return withSandboxEnabled(settings, true)
-  })
-}
-
-/**
- * Takes `sessionId` off the holders of the root its record names, which need not be the session's root now, and puts
- * the earlier value back once none is left.
- */
-async function releaseSandbox($: EngineInterface, sessionId: string) {
-  const saved = await loadSaved($, storeKey(sessionId))
-  const root = saved?.sandboxRoot
-  if (root === undefined) return
-  const key = sandboxKey(root)
-  const hold = await loadHold($, key)
-  if (hold === undefined) return
-  const holders = hold.holders.filter(holder => holder !== sessionId)
-  if (holders.length === 0) {
-    await putSandboxBack($, root, hold)
-    return
-  }
-  await $.store.set(key, { ...hold, holders })
-}
-
-/**
- * Moves an away session's hold to the root it works in now. A /cd or a worktree move raises no event of its own, and
- * without this the new root's commands would run unsandboxed while away. Only a session away names a root in its
- * record. One whose hold never took names none and is left alone, or a broken file would be toasted at every request.
- */
-async function followRoot($: EngineInterface) {
-  const sessionId = await $.session.id()
-  const saved = await loadSaved($, storeKey(sessionId))
-  const heldRoot = saved?.sandboxRoot
-  if (heldRoot === undefined) return
-  const root = await $.session.root()
-  if (heldRoot === root) return
-  await holdSandbox($, sessionId)
-}
-
-/** Names `root` in the session's record as the root it holds. Present keeps no record, and holds nothing. */
-async function recordSandboxRoot($: EngineInterface, sessionId: string, root: string) {
-  const key = storeKey(sessionId)
-  const saved = await loadSaved($, key)
-  if (saved === undefined) return
-  await $.store.set(key, { ...saved, sandboxRoot: root })
-}
-
-/** Puts back the value a dead session's hold recorded, whoever is listed; whether there was a hold and it is back. */
-async function clearSandbox($: EngineInterface): Promise<boolean> {
-  const root = await $.session.root()
-  const hold = await loadHold($, sandboxKey(root))
-  if (hold === undefined) return false
-  return putSandboxBack($, root, hold)
-}
-
-/** Whether the earlier value is back. One that is not keeps the record, with no holders, for /mode present to retry. */
-async function putSandboxBack($: EngineInterface, root: string, hold: SandboxHold): Promise<boolean> {
-  const key = sandboxKey(root)
-  const path = localSettingsPath(root)
-  const consequence = 'The sandbox stays on until /mode present can put it back'
-  const isPutBack = await editLocalSettings($, path, consequence, settings => withSandboxEnabled(settings, hold.earlier))
-  if (isPutBack) await $.store.delete(key)
-  else await $.store.set(key, { ...hold, holders: [] })
-  return isPutBack
-}
-
-/**
- * Applies `edit` to the local settings at `path`, a missing file counting as `{}`, and writes the result unless it is
- * unchanged, so a file away has nothing to change in keeps its own formatting. Whether the file holds the edit: one
- * that cannot be read, does not hold a JSON object or cannot be written is left as it was, and toasted after
- * `consequence`.
- */
-async function editLocalSettings(
-  $: EngineInterface,
-  path: string,
-  consequence: string,
-  edit: (settings: LocalSettings) => LocalSettings | Promise<LocalSettings>,
-): Promise<boolean> {
-  let text: string
-  try {
-    text = await readLocalSettingsText($, path)
-  } catch (err) {
-    $.ui.toast(`${consequence}: reading ${path} failed (${String(err)})`)
-    return false
-  }
-  const settings = parseLocalSettings(text)
-  if (settings === undefined) {
-    $.ui.toast(`${consequence}: ${path} does not hold a JSON object`)
-    return false
-  }
-  const edited = await edit(settings)
-  const editedText = renderLocalSettings(edited)
-  if (editedText === renderLocalSettings(settings)) return true
-  try {
-    await $.fs.write(path, editedText)
-  } catch (err) {
-    $.ui.toast(`${consequence}: writing ${path} failed (${String(err)})`)
-    return false
-  }
-  return true
-}
-
-async function readLocalSettingsText($: EngineInterface, path: string): Promise<string> {
-  if (!(await $.fs.exists(path))) return '{}'
-  return $.fs.read(path)
+// Present typed while present is the owner's way to undo a hold left by a session that ended while away.
+async function presentAgainPuttingSandboxBack($: EngineInterface): Promise<string> {
+  const already = 'Already present.'
+  if (!(await putSandboxBackForEveryHolder($))) return already
+  return `${already} The sandbox settings a session left behind while away are put back.`
 }
 
 async function askForReturnReport($: EngineInterface) {
@@ -590,7 +407,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       await bind($)
       // Here rather than at turn.start: a tool can move the root mid-turn, and a turn's first request comes here too.
-      await followRoot($)
+      if ((await read($, mode)) === 'away') await followRoot($)
       await sendOwedRules($)
       await askToEndTurnIfFull($, e.turnId)
     }

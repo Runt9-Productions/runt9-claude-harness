@@ -31,7 +31,9 @@ the README does not state, each with its reason.
 | `plugins/away/hooks/hooks.json` | the one module |
 | `plugins/away/types/index.d.ts` | the `away` state keys and `AttentionMode` |
 | `plugins/away/hooks/register.tsx` | every hook; atoms declared in the file that reads them |
-| `plugins/away/hooks/settings-file.ts` (optional) | pure JSON edit of the local settings, never touching `$` |
+| `plugins/away/hooks/board-posts.ts` | posting refused prompts and auto mode denials to the board |
+| `plugins/away/hooks/sandbox-hold.ts` | the sandbox hold: writing, sharing and putting back the local settings' sandbox keys |
+| `plugins/away/hooks/settings-file.ts` | pure JSON edit of the local settings, never touching `$` |
 | `plugins/away/hooks/register.test.ts` | kit tests at the boundaries of each table row |
 | `plugins/away/README.md` | the table, the sandbox gap, the contracts it relies on |
 | `.claude-plugin/marketplace.json` | the entry |
