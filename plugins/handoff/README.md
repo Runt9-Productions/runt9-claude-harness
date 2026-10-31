@@ -77,6 +77,6 @@ ways:
 
 Interrupting its turn still compacts nothing.
 
-`away` reads this plugin's state, typed in `types/index.d.ts`: `phase` (`idle`, `queued`, `writing`, `compacting`),
-`isUnattended`, and `ceilingPercent`, the fill at which it hands off (the `ceiling_percent` option). `phase` and
-`ceilingPercent` are written on every session start and every turn.
+`away` reads this plugin's state, typed in `types/index.d.ts`: `phase` (`idle`, `queued`, `writing`, `compacting`)
+and `ceilingPercent`, the fill at which it hands off (the `ceiling_percent` option). Both are written on every session
+start and every turn.

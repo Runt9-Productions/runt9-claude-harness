@@ -5,7 +5,7 @@ permalink: guardrails/overview
 tags: [guardrails, auto-mode, sandbox, permissions, hooks, credentials, installs]
 verified: 2026-10-31
 coverage: partial
-measured_on: "Claude Code 2.1.314, Linux bubblewrap 0.9.0"
+measured_on: "Claude Code 2.1.314 and 2.1.316, Linux bubblewrap 0.9.0"
 sources:
   - "harness/settings/guardrails-automode.json"
   - "harness/settings/guardrails-sandbox.json"
@@ -19,7 +19,9 @@ sources:
 > sandbox and model-evaluated hooks, as far as the harness's settings fragments rely on them. The `#measured` lines
 > come from headless `claude -p` runs on 2.1.314 in scratch repositories with synthetic files, with the sandbox on and
 > its network closed so nothing could install, one to three runs per case (2026-10-29 to 2026-10-31); the earlier
-> ones were not re-run when this note was written. Not covered: macOS and Windows sandboxing, the Read tool's path
+> ones were not re-run when this note was written. The line on `sandbox.enabled` in the local settings was measured on
+> 2.1.316, with the file changed from outside the session between commands, and how soon a change applies below 5 s
+> was not measured. Not covered: macOS and Windows sandboxing, the Read tool's path
 > through auto mode (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build
 > run end to end in the sandbox.
 
@@ -81,6 +83,11 @@ stop a call.
   any shell step that writes harness state fails with `Read-only file system`. The Edit and Write tools are not
   sandboxed. #measured
 - [fact] Turning `sandbox.enabled` off in a settings file took effect in the running session. #measured
+- [fact] `sandbox.enabled` in `.claude/settings.local.json` takes effect in a running session both ways. With the
+  rest of the sandbox config and `enabled: false` in the project's `.claude/settings.json`, a Bash command started 5 s
+  after the local file gained `enabled: true` ran sandboxed, and one started after the key was removed or set to
+  `false` ran unsandboxed, 2 of 2 runs. The local key overrode only that key: the rest of the config still applied.
+  #measured
 - [trap] The per-user temp directory (`$TMPDIR`, `/tmp/claude-<uid>`) is writable as a whole, which takes in every
   other session's scratchpad. The rest of `/tmp` is read-only. #measured
 - [trap] The working directory's `.git/hooks` and `.git/config` are mounted read-only, but a directory added with

@@ -84,10 +84,12 @@ transcript shares with the saved one. Activity is not saved.
 
 ## The away plugin
 
-A plugin named `away` posts decisions through `mcp__board__ask_decision` and relies on four things, which do not
+A plugin named `away` posts decisions through `mcp__board__ask_decision` and relies on five things, which do not
 change without it:
 
 - The result of a new decision starts with `Posted D<n>`.
+- `mcp__board__read_board` lists the decisions and the tasks waiting on you, each with its id and its question or
+  title; `away`'s return report has Claude read them there.
 - A decision a plugin posts has no asking agent, so its answer goes to the main session.
 - A new decision flashes on the pane and in the line above the prompt; it is `away`'s only alert in its distracted
   mode.
