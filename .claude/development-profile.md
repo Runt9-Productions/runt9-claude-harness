@@ -8,8 +8,9 @@ a knowledge base note already answers a question, this file points there.
 - GitHub issues on `Runt9-Productions/runt9-claude-harness`. Every change, fix or feature, is an issue in the shape
   of `.github/ISSUE_TEMPLATE/change.md`; `CLAUDE.md`, "Issues and pull request text", has the rules for writing one.
 - A review finding deferred from its pull request becomes an issue labelled `from-review`.
-- Step 3's setup: label `bug` or `enhancement`, plus exactly one of `area:harness`, `area:ci`, `area:plugins` and
-  `area:review`. There are no assignment, planning or estimate fields; the estimate lives in the spec only.
+- Step 3's setup: label `bug` or `enhancement`, plus exactly one of `area:harness`, `area:ci`, `area:plugins`,
+  `area:review` and `area:kb`. There are no assignment, planning or estimate fields; the estimate lives in the spec
+  only.
 - Work started: no update.
 - Automation: none of this repository's own. GitHub closes an issue when a pull request whose body names it with a
   closing keyword (`Closes #<n>`) merges into `main`.
