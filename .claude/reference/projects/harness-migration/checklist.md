@@ -11,9 +11,10 @@ tags: [migration, harness]
 
 - **Live item:** 08, the CLAUDE.md template and fragments: bootstrap's fragment install (#32) is merged, and #34 is in
   review
-- **How far along:** 01 to 06 merged; 07, guardrails plus bootstrap's settings merge, in review
+- **How far along:** 01 to 06 merged; 07's first pull request, bootstrap's settings merge with the credential-store
+  deny fragment, in review; its auto-mode and sandbox fragment and the judge plugin follow
 - **Blocked on:** nothing
-- **Last moved:** 2026-10-29
+- **Last moved:** 2026-10-30
 
 ## Build Order
 

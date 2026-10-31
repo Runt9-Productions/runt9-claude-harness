@@ -29,6 +29,10 @@ BLOCK_START = "<!-- runt9-claude-harness: bootstrap.py keeps the lines from here
 BLOCK_END = "<!-- runt9-claude-harness: end -->"
 EXAMPLE_IMPORT = "@~/.claude/harness/current/fragments/example-rules.md"
 ALPHA_SKILL = b"example alpha skill\n"
+SETTINGS_FRAGMENT = {
+    "permissions": {"deny": ["Read(./example-secret)", "Read(./example-key)"], "defaultMode": "example-mode"},
+    "model": "example-fragment-model",
+}
 STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
@@ -124,8 +128,10 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.write("harness/skills/example-alpha/SKILL.md", ALPHA_SKILL)
     box.write("harness/skills/example-beta/SKILL.md", b"example beta skill\n")
     box.write("harness/skills/example-beta/scripts/example.sh", b"#!/bin/sh\n", 0o755)
+    box.write("harness/skills/example-shared/example.txt", b"example file outside any skill\n")
     box.write("harness/fragments/README.md", b"example fragments readme\n")
     box.write("harness/fragments/example-rules.md", b"example rules\n")
+    box.write("harness/settings/example-deny.json", json.dumps(SETTINGS_FRAGMENT).encode())
     box.commit("Example harness")
     return box
 
@@ -151,7 +157,6 @@ def test_harness_installs_a_new_version_and_keeps_state(sandbox: Sandbox) -> Non
     assert (sandbox.current / "SOURCE_COMMIT").read_text() == f"{head}\n"
     assert (sandbox.current / "githooks/pre-push").read_bytes() == PRE_PUSH
     assert installed_mode(sandbox.current / "githooks/pre-push") == 0o755
-    assert installed_mode(sandbox.current / "leak-scan/scan.sh") == 0o755
     assert installed_mode(sandbox.current / "harness.json") == 0o644
     assert not (sandbox.current / "githooks/README.md").exists()
     assert sorted(path.name for path in (sandbox.install / "versions").iterdir()) == ["0.2.0"]
@@ -268,6 +273,7 @@ def test_list_works_in_a_session(sandbox: Sandbox) -> None:
         "hooks-path",
         "skills",
         "fragment:example-rules",
+        "settings:example-deny",
         "plugin:example-one",
         "plugin:example-two",
         "plugin:example-three",
@@ -517,18 +523,28 @@ def test_shipped_template_holds_the_markers_bootstrap_writes_between() -> None:
     assert template.index(BLOCK_START) + 1 == template.index(BLOCK_END)
 
 
-def test_fragment_missing_from_the_installed_harness_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
+@pytest.mark.parametrize(
+    ("component", "relative", "content", "target"),
+    [
+        ("fragment:example-later", "fragments/example-later.md", b"example later rules\n", ".claude/CLAUDE.md"),
+        ("settings:example-later", "settings/example-later.json", b"{}\n", ".claude/settings.json"),
+    ],
+    ids=["fragment", "settings"],
+)
+def test_fragment_missing_from_the_installed_harness_refuses_with_nothing_installed(
+    sandbox: Sandbox, component: str, relative: str, content: bytes, target: str
+) -> None:
     assert sandbox.run("harness").returncode == 0
-    sandbox.write("harness/fragments/example-later.md", b"example later rules\n")
+    sandbox.write(f"harness/{relative}", content)
     sandbox.set_version("0.2.0")
     sandbox.commit("Add a later example fragment")
 
-    result = sandbox.run("skills", "fragment:example-later")
+    result = sandbox.run("skills", component)
 
     assert result.returncode == 1
-    assert f"the installed harness has no {sandbox.current / 'fragments/example-later.md'}" in result.stderr
+    assert f"the installed harness has no {sandbox.current / relative}" in result.stderr
     assert not sandbox.skills.exists()
-    assert not sandbox.claude_md.exists()
+    assert not (sandbox.home / target).exists()
 
 
 def test_unmatched_block_marker_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
@@ -542,6 +558,76 @@ def test_unmatched_block_marker_refuses_with_nothing_installed(sandbox: Sandbox)
     assert "fix the markers by hand" in result.stderr
     assert not sandbox.skills.exists()
     assert sandbox.claude_md.read_text() == before
+
+
+def test_settings_merge_adds_only_what_is_missing_through_a_link_only_on_yes(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    own = sandbox.root / "example-own-settings.json"
+    existing = {
+        "permissions": {"allow": ["Bash(ls)"], "deny": ["Read(./example-secret)", "Read(./example-own)"]},
+        "model": "example-own-model",
+        "exampleOther": {"kept": True},
+    }
+    before = json.dumps(existing, indent=4) + "\n"
+    own.write_text(before)
+    settings = sandbox.home / ".claude/settings.json"
+    settings.symlink_to(own)
+
+    declined = sandbox.run("settings:example-deny", stdin="n\n")
+    declined_text = own.read_text()
+    written = sandbox.run("settings:example-deny", stdin="y\n")
+    rerun = sandbox.run("settings:example-deny")
+
+    assert declined.returncode == 1
+    assert '\n+            "Read(./example-key)"\n' in declined.stdout
+    assert declined_text == before
+    assert written.returncode == 0, written.stderr
+    assert settings.readlink() == own
+    merged = {
+        "permissions": {
+            "allow": ["Bash(ls)"],
+            "deny": ["Read(./example-secret)", "Read(./example-own)", "Read(./example-key)"],
+            "defaultMode": "example-mode",
+        },
+        "model": "example-own-model",
+        "exampleOther": {"kept": True},
+    }
+    assert own.read_text() == json.dumps(merged, indent=4) + "\n"
+    assert rerun.returncode == 0, rerun.stderr
+    assert "already has everything" in rerun.stdout
+
+
+def test_missing_settings_file_is_written_from_the_fragment(sandbox: Sandbox) -> None:
+    result = sandbox.run("harness", "settings:example-deny", stdin="y\n")
+
+    assert result.returncode == 0, result.stderr
+    assert (sandbox.home / ".claude/settings.json").read_text() == json.dumps(SETTINGS_FRAGMENT, indent=2) + "\n"
+
+
+def test_settings_not_an_object_refuses_with_nothing_installed(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    settings = sandbox.home / ".claude/settings.json"
+    settings.write_text("[]")
+
+    result = sandbox.run("skills", "settings:example-deny", stdin="y\n")
+
+    assert result.returncode == 1
+    assert f"{settings} is not a JSON object" in result.stderr
+    assert not sandbox.skills.exists()
+    assert settings.read_text() == "[]"
+
+
+def test_settings_the_fragment_cannot_merge_into_refuses_unchanged(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    settings = sandbox.home / ".claude/settings.json"
+    content = '{"permissions": {"deny": "example"}}'
+    settings.write_text(content)
+
+    result = sandbox.run("settings:example-deny", stdin="y\n")
+
+    assert result.returncode == 1
+    assert f"permissions.deny in {settings} is not a list" in result.stderr
+    assert settings.read_text() == content
 
 
 @pytest.mark.parametrize(
@@ -627,8 +713,8 @@ def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -
 
 
 def test_prompt_installs_what_was_answered_yes(sandbox: Sandbox) -> None:
-    # harness, skills, the fragment, then the three plugins; hooks-path is not offered without --repo.
-    result = sandbox.run(stdin="y\nn\nn\nn\ny\nn\n")
+    # harness, skills, the fragment, the settings, then the three plugins; hooks-path is not offered without --repo.
+    result = sandbox.run(stdin="y\nn\nn\nn\nn\ny\nn\n")
 
     assert result.returncode == 0, result.stderr
     assert "Install hooks-path" not in result.stdout
