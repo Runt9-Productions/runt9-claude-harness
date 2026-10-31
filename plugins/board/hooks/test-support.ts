@@ -1,6 +1,9 @@
 import { mock } from 'claude-code/testing'
-import type { Engine, MockClock } from 'claude-code/testing'
+import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 import type { AgentInfo, On, RenderSurface } from 'claude-code'
+
+// Type-aware oxlint holds about 5 GB for each file that calls `on`, and adds the files up, so the tests register
+// their hooks only through the helpers in this file. One more such file can exhaust a CI runner.
 
 export const ASK = {
   tool: 'mcp__board__ask_decision',
@@ -133,6 +136,44 @@ export function captureSends(on: On, agents: readonly AgentInfo[] = []): { to: s
     return { isDelivered: true }
   })
   return sent
+}
+
+/** Holds the first `session.send` until the returned release runs, then refuses it; every later send is delivered. */
+export function holdFirstSend(on: On): () => void {
+  let releaseFirst = () => {}
+  const firstHeld = new Promise<void>(resolve => (releaseFirst = resolve))
+  let calls = 0
+  on('session.send', async () => {
+    calls += 1
+    if (calls === 1) {
+      await firstHeld
+      return { isDelivered: false, reason: 'gone' }
+    }
+    return { isDelivered: true }
+  })
+  return releaseFirst
+}
+
+/** Answers every render that reaches beneath the board with an empty box, where the kit's bottom hook would throw. */
+export function drawEmptyBeneath(on: On) {
+  on('ui.render', () => ({ type: 'Box', props: {} }) as never)
+}
+
+/** Answers `prompt.compose` beneath the board with no sections, where the kit's bottom hook would throw. */
+export function composeNothingBeneath(on: On) {
+  on('prompt.compose', () => ({ sections: [] }) as never)
+}
+
+/** Another plugin whose `probe` command makes 20 tool calls of its own and answers with their results. */
+export const PROBE_CALLER: Plugin = {
+  name: 'caller',
+  register(on) {
+    on('command.run', { command: 'probe' }, async $ => {
+      const results: unknown[] = []
+      for (let i = 0; i < 20; i++) results.push(await $.tool.call({ tool: 'Read', file_path: 'notes.md' }))
+      return { text: JSON.stringify(results) }
+    })
+  },
 }
 
 /** Reads back each row the mod appended, with the loop it went to (`undefined` for the main session). */

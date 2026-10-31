@@ -1,11 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 import type { AgentInfo, PromptComposeInput } from 'claude-code'
 
-import { PHASES, SCOUT, SET_TASK, SPAWN_SCOUT, WORKER, complete, engine, mountPane, resultText, step } from './test-support'
+import { PHASES, PROBE_CALLER, SCOUT, SET_TASK, SPAWN_SCOUT, WORKER, complete, composeNothingBeneath, engine, mountPane, resultText, step } from './test-support'
 
 test('the guidance is added only where a surface draws', async ($, on) => {
   engine(on)
-  on('prompt.compose', () => ({ sections: [] }) as never)
+  composeNothingBeneath(on)
   const compose: PromptComposeInput = { model: 'opus', promptModel: 'opus', surfaces: [], tools: [], outputStyle: null, traits: [] }
   const headless = await $.prompt.compose(compose)
   expect(JSON.stringify(headless)).not.toContain('board:guidance')
@@ -59,20 +59,7 @@ test('a subagent, whose prompt carries no guidance, is asked about its status on
   expect(afterStatus.at(-1)).toContain('Your board status \\"reading notes\\"')
 })
 
-test("another plugin's own tool calls do not spend the main session's nudge", {
-  plugins: [
-    {
-      name: 'caller',
-      register(on) {
-        on('command.run', { command: 'probe' }, async $ => {
-          const results: unknown[] = []
-          for (let i = 0; i < 20; i++) results.push(await $.tool.call({ tool: 'Read', file_path: 'notes.md' }))
-          return { text: JSON.stringify(results) }
-        })
-      },
-    },
-  ],
-}, async ($, on) => {
+test("another plugin's own tool calls do not spend the main session's nudge", { plugins: [PROBE_CALLER] }, async ($, on) => {
   engine(on)
   // The main session is mid-turn, so its own calls count.
   await step($)

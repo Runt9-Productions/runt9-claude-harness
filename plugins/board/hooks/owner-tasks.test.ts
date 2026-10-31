@@ -1,10 +1,10 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { AgentInfo } from 'claude-code'
 
-import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, engine, mountPane, resultText, saved, step } from './test-support'
+import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, drawEmptyBeneath, engine, holdFirstSend, mountPane, resultText, saved, step } from './test-support'
 
 test('a task for the owner posts at once, flashes on the pane and in the band, and collapses its checklist to one line with progress', async ($, on) => {
-  on('ui.render', () => ({ type: 'Box', props: {} }) as never)
+  drawEmptyBeneath(on)
   const clock = mock.clock(on)
   engine(on, { clock })
   await $.tool.call(ASK as never)
@@ -284,17 +284,7 @@ test("a change leaves the unsent list once a request of the poster's loop has ca
 test("a slow delivery of an older change does not overwrite the newer change's delivery", async ($, on) => {
   const toasts: string[] = []
   const store = engine(on, { toasts, agents: [{ ...WORKER, status: 'idle' }], isAppendRefused: true })
-  let releaseFirst = () => {}
-  const firstHeld = new Promise<void>(resolve => (releaseFirst = resolve))
-  let calls = 0
-  on('session.send', async () => {
-    calls += 1
-    if (calls === 1) {
-      await firstHeld
-      return { isDelivered: false, reason: 'gone' }
-    }
-    return { isDelivered: true }
-  })
+  const releaseFirst = holdFirstSend(on)
   await $.tool.call({ ...OWNER_TASK, agentId: 'worker' } as never)
   const pane = await mountPane($)
   await pane.press({ key: 'O1-expand' })

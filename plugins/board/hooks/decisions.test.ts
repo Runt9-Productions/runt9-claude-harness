@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { AgentInfo } from 'claude-code'
 
-import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, complete, engine, mountPane, resultText, saved, step } from './test-support'
+import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, complete, drawEmptyBeneath, engine, mountPane, resultText, saved, step } from './test-support'
 
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: pressing an option records the answer once`, async ($, on) => {
@@ -29,7 +29,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 }
 
 test('a new decision flashes on the pane and in the band for a few seconds, then stops', async ($, on) => {
-  on('ui.render', () => ({ type: 'Box', props: {} }) as never)
+  drawEmptyBeneath(on)
   const clock = mock.clock(on)
   engine(on, { clock })
   await $.tool.call(ASK as never)
