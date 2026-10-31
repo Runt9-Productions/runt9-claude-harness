@@ -51,7 +51,9 @@ them. Whether this file is tracked in git is your repository's choice.
 - The build and test commands.
 - Suites never run locally.
 - The pre-push step CI checks for.
-- How long a CI run takes, so the lead knows when to check on it.
+- The CI watch: one command that waits on a pushed head's checks and exits non-zero when one fails. Every push
+  starts it in the background.
+- How long a CI run takes, so a watch that runs far longer stands out.
 
 ## 7. Verification
 

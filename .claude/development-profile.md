@@ -82,6 +82,9 @@ a knowledge base note already answers a question, this file points there.
   leak scan, then a `public-leak` review through `claude -p` costing about $0.10 to $0.50. Any finding above Normal,
   or any open question, refuses the push. It reads commit messages too. What CI fails that is cheapest to catch first:
   a missing version rise, `ruff format`, and a note left unverified after its sources changed.
+- CI watch: `gh pr checks <n> --watch --fail-fast`, with `GH_TOKEN` set (section 1). The bot cannot rerun a job, since
+  its App lacks Actions write, so a run failed by the runner rather than the code is rerun by the owner or by the next
+  push.
 - Duration: `CI` takes about 1.5 minutes (recent runs, 2026-10-28); a local code review took 8 and 16 minutes
   (two runs, 2026-10-31).
 

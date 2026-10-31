@@ -58,6 +58,10 @@ step number, start there; see "Starting mid-process".
   Without both, ask before each push. A standing grant is safe only when something outside the model rejects a bad
   push. Commit identity and trailer lines come from section 10. Merging is never this skill's. The pull request
   leaves draft when section 10 says, and on the owner's explicit approval where it says nothing.
+- **Watch CI after every push.** Each push, in any step, is followed by the CI watch section 6 names, started as a
+  background command so the session is notified when the checks finish rather than relying on remembering to look.
+  With none named, ask the owner for one. A watch speaks only for the head it started on. A failure is step 8 work
+  for the engineer, and the pull request leaves draft only on a head whose watch passed.
 - **Effort, never duration.** Size work in files, lines and complexity, and tell every briefed teammate the same; a
   model's time figure has no grounding. A ticket type that implies a duration is the owner's choice.
 - **Paste text that needs approval.** A ticket body, a pull request body or user-facing copy is shown in full, never
@@ -167,8 +171,7 @@ separate issue.
 ### 6. Push and open a draft pull request
 
 Run section 6's pre-push step. Check how far the branch lags its base, and merge the base in if section 2 asks for
-that. Push, then open a draft pull request against the base with its body read from a file. Follow CI, trusting only
-the runs for the newest head.
+that. Push, then open a draft pull request against the base with its body read from a file, and start the CI watch.
 
 ### 7. Test review, then panel review
 
@@ -196,7 +199,7 @@ is flagged when it reverses something the owner was told earlier. Answer every t
 
 Before pushing, run the comment sweep: spawn `develop:comment-sweeper` unless section 5 names a substitute, and move
 any reviewer justification it hands back into `reviewer-notes.md`. Section 5's doc writer brings the docs up to date
-from the current code.
+from the current code. Then push and start the CI watch.
 
 ### 9. External review
 
@@ -206,11 +209,11 @@ not.
 
 ### 10. Reviewer guide
 
-Post only against a head whose CI passes, since notes on code that moves afterwards mislead. Re-check every entry in
-`reviewer-notes.md` against the current code, then post them as a single review of inline comments with section 9's
-tooling. Typical subjects, as illustrations only: code whose purpose is not evident, a summary above a dense block,
-behaviour that differs from before, a risk taken on purpose, an accepted gap, and deleted code with its replacement
-or proof it was unused.
+Post only against a head whose CI watch passed, since notes on code that moves afterwards mislead. Re-check every
+entry in `reviewer-notes.md` against the current code, then post them as a single review of inline comments with
+section 9's tooling. Typical subjects, as illustrations only: code whose purpose is not evident, a summary above a
+dense block, behaviour that differs from before, a risk taken on purpose, an accepted gap, and deleted code with its
+replacement or proof it was unused.
 
 Evidence goes in a separate pull request comment, and every image is looked at before it is posted. Drafting the
 notes often exposes a behaviour change nobody decided on; that becomes a decision before its note is posted.
