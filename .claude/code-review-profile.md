@@ -120,6 +120,7 @@ A new plugin with a contract adds its rows here.
 | a `# vX` comment beside a pinned action | the SHA it annotates | Dependabot |
 | the "tuned on" version in `harness/leak-scan/README.md` | `version` in `install-betterleaks.sh` | hand |
 | the `warn_percent` and `ceiling_percent` defaults in `plugins/handoff/.claude-plugin/plugin.json` | the 30% and 60% in `harness/fragments/delegation.md` and the delegation skill | hand |
+| the rules in `harness/fragments/security.md` | the `autoMode` rules in `harness/settings/guardrails-automode.json` that govern the agent's actions | hand |
 | each request under "Other callers" | the `request` text in `harness/githooks/pre-push`, `harness/leak-scan/review-text.sh` and `harness/leak-scan/review.sh` | hand |
 
 ## Companions

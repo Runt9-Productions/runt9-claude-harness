@@ -11,8 +11,8 @@ nothing from an employer, a private project or a specific machine goes in, in co
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`), `leak-scan/` (the scan that gate and CI
   run, with its allowlist in `.leak-scan.toml`, and the `public-leak` review the gate and `review-text.sh` run),
   `fragments/` (always-on `CLAUDE.md` rules a user imports from `~/.claude/harness/current/fragments/`, so far
-  `delegation.md`, `working-agreement.md`, `voice.md` and `reasoning.md`), `claude-md-template.md` (the template a
-  missing `~/.claude/CLAUDE.md` starts from), `settings/` (fragments `bootstrap.py` merges into
+  `delegation.md`, `working-agreement.md`, `voice.md`, `reasoning.md` and `security.md`), `claude-md-template.md`
+  (the template a missing `~/.claude/CLAUDE.md` starts from), `settings/` (fragments `bootstrap.py` merges into
   `~/.claude/settings.json`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and
   `comment-style` skills). Its version is in `harness/harness.json`.
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
