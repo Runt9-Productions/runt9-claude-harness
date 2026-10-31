@@ -25,14 +25,14 @@ if any goes unreported.
 ## Use
 
 ```sh
-scan.sh [--ref <ref name>]... [--export <dir>] <repo> <trusted-ref|none> <git log revisions...>
+scan.sh [--ref <ref name>]... [--export <dir>] [--allow-message-hex] <repo> <trusted-ref|none> <git log revisions...>
 scan.sh --ref refs/heads/topic . origin/main origin/main..topic
 scan.sh --text <file> <repo> <trusted-ref|none>
 ```
 
 - `--text <file>`: scans one file instead of commits, with the same rules and the allowlist from `<trusted-ref>`. It
   is for text published outside git, such as an issue or pull request body before it is posted. It takes no
-  `--ref`, `--export` or revisions.
+  `--ref`, `--export`, `--allow-message-hex` or revisions.
 
 - `--ref`: a ref name the push creates or updates on the remote, such as `refs/heads/topic` or `refs/tags/v1`. A
   push publishes the name, so it is scanned too. Repeat it for each ref.
@@ -45,6 +45,9 @@ scan.sh --text <file> <repo> <trusted-ref|none>
   - `text/file-names`: every path added or changed, sorted, unquoted.
   - `text/ref-names`: the `--ref` values.
   - `binary-files`: `<commit> <path>` for each binary file added or changed. Its content was not scanned.
+- `--allow-message-hex`: drops `hex-identifier` findings in commit messages and nowhere else. It is for a caller that
+  knows the messages come from a bot that names commits by full hash; the allowlist cannot express it, since it cannot
+  see who wrote a commit beyond fields any author can set.
 - Revisions are anything `git rev-parse` resolves: `A..B`, `<sha> --not --remotes=origin`. Pass an annotated tag
   itself, not the commit it points at, so its message and tagger are scanned.
 

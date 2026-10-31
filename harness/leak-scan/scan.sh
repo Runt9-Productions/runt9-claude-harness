@@ -4,12 +4,14 @@
 # parents), commit messages, author and committer identities, annotated tags, file names, and the ref names given with
 # --ref. Binary content is not read.
 #
-#   scan.sh [--ref <ref name>]... [--export <dir>] <repo> <trusted-ref|none> <git log revisions...>
+#   scan.sh [--ref <ref name>]... [--export <dir>] [--allow-message-hex] <repo> <trusted-ref|none>
+#           <git log revisions...>
 #   scan.sh --ref refs/heads/topic . origin/main origin/main..topic
 #   scan.sh --text <file> <repo> <trusted-ref|none>
 #
 # The allowlist is the repo's .leak-scan.toml as committed on <trusted-ref>, never the working tree, so a change
 # cannot allowlist itself. `none` scans with no allowlist. --export writes what was scanned to <dir>; see the README.
+# --allow-message-hex drops hex-identifier findings in commit messages, for a caller that knows who wrote them.
 # --text scans one file instead of commits, such as an issue or pull request body before it is posted.
 #
 # Exit 0 clean, 1 findings, 2 the scan did not run. Treat 2 as a failure, never as clean.
@@ -17,7 +19,8 @@ set -Eeuo pipefail
 trap 'echo "leak-scan: failed at line $LINENO" >&2; exit 2' ERR
 
 usage() {
-    echo "usage: scan.sh [--ref <ref name>]... [--export <dir>] <repo> <trusted-ref|none> <git log revisions...>" >&2
+    echo "usage: scan.sh [--ref <ref name>]... [--export <dir>] [--allow-message-hex] <repo> <trusted-ref|none>" \
+        "<git log revisions...>" >&2
     echo "       scan.sh --text <file> <repo> <trusted-ref|none>" >&2
     exit 2
 }
@@ -25,18 +28,32 @@ usage() {
 ref_names=()
 export_dir=
 text_file=
-while [[ ${1:-} == --ref || ${1:-} == --export || ${1:-} == --text ]]; do
-    (( $# >= 2 )) || usage
+allow_message_hex=false
+while (( $# )); do
     case $1 in
-        --ref) ref_names+=("$2") ;;
-        --export) export_dir=$2 ;;
-        --text) text_file=$2 ;;
+        --allow-message-hex)
+            allow_message_hex=true
+            shift
+            ;;
+        --ref | --export | --text)
+            (( $# >= 2 )) || usage
+            case $1 in
+                --ref) ref_names+=("$2") ;;
+                --export) export_dir=$2 ;;
+                --text) text_file=$2 ;;
+            esac
+            shift 2
+            ;;
+        *)
+            break
+            ;;
     esac
-    shift 2
 done
 if [[ -n $text_file ]]; then
     (( $# == 2 )) || usage
-    [[ -z $export_dir && ${#ref_names[@]} -eq 0 ]] || usage
+    [[ -z $export_dir ]] || usage
+    (( ${#ref_names[@]} == 0 )) || usage
+    [[ $allow_message_hex == false ]] || usage
 else
     (( $# >= 3 )) || usage
 fi
@@ -199,6 +216,11 @@ if [[ -n $text_file ]]; then
 else
     printf '%s\n' "${ref_names[@]}" > "$work/push/text/ref-names"
     scan "$work/push" "$mirror" "$work/shapes.toml" "${revisions[@]}"
+    if [[ $allow_message_hex == true ]]; then
+        jq 'map(select((.RuleID == "hex-identifier" and (.File | endswith(".message"))) | not))' \
+            "$work/push/shapes-text.json" > "$work/push/shapes-text.kept.json"
+        mv "$work/push/shapes-text.kept.json" "$work/push/shapes-text.json"
+    fi
 fi
 
 if [[ -n $export_dir ]]; then
