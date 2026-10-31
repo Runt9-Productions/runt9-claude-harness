@@ -9,6 +9,7 @@ Exits 0 when everything picked installed, otherwise 1 with one line naming the r
 """
 
 import argparse
+import copy
 import difflib
 import functools
 import json
@@ -58,7 +59,9 @@ CLAUDE_MD_TEMPLATE = "claude-md-template.md"
 BLOCK_START = "<!-- runt9-claude-harness: bootstrap.py keeps the lines from here to the end marker -->"
 BLOCK_END = "<!-- runt9-claude-harness: end -->"
 
+SETTINGS = "settings"
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
+DEFAULT_INDENT = "  "
 SESSION_VARIABLES = ("CLAUDE_CODE_SESSION_ID", "CLAUDECODE")
 PLUGIN_DIRS_VARIABLE = "CLAUDE_CODE_PLUGIN_DIRS"
 
@@ -326,17 +329,46 @@ def install_skills(run: Run) -> None:
             print(f"skills: removed {link}, whose skill this version no longer has")
 
 
-def require_fragment(name: str) -> Path:
-    fragment = CURRENT / FRAGMENTS / f"{name}.md"
-    if not fragment.is_file():
-        raise Stop(f"the installed harness has no {fragment}; install the harness from this checkout first")
-    return fragment
+def require_installed(relative: str) -> Path:
+    path = CURRENT / relative
+    if not path.is_file():
+        raise Stop(f"the installed harness has no {path}; install the harness from this checkout first")
+    return path
+
+
+def shipped_in_head(directory: str, suffix: str) -> list[PurePosixPath]:
+    """The files ending in `suffix` directly in harness/<directory>/ in HEAD, which is what the harness component
+    installs."""
+    source = f"{HARNESS_SOURCE}/{directory}/"
+    listing = git(CLONE, "ls-tree", "--name-only", "-z", "--full-tree", "HEAD", "--", source)
+    paths = [PurePosixPath(os.fsdecode(entry)) for entry in listing.split(b"\0") if entry]
+    return [path for path in paths if path.suffix == suffix and ships(str(path))]
+
+
+def write_after_asking(target: Path, before: str, after: str) -> None:
+    """Shows the diff from `before` to `after` and writes `after` to `target` on yes. Raises Stop on no."""
+    diff = difflib.unified_diff(
+        before.splitlines(), after.splitlines(), fromfile=str(target), tofile=str(target), lineterm=""
+    )
+    print("\n".join(diff))
+    no_stdin = f"no answer on stdin to whether to write {target}; run bootstrap.py in a terminal"
+    if not answered_yes(f"Write this to {target}? [y/N] ", no_stdin):
+        raise Stop(f"not written, so {target} is unchanged")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Staged beside the file and renamed over it, so a failed write leaves the old one whole.
+    with tempfile.TemporaryDirectory(prefix=".staging-", dir=target.parent) as staging:
+        staged = Path(staging) / target.name
+        staged.write_bytes(after.encode())
+        if target.exists():
+            shutil.copymode(target, staged)
+        staged.replace(target)
 
 
 def check_fragment(name: str, run: Run) -> None:
     # A harness installed in this run comes from HEAD, which is where the fragment was listed from.
     if "harness" not in run.picked:
-        require_fragment(name)
+        require_installed(f"{FRAGMENTS}/{name}.md")
     if USER_CLAUDE_MD.exists():
         block_bounds(USER_CLAUDE_MD.read_bytes().decode().splitlines())
 
@@ -371,7 +403,7 @@ def with_import(text: str, import_line: str) -> str:
 
 
 def install_fragment(name: str, run: Run) -> None:
-    fragment = require_fragment(name)
+    fragment = require_installed(f"{FRAGMENTS}/{name}.md")
     import_line = f"@~/{fragment.relative_to(Path.home())}"
     # Resolved so a CLAUDE.md that links elsewhere keeps its link and the file it names changes.
     target = USER_CLAUDE_MD.resolve()
@@ -387,41 +419,89 @@ def install_fragment(name: str, run: Run) -> None:
     if after == before:
         print(f"fragment:{name}: {USER_CLAUDE_MD} already imports {fragment}")
         return
-
-    diff = difflib.unified_diff(
-        before.splitlines(), after.splitlines(), fromfile=str(target), tofile=str(target), lineterm=""
-    )
-    print("\n".join(diff))
-    no_stdin = f"no answer on stdin to whether to write {target}; run bootstrap.py in a terminal"
-    if not answered_yes(f"Write this to {target}? [y/N] ", no_stdin):
-        raise Stop(f"not written, so {target} is unchanged")
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    # Staged beside the file and renamed over it, so a failed write leaves the old one whole.
-    with tempfile.TemporaryDirectory(prefix=".staging-", dir=target.parent) as staging:
-        staged = Path(staging) / target.name
-        staged.write_bytes(after.encode())
-        if target.exists():
-            shutil.copymode(target, staged)
-        staged.replace(target)
+    write_after_asking(target, before, after)
     print(f"fragment:{name}: {target} imports {fragment}")
 
 
 def fragment_components() -> list[Component]:
-    """One component per fragment in HEAD, which is what the harness component installs."""
-    source = f"{HARNESS_SOURCE}/{FRAGMENTS}/"
-    listing = git(CLONE, "ls-tree", "--name-only", "-z", "--full-tree", "HEAD", "--", source)
-    paths = [PurePosixPath(os.fsdecode(entry)) for entry in listing.split(b"\0") if entry]
     components = []
-    for path in paths:
-        if path.suffix != ".md" or not ships(str(path)):
-            continue
+    for path in shipped_in_head(FRAGMENTS, ".md"):
         components.append(
             Component(
                 name=f"fragment:{path.stem}",
                 summary=f"import ~/.claude/harness/current/{FRAGMENTS}/{path.name} in ~/.claude/CLAUDE.md",
                 install=functools.partial(install_fragment, path.stem),
                 check=functools.partial(check_fragment, path.stem),
+            )
+        )
+    return components
+
+
+def check_settings(name: str, run: Run) -> None:
+    # A harness installed in this run comes from HEAD, which is where the fragment was listed from.
+    if "harness" not in run.picked:
+        require_installed(f"{SETTINGS}/{name}.json")
+    if SETTINGS_FILE.exists():
+        read_json_object(SETTINGS_FILE)
+
+
+def merge_settings(settings: dict, fragment: dict, at: str = "") -> None:
+    """Adds to `settings`, in place, each key of `fragment` it lacks and each entry of a fragment list its list lacks,
+    descending into objects both have. A value `settings` already has is never replaced. Raises Stop where the
+    fragment has an object or a list and `settings` has something else."""
+    for key, value in fragment.items():
+        path = f"{at}.{key}" if at else key
+        if key not in settings:
+            settings[key] = value
+            continue
+        present = settings[key]
+        if isinstance(value, dict) and isinstance(present, dict):
+            merge_settings(present, value, path)
+        elif isinstance(value, list) and isinstance(present, list):
+            for entry in value:
+                if entry not in present:
+                    present.append(entry)
+        elif isinstance(value, (dict, list)):
+            kind = "an object" if isinstance(value, dict) else "a list"
+            raise Stop(f"{path} in {SETTINGS_FILE} is not {kind}, as the fragment's is; fix it by hand")
+
+
+def json_indent(text: str) -> str:
+    """The indentation of the first indented line in `text`, so a rewrite keeps the file's own."""
+    match = re.search(r"\n([ \t]+)\S", text)
+    return match[1] if match else DEFAULT_INDENT
+
+
+def install_settings(name: str, run: Run) -> None:
+    fragment_path = require_installed(f"{SETTINGS}/{name}.json")
+    fragment = read_json_object(fragment_path)
+    # Resolved so a settings.json that links elsewhere keeps its link and the file it names changes.
+    target = SETTINGS_FILE.resolve()
+    if SETTINGS_FILE.exists():
+        before = SETTINGS_FILE.read_text(encoding="utf-8")
+        settings = parse_json_object(before, str(SETTINGS_FILE))
+    else:
+        before = ""
+        settings = {}
+    merged = copy.deepcopy(settings)
+    merge_settings(merged, fragment)
+    if merged == settings:
+        print(f"settings:{name}: {SETTINGS_FILE} already has everything in {fragment_path}")
+        return
+    after = json.dumps(merged, indent=json_indent(before), ensure_ascii=False) + "\n"
+    write_after_asking(target, before, after)
+    print(f"settings:{name}: {target} has everything in {fragment_path}")
+
+
+def settings_components() -> list[Component]:
+    components = []
+    for path in shipped_in_head(SETTINGS, ".json"):
+        components.append(
+            Component(
+                name=f"settings:{path.stem}",
+                summary=f"merge ~/.claude/harness/current/{SETTINGS}/{path.name} into ~/.claude/settings.json",
+                install=functools.partial(install_settings, path.stem),
+                check=functools.partial(check_settings, path.stem),
             )
         )
     return components
@@ -482,8 +562,8 @@ def plugin_components() -> list[Component]:
     return components
 
 
-# Install order, ahead of the fragments and plugins. Everything under harness/ arrives with the harness component; a
-# part that must also be wired into ~/.claude or a repository is one entry here and its install function.
+# Install order, ahead of the fragments, settings and plugins. Everything under harness/ arrives with the harness
+# component; a part that must also be wired into ~/.claude or a repository is one entry here and its install function.
 HARNESS_COMPONENTS = (
     Component(
         name="harness",
@@ -545,7 +625,7 @@ def pick(names: list[str], components: list[Component], run: Run) -> list[Compon
 def bootstrap(args: argparse.Namespace) -> None:
     if not args.list and any(variable in os.environ for variable in SESSION_VARIABLES):
         raise Stop("refusing to run inside a Claude Code session; run it in your own shell")
-    components = [*HARNESS_COMPONENTS, *fragment_components(), *plugin_components()]
+    components = [*HARNESS_COMPONENTS, *fragment_components(), *settings_components(), *plugin_components()]
     if args.list:
         width = max(len(component.name) for component in components)
         for component in components:

@@ -12,14 +12,16 @@ nothing from an employer, a private project or a specific machine goes in, in co
   run, with its allowlist in `.leak-scan.toml`, and the `public-leak` review the gate and `review-text.sh` run),
   `fragments/` (always-on `CLAUDE.md` rules a user imports from `~/.claude/harness/current/fragments/`, so far
   `delegation.md`, `working-agreement.md`, `voice.md` and `reasoning.md`), `claude-md-template.md` (the template a
-  missing `~/.claude/CLAUDE.md` starts from) and `skills/` (the `code-style`, `python-style`, `kotlin-style`,
-  `typescript-style` and `comment-style` skills). Its version is in `harness/harness.json`.
+  missing `~/.claude/CLAUDE.md` starts from), `settings/` (fragments `bootstrap.py` merges into
+  `~/.claude/settings.json`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and
+  `comment-style` skills). Its version is in `harness/harness.json`.
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
   `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the
-  repositories named, adds the import line of each fragment picked to a marked block in `~/.claude/CLAUDE.md`, and
-  installs plugins from the marketplace. A new part under `harness/` that must be wired into `~/.claude` or a
-  repository registers a component in its `HARNESS_COMPONENTS`; a new file in `harness/fragments/` is a component
-  without one. Its tests are `test_bootstrap.py` beside it.
+  repositories named, adds the import line of each fragment picked to a marked block in `~/.claude/CLAUDE.md`, merges
+  each settings fragment picked into `~/.claude/settings.json`, and installs plugins from the marketplace. A new part
+  under `harness/` that must be wired into `~/.claude` or a repository registers a component in its
+  `HARNESS_COMPONENTS`; a new file in `harness/fragments/` or `harness/settings/` is a component without one. Its
+  tests are `test_bootstrap.py` beside it.
 - `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
   needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only, except PyYAML
   in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
