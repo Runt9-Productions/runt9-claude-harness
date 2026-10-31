@@ -9,6 +9,7 @@ measured_on: "Claude Code 2.1.314, Linux bubblewrap 0.9.0"
 sources:
   - "harness/settings/guardrails-automode.json"
   - "harness/settings/guardrails-sandbox.json"
+  - "harness/settings/guardrails-stores.json"
   - "bootstrap.py"
 ---
 
@@ -60,8 +61,12 @@ stop a call.
 - [trap] An absolute path in a `Read(...)` rule needs `//`: `Read(/abs/dir/**)` resolves against the settings file's
   directory and silently does not apply, while `Read(//abs/dir/**)` denies. Sandbox paths use a single `/`.
   #measured #silent-failure
-- [vendor] A `Read(...)` deny rule covers the Read tool, not a shell command reading the same file; the sandbox's
-  `credentials` deny covers the shell side, and the paths of both are merged into the sandbox's configuration.
+- [vendor] A `Read(...)` deny rule also blocks Edit and Write on the same path (creating a file there included), the
+  file commands Claude Code recognizes in Bash (`cat`, `head`, `tail`, `sed`, `tee`) and redirection targets, but not
+  a command that reads without naming the file (`grep -r`) or a script that opens it itself. Its paths are merged into
+  the sandbox's `denyRead`, which covers every sandboxed process.
+- [vendor] A `!` rule carves paths out only of the cwd-relative (`path`, `./path`) rules listed before it in the same
+  file, so a rule anchored with `//` or `~/` cannot be narrowed.
 
 ### Model-evaluated hooks
 
