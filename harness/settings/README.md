@@ -32,8 +32,10 @@ directories is approved without it, so the `guardrails-stores` deny rules are wh
 Turn it on with `sandbox.enabled` in your own settings, or have a tool switch that key; the file reloads live. With
 `failIfUnavailable`, Claude Code then refuses to start where the sandbox cannot run (on Linux, without bubblewrap).
 Sandboxed commands still go through the permission flow (`autoAllowBashIfSandboxed: false`), and a host outside
-`allowedDomains` is refused in every permission mode (`strictAllowlist`). If your sandbox is already on, the merge
-adds those three settings to it.
+`allowedDomains` is refused in every permission mode (`strictAllowlist`). The merge adds every key and list entry here
+that your own `sandbox` settings lack, whether the sandbox is on or not. That includes `allowUnsandboxedCommands:
+false`, under which a command's `dangerouslyDisableSandbox` is ignored without notice, so a command the sandbox breaks
+runs outside it only through `excludedCommands`.
 
 The sandbox wraps shell commands only: Read, Edit, Write and the web tools follow permission rules instead. With it
 on, a shell command can write only in the working directories, the temporary directory and any `allowWrite` path,
@@ -44,10 +46,13 @@ never under most of `~/.claude`. What that changes:
 - The credential denies hide files that tools read for themselves. With `~/.ssh` denied, git over SSH and SSH commit
   signing fail; with `~/.gnupg` denied, GPG signing fails; npm, Gradle, Docker and kubectl lose their own config.
 - Common token variables are unset in sandboxed commands. A variable set inline in the command itself is kept.
-- `gh` exits when it cannot read `~/.config/gh/hosts.yml`. Run a call that authenticates with `GH_TOKEN` with
-  `GH_CONFIG_DIR` set to an empty directory under `$TMPDIR`, and set `XDG_CACHE_HOME` there too for commands that
-  cache, such as `gh run view --log-failed`.
-- Worktrees beside the checkout are outside the working directory; add their parent to
-  `sandbox.filesystem.allowWrite`. The sandbox keeps a repository's `.git/config` and `.git/hooks` read-only, so
-  create a branch without upstream tracking.
+- `gh` has no token of its own in the sandbox: `GH_TOKEN` is unset and `~/.config/gh/hosts.yml` is denied. Set the
+  token inline in the command (`GH_TOKEN=... gh ...`) from a source the sandbox can read, or list `gh` in
+  `sandbox.excludedCommands`. A sandboxed `gh` also exits when it cannot read `hosts.yml`, so set `GH_CONFIG_DIR` to
+  an empty directory under `$TMPDIR`, and `XDG_CACHE_HOME` there too for commands that cache, such as
+  `gh run view --log-failed`.
+- Worktrees beside the checkout are outside the working directory; add each worktree's own path to
+  `sandbox.filesystem.allowWrite`, never a parent directory. Only the working directory's `.git/config` and
+  `.git/hooks` are kept read-only, so a repository under an `allowWrite` path can have a hook planted that later runs
+  outside the sandbox. In the working directory, create a branch without upstream tracking.
 - The pre-push gate reviews every push in full, as `harness/githooks/README.md` describes.

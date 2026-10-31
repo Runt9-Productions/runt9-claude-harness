@@ -9,6 +9,7 @@ measured_on: "Claude Code 2.1.314, Linux bubblewrap 0.9.0"
 sources:
   - "harness/settings/guardrails-automode.json"
   - "harness/settings/guardrails-sandbox.json"
+  - "bootstrap.py"
 ---
 
 # Guardrails
