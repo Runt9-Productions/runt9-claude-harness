@@ -1,6 +1,17 @@
 import type { Register } from 'claude-code'
 
-import { MAIN, countCall, fillOldActivityRows, isCommitResult, isMainOutsideTurn, resetChecklistCount, setActivity, startNamedAgent, tick } from './activity'
+import {
+  MAIN,
+  countCall,
+  fillOldActivityRows,
+  isCommitResult,
+  isMainOutsideTurn,
+  refreshFromAgentList,
+  resetChecklistCount,
+  setActivity,
+  setStatus,
+  startNamedAgent,
+} from './activity'
 import { askDecision, endSendNowQueue, markSeen, openBoard, resetFlashAndHotkeys } from './decisions'
 import { setOwnerTask } from './owner-tasks'
 import { renderAbovePrompt, renderPane } from './pane'
@@ -17,7 +28,7 @@ import type { AskDecisionInput, SetOwnerTaskInput, SetStatusInput, SetTaskInput 
 // The same id as PANE in decisions.ts, spelled again here: the loader reads a matcher's requestId from this file's
 // source, and reads an imported constant as unknown.
 const PANE = 'board'
-const TICK_MS = 10_000
+const REFRESH_MS = 10_000
 
 // Carried by the mod rather than CLAUDE.md, so removing the mod removes the instruction too.
 const GUIDANCE = {
@@ -44,7 +55,7 @@ export const register: Register = on => {
     await save($)
     await prune($)
     // Module timers stop on a reload and register runs again, so this never runs twice.
-    $.clock.every(TICK_MS, () => void tick($))
+    $.clock.every(REFRESH_MS, () => void refreshFromAgentList($))
     return next(e)
   })
 
@@ -79,9 +90,11 @@ export const register: Register = on => {
     return result
   })
 
-  // turn.start names no loop; binding is right whichever loop it was.
+  // Binding is right whichever loop the turn runs in. The main loop works from here rather than from its first request,
+  // so Send now is not offered in between.
   on('turn.start', async ($, e, next) => {
     await bind($)
+    if (e.agentId === undefined) await setActivity($, MAIN, { state: 'working' })
     return next(e)
   })
 
@@ -137,8 +150,7 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'mcp__board__set_status' }, async ($, e) => {
     const input = e as unknown as SetStatusInput
-    const status = input.status.trim()
-    await setActivity($, e.agentId ?? MAIN, { status, statusAt: await $.clock.now(), callsSinceStatus: 0, workedMsSinceStatus: 0, isNudged: false })
+    await setStatus($, e.agentId ?? MAIN, input.status.trim())
     return { result: 'Status set.' }
   })
 

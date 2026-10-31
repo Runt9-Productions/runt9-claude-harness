@@ -75,6 +75,8 @@ export function engine(on: On, options: EngineOptions = {}): Map<string, unknown
     options.submitted?.push(e.text)
     return { text: e.text }
   })
+  // The prompt waits on the owner, so no decision comes back.
+  on('classic.PermissionRequest', () => ({}))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('turn.step', async function* (_$, e) {
@@ -102,7 +104,9 @@ export async function step($: Engine, agentId?: string) {
   }
 }
 
-export const saved = (store: Map<string, unknown>, key = SESSION_KEY) => JSON.stringify(store.get(key))
+export function saved(store: Map<string, unknown>, key = SESSION_KEY): string {
+  return JSON.stringify(store.get(key))
+}
 
 // A teammate's own calls carry an id that differs from the `name@session` one its spawn answered.
 export const SCOUT: AgentInfo = {
@@ -117,7 +121,9 @@ export const SPAWN_SCOUT = { tool: 'Agent', description: 'Survey the parser', pr
 
 export const READ_BOARD = { tool: 'mcp__board__read_board' }
 export const WORKER: AgentInfo = { id: 'worker', teammateId: 'worker@team', name: 'worker', description: 'Worker', type: 'teammate', status: 'running' }
-export const resultText = (result: unknown) => JSON.stringify(result)
+export function resultText(result: unknown): string {
+  return JSON.stringify(result)
+}
 
 export const PHASES = ['build', 'tests', 'PR']
 

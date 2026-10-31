@@ -14,7 +14,9 @@ test('the guidance is added only where a surface draws', async ($, on) => {
 })
 
 const WORKER_CALL = { tool: 'Read', file_path: 'notes.md', agentId: 'worker' }
-const isNudge = (result: unknown) => JSON.stringify(result).includes('[board]')
+function isNudge(result: unknown): boolean {
+  return JSON.stringify(result).includes('[board]')
+}
 
 test('a teammate is nudged once when its status reaches the call limit, and again only after a new status', async ($, on) => {
   engine(on, { agents: [WORKER] })

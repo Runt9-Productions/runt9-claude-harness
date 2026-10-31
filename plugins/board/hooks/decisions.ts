@@ -1,14 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Timer } from 'claude-code'
 
-import type { BoardActivity, BoardDecision, BoardDelivery, BoardOption } from '../types'
-import { isPresent } from './activity'
+import type { BoardActivity, BoardDecision, BoardDelivery, BoardOption, BoardOwnerTask } from '../types'
+import { agentLabel, isPresent } from './activity'
 import { bind, nextId, retireIds, save } from './persistence'
 import type { AskDecisionInput } from './tools'
 
 export const PANE = 'board'
 
-const decisions = atom({ plugin: 'board', key: 'decisions' } as const, [])
+// Declared again in each file that uses them, since the loader refuses an imported atom (register.tsx has the rule).
+const decisions =atom({ plugin: 'board', key: 'decisions' } as const, [])
 const ownerTasks = atom({ plugin: 'board', key: 'ownerTasks' } as const, [])
 const activity = atom({ plugin: 'board', key: 'activity' } as const, [])
 const litIds = atom({ plugin: 'board', key: 'litIds' } as const, [])
@@ -16,12 +17,6 @@ const areHotkeysHeld = atom({ plugin: 'board', key: 'areHotkeysHeld' } as const,
 
 export async function openBoard($: EngineInterface) {
   return $.ui.open({ id: PANE, title: 'Board' })
-}
-
-/** The loop's name as the pane shows it; undefined for the main session. */
-export function agentLabel(rows: readonly BoardActivity[], agentId: string | undefined): string | undefined {
-  if (agentId === undefined) return undefined
-  return rows.find(a => a.agentId === agentId)?.label ?? agentId
 }
 
 /**
@@ -80,8 +75,8 @@ export async function askDecision($: EngineInterface, agentId: string | undefine
  */
 export function notPosterText(rows: readonly BoardActivity[], id: string, posterId: string | undefined, callerId: string | undefined): string | undefined {
   if (callerId === undefined || callerId === posterId) return undefined
-  if (posterId === undefined) return `${id} was posted by the main session; only the main session can change it.`
-  const poster = agentLabel(rows, posterId) ?? posterId
+  const poster = agentLabel(rows, posterId)
+  if (poster === undefined) return `${id} was posted by the main session; only the main session can change it.`
   return `${id} was posted by ${poster}; only ${poster} or the main session can change it.`
 }
 
@@ -345,8 +340,32 @@ export async function markSeen($: EngineInterface, agentId: string | undefined) 
   if (isChanged) await save($)
 }
 
-// The answers are already in the conversation as [board] rows, so the prompt only has to start the turn.
-const SEND_NOW_PROMPT = '[board] The owner answered on the board. Act on the [board] answers above.'
+function isAnswerForMain(decision: BoardDecision): boolean {
+  return decision.agentId === undefined && decision.delivery === 'sent'
+}
+
+function isChangeForMain(task: BoardOwnerTask): boolean {
+  return task.agentId === undefined && task.lastChange?.delivery === 'sent'
+}
+
+/** The ids whose answer or owner's change reached the main session and no request of it has carried yet. */
+export async function unreadByMain($: EngineInterface): Promise<string[]> {
+  const allDecisions: BoardDecision[] = await read($, decisions)
+  const allOwnerTasks: BoardOwnerTask[] = await read($, ownerTasks)
+  const answered = allDecisions.filter(isAnswerForMain).map(d => d.id)
+  const changed = allOwnerTasks.filter(isChangeForMain).map(t => t.id)
+  return [...answered, ...changed]
+}
+
+/**
+ * The answers are already in the conversation as [board] rows, so the prompt only has to start the turn. It names
+ * them, so it vouches only for those rows and not for any [board] text a tool result carries.
+ *
+ * [board] The owner answered on the board. Act on the [board] messages above about D1, O2.
+ */
+function sendNowPrompt(ids: readonly string[]): string {
+  return `[board] The owner answered on the board. Act on the [board] messages above about ${ids.join(', ')}.`
+}
 
 // From the press until the main loop's next request, so a second press submits nothing more.
 let isSendNowQueued = false
@@ -361,10 +380,13 @@ export async function sendNow($: EngineInterface) {
     $.ui.toast('Already sent; Claude reads the answers when its turn starts')
     return
   }
+  const ids = await unreadByMain($)
+  // A press on a frame drawn before a request of the main session carried them.
+  if (ids.length === 0) return
   isSendNowQueued = true
   let refusal: string | undefined
   try {
-    refusal = (await $.prompt.submit({ text: SEND_NOW_PROMPT })).drop
+    refusal = (await $.prompt.submit({ text: sendNowPrompt(ids) })).drop
   } catch (err) {
     refusal = String(err)
   }

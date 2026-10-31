@@ -2,8 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
 import type { BoardActivity, BoardDecision, BoardOwnerTask, BoardTask, BoardTaskStatus } from '../types'
-import { MAIN, elapsed } from './activity'
-import { DISMISSED_ANSWER, answerOther, answerWithNote, asOption, dismiss, openBoard, retry, sendNow, setNote } from './decisions'
+import { agentLabel, elapsed, isMainOutsideTurn } from './activity'
+import { DISMISSED_ANSWER, answerOther, answerWithNote, asOption, dismiss, openBoard, retry, sendNow, setNote, unreadByMain } from './decisions'
 import { completeOwnerTask, dismissOwnerChange, ownerTaskStatus, retryOwnerChange, toggleItem, toggleStart } from './owner-tasks'
 import { boundSession, pressOnBoard } from './persistence'
 import { OPEN_ORDER, clearDone } from './tasks'
@@ -18,9 +18,23 @@ const STATUS_COLOR: Record<BoardTaskStatus, string | undefined> = {
   pending: undefined,
 }
 
+const ACTIVITY_MARK: Record<BoardActivity['state'], string> = { permission: '!', working: '●', idle: '○' }
+
+function activityColor(state: BoardActivity['state'], hasOpenWork: boolean): string | undefined {
+  if (state === 'permission') return 'red'
+  if (state === 'working') return 'cyan'
+  return hasOpenWork ? 'yellow' : undefined
+}
+
+function activityText(row: BoardActivity): string {
+  if (row.state !== 'permission') return row.state
+  return `waiting on a permission prompt (${row.permissionTool ?? 'a tool'})`
+}
+
 const LIT_STYLE = { color: 'black', backgroundColor: 'yellow' }
 
-const decisions = atom({ plugin: 'board', key: 'decisions' } as const, [])
+// Declared again in each file that uses them, since the loader refuses an imported atom (register.tsx has the rule).
+const decisions =atom({ plugin: 'board', key: 'decisions' } as const, [])
 const tasks = atom({ plugin: 'board', key: 'tasks' } as const, [])
 const ownerTasks = atom({ plugin: 'board', key: 'ownerTasks' } as const, [])
 const isDoneShown = atom({ plugin: 'board', key: 'isDoneShown' } as const, false)
@@ -54,11 +68,9 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const unsent = allDecisions.filter(d => d.delivery !== undefined && d.delivery !== 'seen')
   const unsentOwnerTasks = allOwnerTasks.filter(t => t.lastChange !== undefined && t.lastChange.delivery !== 'seen')
   const loops: BoardActivity[] = await read($, activity)
-  // A working main loop reads its answers at its next step anyway; only an idle one needs its turn started.
-  const isMainIdle = loops.find(a => a.agentId === MAIN)?.state !== 'working'
-  const hasAnswersForMain =
-    unsent.some(d => d.agentId === undefined && d.delivery === 'sent') ||
-    unsentOwnerTasks.some(t => t.agentId === undefined && t.lastChange?.delivery === 'sent')
+  // A main loop inside a turn, held on a permission prompt included, reads its answers at its next request anyway.
+  const isMainIdle = await isMainOutsideTurn($)
+  const hasAnswersForMain = (await unreadByMain($)).length > 0
   const at = (await read($, now)) || (await $.clock.now())
   const hasOpenWork = allTasks.some(t => t.status === 'in_progress' || t.status === 'pending')
   const openTasks = OPEN_ORDER.flatMap(status => allTasks.filter(t => t.status === status))
@@ -66,7 +78,6 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const isDoneListed: boolean = await read($, isDoneShown)
   const expanded: string[] = await read($, expandedNotes)
   const lit: string[] = await read($, litIds)
-  const holderLabel = (holderId: string) => loops.find(a => a.agentId === holderId)?.label ?? (holderId === MAIN ? 'Claude' : holderId)
   const hotkeysHeld: boolean = await read($, areHotkeysHeld)
   const drawnFor = boundSession()
   const onBoard = (act: () => Promise<void>) => () => void pressOnBoard($, drawnFor, act)
@@ -78,14 +89,8 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       {loops.map(a => (
         <Box key={a.agentId} flexDirection="column">
           {/* One line per agent whatever the pane's width: a wrapped row moves everything below it. */}
-          <Text
-            wrap="truncate-end"
-            color={a.state === 'permission' ? 'red' : a.state === 'working' ? 'cyan' : hasOpenWork ? 'yellow' : undefined}
-            bold={a.state === 'permission'}
-          >
-            {a.state === 'permission' ? '!' : a.state === 'working' ? '●' : '○'} {a.label}{' '}
-            {a.state === 'permission' ? `waiting on a permission prompt (${a.permissionTool ?? 'a tool'})` : a.state}{' '}
-            {elapsed(a.since, at)}
+          <Text wrap="truncate-end" color={activityColor(a.state, hasOpenWork)} bold={a.state === 'permission'}>
+            {ACTIVITY_MARK[a.state]} {a.label} {activityText(a)} {elapsed(a.since, at)}
             {a.status ? ` · ${a.status} (${elapsed(a.statusAt, at)} ago)` : ''}
           </Text>
         </Box>
@@ -182,7 +187,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
               <Text color={STATUS_COLOR[t.status]}>
                 {STATUS_MARK[t.status]} {t.id} {t.title}
                 {items.length > 0 ? ` ${ticked}/${items.length}` : ''}
-                {t.holderId === undefined ? '' : ` · ${holderLabel(t.holderId)}`}{' '}
+                {t.holderId === undefined ? '' : ` · ${agentLabel(loops, t.holderId) ?? 'Claude'}`}{' '}
               </Text>
               {isCollapsible && (
                 <Button key={`${t.id}-expand`} label={isExpanded ? 'Collapse' : 'Expand'} onPress={() => void toggleExpanded($, t.id)} />

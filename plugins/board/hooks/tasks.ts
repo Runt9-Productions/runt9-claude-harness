@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { BoardActivity, BoardDecision, BoardItem, BoardOwnerTask, BoardTask, BoardTaskStatus } from '../types'
-import { MAIN, isPresent, releaseAbandoned } from './activity'
+import { MAIN, agentLabel, isPresent, releaseAbandoned } from './activity'
 import { editItems, hasNoItemText, missingLabels, progressText } from './checklist'
 import { asOption } from './decisions'
 import { OWNER_STATUS_TEXT, ownerTaskStatus } from './owner-tasks'
@@ -12,6 +12,7 @@ import type { SetTaskInput } from './tools'
 
 export const OPEN_ORDER: BoardTaskStatus[] = ['in_progress', 'blocked', 'pending']
 
+// Declared again in each file that uses them, since the loader refuses an imported atom (register.tsx has the rule).
 const decisions = atom({ plugin: 'board', key: 'decisions' } as const, [])
 const tasks = atom({ plugin: 'board', key: 'tasks' } as const, [])
 const ownerTasks = atom({ plugin: 'board', key: 'ownerTasks' } as const, [])
@@ -19,8 +20,7 @@ const activity = atom({ plugin: 'board', key: 'activity' } as const, [])
 
 /** The holder as another agent reads it. */
 function holderName(rows: readonly BoardActivity[], holderId: string): string {
-  if (holderId === MAIN) return 'the main session'
-  return rows.find(a => a.agentId === holderId)?.label ?? holderId
+  return agentLabel(rows, holderId) ?? 'the main session'
 }
 
 /** Who holds the task once it moves to `status`: in_progress claims it, blocked keeps the claim, the rest release it. */

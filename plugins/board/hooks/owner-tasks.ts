@@ -2,11 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { BoardActivity, BoardDelivery, BoardOwnerChange, BoardOwnerTask, BoardTaskStatus } from '../types'
+import { agentLabel } from './activity'
 import { editItems, progressText } from './checklist'
-import { agentLabel, deliver, flash, notPosterText, openBoard, tellPoster } from './decisions'
+import { deliver, flash, notPosterText, openBoard, tellPoster } from './decisions'
 import { bind, nextId, retireIds, save } from './persistence'
 import type { SetOwnerTaskInput } from './tools'
 
+// Declared again in each file that uses them, since the loader refuses an imported atom (register.tsx has the rule).
 const ownerTasks = atom({ plugin: 'board', key: 'ownerTasks' } as const, [])
 const activity = atom({ plugin: 'board', key: 'activity' } as const, [])
 

@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { AgentInfo } from 'claude-code'
 
 import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, complete, drawEmptyBeneath, engine, mountPane, resultText, saved, step } from './test-support'
@@ -313,7 +314,7 @@ test('Send now starts the idle main session once for the answers waiting on it, 
   await pane.press({ key: 'send-now' })
   await pane.press({ key: 'send-now' })
   expect(submitted.length).toBe(1)
-  expect(submitted[0]).toContain('[board] The owner answered on the board')
+  expect(submitted[0]).toBe('[board] The owner answered on the board. Act on the [board] messages above about D1, D2.')
   expect(toasts.at(-1)).toContain('Already sent')
 
   // The turn's first request carries the answers, so nothing is left to send.
@@ -326,13 +327,27 @@ test('Send now starts the idle main session once for the answers waiting on it, 
   await pane.press({ key: 'D3-option-0' })
   await pane.press({ key: 'send-now' })
   expect(submitted.length).toBe(2)
+  expect(submitted[1]).toContain('about D3.')
 })
 
-test('Send now is not offered while the main session is working', async ($, on) => {
-  engine(on)
-  await $.tool.call(ASK as never)
-  await step($)
-  const pane = await mountPane($)
-  await pane.press({ key: 'D1-option-0' })
-  expect(await pane.find({ key: 'send-now' })).toBeUndefined()
-})
+// Each brings the main session into a turn, whose next request carries the answers without a prompt.
+const MAIN_IN_TURN: Record<string, ($: Engine) => Promise<unknown>> = {
+  'once its turn has started': async $ => $.turn.start({ text: 'Tidy the parser', turnId: 't1' }),
+  'while it is working': async $ => step($),
+  'while a permission prompt holds it': async $ => {
+    await step($)
+    await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'rm -r build' } } as never)
+  },
+}
+
+for (const [when, enterTurn] of Object.entries(MAIN_IN_TURN)) {
+  test(`Send now is not offered to the main session ${when}`, async ($, on) => {
+    engine(on)
+    await $.tool.call(ASK as never)
+    await enterTurn($)
+    const pane = await mountPane($)
+    await pane.press({ key: 'D1-option-0' })
+    expect(await pane.find({ type: 'Text', text: 'D1 → Skip' })).toBeDefined()
+    expect(await pane.find({ key: 'send-now' })).toBeUndefined()
+  })
+}

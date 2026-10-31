@@ -6,7 +6,8 @@ import { bind, save } from './persistence'
 
 export const MAIN = 'main'
 
-const tasks = atom({ plugin: 'board', key: 'tasks' } as const, [])
+// Declared again in each file that uses them, since the loader refuses an imported atom (register.tsx has the rule).
+const tasks =atom({ plugin: 'board', key: 'tasks' } as const, [])
 const activity = atom({ plugin: 'board', key: 'activity' } as const, [])
 const now = atom({ plugin: 'board', key: 'now' } as const, 0)
 
@@ -40,6 +41,17 @@ export async function setActivity($: EngineInterface, agentId: string, patch: Pa
     const next = { ...base, workedMsSinceStatus, ...patch, since: isNewState ? at : base.since }
     return existing ? all.map(a => (a.agentId === agentId ? next : a)) : [...all, next]
   })
+}
+
+/** The loop's name as the pane shows it; undefined for the main session, which each caller names in its own words. */
+export function agentLabel(rows: readonly BoardActivity[], agentId: string | undefined): string | undefined {
+  if (agentId === undefined || agentId === MAIN) return undefined
+  return rows.find(a => a.agentId === agentId)?.label ?? agentId
+}
+
+/** A new status starts its staleness count again. */
+export async function setStatus($: EngineInterface, agentId: string, status: string) {
+  await setActivity($, agentId, { status, statusAt: await $.clock.now(), callsSinceStatus: 0, workedMsSinceStatus: 0, isNudged: false })
 }
 
 /** Rows kept across a hot reload may predate the current row shape: fill what they lack, keep their status. */
@@ -200,7 +212,7 @@ export async function resetChecklistCount($: EngineInterface, agentId: string) {
 
 // Runs on the clock: names agents by their labels, drops the ones that have gone, and moves `now`,
 // which redraws every elapsed time.
-export async function tick($: EngineInterface) {
+export async function refreshFromAgentList($: EngineInterface) {
   const agents = await $.agent.list()
   // A spawn not yet listed when its Agent call returned is started here instead.
   await applyStarts($, agents)

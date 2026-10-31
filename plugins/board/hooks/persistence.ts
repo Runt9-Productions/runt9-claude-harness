@@ -3,6 +3,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { BoardDecision, BoardOwnerTask, BoardTask } from '../types'
 
+// Declared again in each file that uses them, since the loader refuses an imported atom (register.tsx has the rule).
 const decisions = atom({ plugin: 'board', key: 'decisions' } as const, [])
 const tasks = atom({ plugin: 'board', key: 'tasks' } as const, [])
 const ownerTasks = atom({ plugin: 'board', key: 'ownerTasks' } as const, [])
@@ -102,12 +103,7 @@ export async function bind($: EngineInterface) {
   // Unset after a hot reload, when the state still belongs to this session. A change of id within one
   // process means another conversation, whose board is its own or one it carried over.
   if (boundSessionId !== undefined) {
-    await update($, decisions, () => [])
-    await update($, tasks, () => [])
-    await update($, ownerTasks, () => [])
-    await update($, lastTaskNumber, () => 0)
-    await update($, lastDecisionNumber, () => 0)
-    await update($, lastOwnerTaskNumber, () => 0)
+    await writeBoard($, {})
     recentToolUseIds = []
   }
   boundSessionId = id
@@ -136,13 +132,18 @@ async function restore($: EngineInterface) {
   const own = await loadSaved($, ownKey)
   const saved = isEmpty(own) ? await findMovedBoard($, ownKey) : own
   if (!saved || isEmpty(saved)) return
-  await update($, decisions, () => saved.decisions ?? [])
-  await update($, tasks, () => saved.tasks ?? [])
-  await update($, ownerTasks, () => saved.ownerTasks ?? [])
-  await update($, lastTaskNumber, () => saved.lastTaskNumber ?? 0)
-  await update($, lastDecisionNumber, () => saved.lastDecisionNumber ?? 0)
-  await update($, lastOwnerTaskNumber, () => saved.lastOwnerTaskNumber ?? 0)
+  await writeBoard($, saved)
   await save($)
+}
+
+/** Replaces the board's state with `board`, a list or counter it lacks starting empty. */
+async function writeBoard($: EngineInterface, board: SavedBoard) {
+  await update($, decisions, () => board.decisions ?? [])
+  await update($, tasks, () => board.tasks ?? [])
+  await update($, ownerTasks, () => board.ownerTasks ?? [])
+  await update($, lastTaskNumber, () => board.lastTaskNumber ?? 0)
+  await update($, lastDecisionNumber, () => board.lastDecisionNumber ?? 0)
+  await update($, lastOwnerTaskNumber, () => board.lastOwnerTaskNumber ?? 0)
 }
 
 export async function prune($: EngineInterface) {
@@ -157,7 +158,9 @@ export async function prune($: EngineInterface) {
 
 type IdPrefix = 'T' | 'D' | 'O'
 
-const idNumber = (id: string) => Number(id.slice(1)) || 0
+function idNumber(id: string): number {
+  return Number(id.slice(1)) || 0
+}
 
 /**
  * The next id with this prefix, from that prefix's own counter. Claude and the owner refer to items by id, so one
