@@ -16,13 +16,12 @@ given and asks whether the tests over it are worth having.
 
 It runs in a forked context because the caller usually wrote the tests, and a verdict reached in the author's session
 inherits the author's view of them. Only your final message leaves the fork, so put the whole result in it. The fork
-runs in the foreground (`background: false`) because it breaks production code on purpose, and nothing else may read
-or build the tree until it has put the code back.
+runs in the foreground (`background: false`) because the reviewer edits the tests in the working tree.
 
 ## 1. Read the profile
 
-Read `.claude/test-review-profile.md`. If it does not exist, stop and say so, pointing at the template,
-`${CLAUDE_PLUGIN_ROOT}/skills/test-review/references/profile-template.md`.
+Read `.claude/test-review-profile.md`. If it does not exist, or has no "Batch runs" section, stop and say so,
+pointing at the template, `${CLAUDE_PLUGIN_ROOT}/skills/test-review/references/profile-template.md`.
 
 ## 2. Find the scope
 
@@ -57,19 +56,7 @@ judgment instead of its.
 A scoped file that matches no reference is still reviewed, and the report lists it as a gap. If no file matches any
 reference, the patterns are more likely wrong than the files; check them against the profile before going on.
 
-## 4. Check the tree
-
-List production files with uncommitted changes:
-
-```bash
-git status --porcelain -uall
-```
-
-Any entry that is neither a test file nor one of the profile's helpers is production. The reviewer breaks production
-code on purpose and restores it afterwards, and a file it is not told is dirty gets restored from git, which would
-destroy uncommitted work.
-
-## 5. Spawn the reviewer
+## 4. Spawn the reviewer
 
 Spawn one reviewer with `subagent_type: "test-review:test-reviewer"`, `run_in_background: false`, and without
 `model`. A plugin agent answers only to its namespaced name. Split the scope across more than one reviewer only when
@@ -80,13 +67,16 @@ The prompt holds only:
 - the scoped files;
 - the reference files they map to, and the profile's path;
 - for each test kind in scope, the run command and how to read its result, from the profile;
-- the dirty production files from step 4, listed as dirty, which the reviewer's Restoring section then backs up;
+- the batch command, with the kind filled in:
+  `python3 ${CLAUDE_PLUGIN_ROOT}/skills/test-review/scripts/run_breaks.py --kind '<kind>' --breaks <file> --out <dir> <tests>`,
+  where `<file>` and `<dir>` lie outside the repository and `<tests>` is what the kind's run command takes, as
+  paths from the repository root; `--help` gives the rest;
 - the rule: fix the tests, report production defects without fixing them, and leave production code exactly as it was
   found.
 
 Add nothing about what you expect it to find.
 
-## 6. Report
+## 5. Report
 
 Relay the reviewer's report whole, in the shape its Report section gives it; leave nothing out, a clean result's
 evidence included. Add the one thing only you know, the scoped files that matched no reference. Then run

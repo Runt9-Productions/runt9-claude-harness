@@ -16,6 +16,31 @@ Facts about this repository's tests that `/test-review` and its `test-review:tes
 
 Production code is every file that is neither a test nor a helper listed above.
 
+## Batch runs
+
+The reviewer's breaks run through the plugin's `run_breaks.py`, which reads this block: per kind, the command run in
+each copy of the tree (`{tests}` becomes the test files or plugin directory named) and the patterns that read one
+passing and one failing test line. `link` lists ignored paths a suite needs, linked into every copy.
+
+```toml
+link = ["node_modules"]
+
+[kinds.bats]
+run = ["bats", "{tests}"]
+pass = '^ok \d+ (?P<name>.+?)(?: # skip.*)?$'
+fail = '^not ok \d+ (?P<name>.+)$'
+
+[kinds."mod kit"]
+run = ["claude", "plugin", "test", "{tests}"]
+pass = '^\(pass\) (?P<name>.+?)(?: \[[\d.]+m?s\])?$'
+fail = '^\(fail\) (?P<name>.+?)(?: \[[\d.]+m?s\])?$'
+
+[kinds.pytest]
+run = ["python", "-m", "pytest", "-p", "no:cacheprovider", "-v", "{tests}"]
+pass = '^(?P<name>\S+::\S+) PASSED'
+fail = '^(?P<name>\S+::\S+) FAILED'
+```
+
 ## Checks on every scoped file
 
 - **It has tests.** bats passes a file with no tests in it, so count the per-test lines rather than trusting the exit

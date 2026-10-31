@@ -37,26 +37,31 @@ Judge each test against all four. They are independent: a test can pass three an
 
 ## Proof by forced failure
 
-Every verdict rests on a run, not on reading.
+Every verdict rests on a run, not on reading. Breaks never touch the checkout: the batch script the prompt names runs
+each one in its own copy of the tree, alongside one unbroken baseline run.
 
-1. Make the smallest change to production code that inverts the behaviour the test claims to check.
-2. Before running, write down which tests you expect to go red and which to stay green.
-3. Run the test and its neighbours, using the run command the prompt gives.
-4. Read the failure text. It should fail for the reason you broke, under a name that tells a reader what broke, show
-   the actual and expected values, and stop at the first failing assertion. The assertions after that one never ran,
-   so a red run proves only the first; break each later assertion on its own before counting the test as able to
-   fail on it.
-5. Confirm the run executed your change, not a cached or installed copy.
-6. When two breaks would interact, apply one at a time.
-7. Explain every green you expected to be red before moving on; an unexplained green is a test that cannot fail.
-8. When a break stays green because a second piece of production code enforces the same rule, report the double
+1. For each behaviour a test claims to check, choose the smallest change to production code that inverts it: an
+   exact `old` string that occurs once in its file, and the `new` text that replaces it.
+2. Write every break of a round to one JSON Lines file outside the repository, one object per line with `id`, `file`,
+   `old`, `new` and `expect`. `file` is the path from the repository root of a file git lists, never a symlink or an
+   ignored file. `expect` lists the tests you predict go red, named as the run's result lines name them.
+   The prediction is written before the run and never edited after it.
+3. Run the whole file at once with the command the prompt gives. Stdout lists only the breaks whose result differed
+   from `expect` and the runs that errored; the full table and one log per run are in the output directory.
+4. Read the failure text of the red runs a verdict rests on, from their logs. It should fail for the reason you broke,
+   under a name that tells a reader what broke, show the actual and expected values, and stop at the first failing
+   assertion. The assertions after that one never ran, so a red run proves only the first; break each later
+   assertion on its own in the next round before counting the test as able to fail on it.
+5. Explain every surprise before moving on; an unexplained green is a test that cannot fail.
+6. When a break stays green because a second piece of production code enforces the same rule, report the double
    enforcement as a production finding.
+7. After fixing the tests, run the same break file again, with breaks added for anything the fixes now assert, so each
+   verdict is proved against the tests as they will ship.
 
-## Restoring
+## Turns
 
-Restore production code after every experiment. For a file that was clean, restore it from git. For a file the prompt
-lists as dirty, copy it aside before the first change and restore it from that copy. Check the result with
-`git status` and `git diff` after each restore; intending to have restored it does not count.
+Every turn re-reads the whole context, so put independent tool calls in one turn: read the source and test files you
+need together, make independent test edits together, and read the logs you need in one call.
 
 ## Reading
 

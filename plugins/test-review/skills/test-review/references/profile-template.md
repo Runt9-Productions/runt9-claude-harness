@@ -21,6 +21,22 @@ like in the output, since some runners exit 0 with nothing run. The row below is
 
 Production code is every file that is neither a test nor a helper listed above.
 
+## Batch runs
+
+<!-- Read by the plugin's run_breaks.py, which runs the reviewer's breaks. Per kind: the command it runs in each copy
+of the tree, where the item "{tests}" becomes the files the reviewer names, and the patterns that read one passing
+and one failing test line, each with a (?P<name>...) group. `link` lists ignored paths a suite needs, such as
+`node_modules`, linked into every copy. The script runs no command this block does not name. -->
+
+```toml
+link = []
+
+[kinds.pytest]
+run = ["python", "-m", "pytest", "-v", "{tests}"]
+pass = '^(?P<name>\S+::\S+) PASSED'
+fail = '^(?P<name>\S+::\S+) FAILED'
+```
+
 ## Checks on every scoped file
 
 <!-- Optional. Checks beyond the four criteria that every test file here must pass: that CI runs it, the lint a fix
