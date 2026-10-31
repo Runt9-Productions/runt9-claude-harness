@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks an issue or pull request body before it is posted: the pattern scan, then the public-leak review, both under
+# Checks an issue, pull request or review body before it is posted: the pattern scan, then the public-leak review, both under
 # the repository's <trusted-ref> (its default branch, as last fetched).
 #
 #   review-text.sh <file> <repo> <trusted-ref>

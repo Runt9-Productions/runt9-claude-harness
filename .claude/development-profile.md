@@ -128,8 +128,9 @@ pre-push gate trusts it, so a build never writes to it.
 - Posting: the bot posts the result as one comment-type review from the payload the skill wrote. Run the second
   command only when GitHub rejects the first, which it does for the whole review when one comment misses the diff. It
   posts the report as the body alone, cut below GitHub's 65,536-character limit for a review body. No tooling posts
-  images; evidence is text. Before either, run `review.md`, which holds every finding in full, through
-  `review-text.sh` (section 1): the reviewers load the user's own `CLAUDE.md` and memory, so a finding can quote them.
+  images; evidence is text. Before either, run what would be posted through `review-text.sh` (section 1): the payload's
+  text (`jq -r '.body, .comments[].body'`) and `review.md` in one file. The reviewers load the user's own `CLAUDE.md`
+  and memory, so a finding can quote them; on a hit, edit both files and check again.
 
   ```
   jq '.event = "COMMENT"' <run dir>/review-payload.json \

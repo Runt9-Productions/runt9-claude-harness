@@ -12,9 +12,16 @@ your own settings, not here.
 
 The three name credential stores in the form each layer reads, so their lists differ: `Read` deny rules take globs
 anywhere on disk, the sandbox takes paths, and the auto-mode classifier reads prose. The
-sandbox list leaves out `~/.claude/.credentials.json`, which a nested `claude` reads to log in. The `Read` rules match
-by name, so they also refuse a `.env` of public defaults, a `.env.example` and a public certificate in a `.pem` file; `.npmrc` and
-`gradle.properties` are denied only in the home directory, since a project keeps its own as plain configuration.
+sandbox list leaves out `~/.claude/.credentials.json`, which a nested `claude` reads to log in.
+
+A `Read` deny rule refuses more than the Read tool: Edit and Write on the same path, file commands such as `cat` and
+`sed`, and, since its paths are merged into the sandbox's `denyRead`, every sandboxed command (on macOS, globs
+included). So the rules name stores by name, not by extension: a `.pem` glob would hide CA bundles from sandboxed
+commands, and `.env.*` would block editing a `.env.example`. Of the `.env` variants only `.env` and the `*.local`
+files, which frameworks keep out of git for secrets, are denied. `.npmrc` and `gradle.properties` are denied only in
+the home directory, since a project keeps its own as plain configuration. Keys and certificates elsewhere are left to
+the auto-mode rule, which judges a file by its purpose. A deny rule cannot be carved back out by an allow rule, and installing
+`settings:guardrails-stores` again re-adds one you removed by hand.
 
 ## Auto mode
 

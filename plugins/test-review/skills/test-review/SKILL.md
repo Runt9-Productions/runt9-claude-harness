@@ -15,7 +15,9 @@ This complements a code review, which looks for defects in production code; this
 given and asks whether the tests over it are worth having.
 
 It runs in a forked context because the caller usually wrote the tests, and a verdict reached in the author's session
-inherits the author's view of them. Only your final message leaves the fork, so put the whole result in it.
+inherits the author's view of them. Only your final message leaves the fork, so put the whole result in it. The fork
+runs in the foreground (`background: false`) because it breaks production code on purpose, and nothing else may read
+or build the tree until it has put the code back.
 
 ## 1. Read the profile
 
