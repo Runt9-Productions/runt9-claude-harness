@@ -23,7 +23,10 @@ sources:
 > 2.1.316, with the file changed from outside the session between commands, and how soon a change applies below 5 s
 > was not measured. The three lines after it, on which local file applies outside a repository-root start and on
 > `autoAllowBashIfSandboxed`, were measured on 2.1.316 in `claude -p` sessions in scratch repositories, worktrees and
-> subdirectories, one or two sessions per case, with no sandbox key in user or project settings. Not covered: macOS
+> subdirectories, one or two sessions per case, with no sandbox key in user or project settings. On 2026-10-31 the note
+> was re-checked against the auto-mode fragment's added `allow` entry (marking a pull request the session opened ready
+> for review): no claim rests on which entries that list holds, and every other claim was carried forward without a
+> re-check. Not covered: macOS
 > and Windows sandboxing, the Read tool's path through auto mode (only the documentation's account), pushes over HTTPS
 > from inside the sandbox, and any JVM build run end to end in the sandbox.
 
