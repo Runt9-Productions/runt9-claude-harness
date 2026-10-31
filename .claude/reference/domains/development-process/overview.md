@@ -31,7 +31,7 @@ filter to CI. Each trap here produces a pull request that looks finished and eit
 - [decision] Plugins with a contract between them bump together in one pull request and name each other in `dependencies` (owner, 2026-10-24): both sides of a contract release together.
 - [question] Whether `dependencies` can constrain versions. Not verified; the plugin manifest docs would answer it.
 - [decision] The bot keeps no `workflows` permission, so a branch that changes `.github/workflows/` is pushed by the owner (owner, 2026-10-25): the owner keeps control of what runs in GitHub Actions. Opening the pull request, labels and replies stay with the bot.
-- [decision] Code review and test review run locally, never in a GitHub workflow (owner, 2026-10-30): a workflow review holds the owner's Claude token in a job that runs pull request code.
+- [decision] Code review and test review run locally, never in a GitHub workflow (owner, 2026-10-30): CI saved little over a local run and cost much in workarounds, and a reviewer that needs web search and fetch cannot run there.
 - [decision] CI runs pytest and ruff at the exact versions `requirements-dev.txt` pins, installed as wheels only (owner, 2026-10-26): installing then runs no package's build code.
 - [trap] CI's pytest reads no config file (`-c /dev/null`), so only default discovery applies: a test file not named `test_*.py` never runs, and nothing fails while some other test still runs #silent-failure
 - [decision] Docs, skills and notes give each rule its structure and a one-line reason, never the history behind it (owner, 2026-10-26): the structure is what a reader needs.
