@@ -38,7 +38,7 @@ const GUIDANCE = {
     'The board mod is loaded. Post each decision whose answer changes what you do next with ' +
     'mcp__board__ask_decision (load it through ToolSearch), one call per decision even when several are pending, ' +
     'instead of asking it in a reply or with AskUserQuestion, since the board lets the owner add a note to an ' +
-    'answer. A page your instructions ask for, such as a plan or a question page, still goes where they say. Then ' +
+    'answer. Output your instructions send to a particular place, such as a plan, still goes there. Then ' +
     'keep working on whatever does not depend on the answers. When you need the owner to do something rather than choose, such as ' +
     're-review PRs or try a change by hand, post it with mcp__board__set_owner_task. Track your own multi-step work ' +
     'with mcp__board__set_task, giving it a checklist of its phases to tick as you go, and keep a one-line ' +
