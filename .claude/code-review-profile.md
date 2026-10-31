@@ -43,6 +43,7 @@ Routing, added when the diff matches:
 |---|---|
 | `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `harness/`; `package.json`; `package-lock.json`; `requirements-dev.txt`; `ruff.toml`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
 | `mod-contract` | `plugins/*/hooks/*.ts`; any `*.tsx`; anything under `plugins/*/types/`; a change to `dependencies` or `types` in a `plugin.json` |
+| `claude-code-expert` | anything under `plugins/` or `harness/` other than tests; `.claude/agents/`; `CLAUDE.md`; `bootstrap.py`; any settings, hook, skill, agent or rule file, or prose an agent reads as instructions |
 
 Deep pass: `principal-review`. An open question the panel could not settle goes to it, scoped to that question.
 
