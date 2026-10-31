@@ -11,6 +11,8 @@ declare module 'claude-code' {
       isReportOwed: boolean
       /** Whether a fill at handoff's ceiling hands off: false from away's handoff until the fill drops below it. */
       isHandoffArmed: boolean
+      /** The decision id posted for each refused permission prompt this session, by a JSON array of the loop, the tool and the input. */
+      postedRefusals: Record<string, string>
       /** The auto mode denials posted this session, each a JSON array of the loop, the tool and the category. */
       postedDenials: string[]
     }

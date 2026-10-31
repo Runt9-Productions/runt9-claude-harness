@@ -23,12 +23,21 @@ Rulings for building the `away` plugin. Facts about the sandbox and protected pa
 - [decision] The mod turns the sandbox on by writing `sandbox.enabled: true` into the session root's
   `.claude/settings.local.json` and puts back the value it found on the return to present; the rest of the sandbox
   config comes from the user's settings, since a local key overrides only that key (owner, 2026-10-31)
+- [decision] Going away also writes `sandbox.autoAllowBashIfSandboxed: false` and puts back the value it found on the
+  return, since Claude Code defaults it to `true` and a sandboxed command would then run without the prompt away
+  refuses (owner, 2026-10-31)
 - [decision] Edit and Write calls under `~/.claude` are left to Claude Code's protected-path handling (prompted in
   default and acceptEdits, so refused while away; sent to the classifier in auto mode), and the README states that gap
   per permission mode; the mod adds no guard or deny rules (owner, 2026-10-31)
 - [decision] Sessions sharing one checkout share its local settings file, so the mod tracks per root which sessions
   hold the sandbox on, restores the earlier value only when none does, and a `/mode present` typed there clears holders
   left by a session that died away (owner, 2026-10-31, with the spec)
+- [decision] An away session does not re-check its hold or the file's sandbox values while away; the README states
+  that a `/mode present` typed in another session there, or an Edit or Write to the file, leaves it unsandboxed until
+  it leaves away (owner, 2026-10-31)
+- [decision] Away keeps writing the session root's local file, which takes effect in a worktree or subdirectory start
+  too, and on going away toasts when the repository root's local file, `--settings` or managed settings set either
+  sandbox key the other way, since that value wins and the sandbox would stay off unannounced (owner, 2026-10-31)
 - [decision] A session records which root's sandbox it holds and releases it there, so a `/cd` or worktree move while
   away does not leave the old root sandboxed (owner, 2026-10-31)
 - [decision] An away session whose root differs from its recorded one moves its hold to the new root at the main

