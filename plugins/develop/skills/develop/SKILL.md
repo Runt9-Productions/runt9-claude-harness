@@ -58,6 +58,11 @@ step number, start there; see "Starting mid-process".
   Without both, ask before each push. A standing grant is safe only when something outside the model rejects a bad
   push. Commit identity and trailer lines come from section 10. Merging is never this skill's. The pull request
   leaves draft when section 10 says, and on the owner's explicit approval where it says nothing.
+- **Watch CI after every push.** Each push, in any step, is followed by the CI watch section 6 names, given the
+  pushed commit and started as a background command whose time limit exceeds section 6's CI duration, so the session
+  is notified when CI finishes rather than relying on remembering to look. With none named, ask the owner for one. A
+  watch speaks only for the commit it was given. The pull request leaves draft only when CI passed on its head, and a
+  head nobody watched, such as one the owner pushed, gets a watch first.
 - **Effort, never duration.** Size work in files, lines and complexity, and tell every briefed teammate the same; a
   model's time figure has no grounding. A ticket type that implies a duration is the owner's choice.
 - **Paste text that needs approval.** A ticket body, a pull request body or user-facing copy is shown in full, never
@@ -167,8 +172,7 @@ separate issue.
 ### 6. Push and open a draft pull request
 
 Run section 6's pre-push step. Check how far the branch lags its base, and merge the base in if section 2 asks for
-that. Push, then open a draft pull request against the base with its body read from a file. Follow CI, trusting only
-the runs for the newest head.
+that. Push, then open a draft pull request against the base with its body read from a file, and start the CI watch.
 
 ### 7. Test review, then panel review
 
