@@ -20,7 +20,7 @@ away. It ends when the plugin merges with its README's mode table backed by kit 
 
 ## Where it stands
 
-- [status] Spec approved (D3); set-up next: issue text, handoff, then the build session in a worktree.
+- [status] Built and verified live; in review on its pull request.
 
 ## Goal
 
