@@ -40,6 +40,11 @@ belong in an agent definition.
 
 ### Roles
 
+- **The lead decides what a change does, and a worker builds it, however small.** Building costs the lead its
+  reading (source files, types, test output) more than its edits, so a change of a few lines is no reason to make it
+  in the lead. Fix rounds after a review, and changes the user asks for on a pull request, go to a worker the same
+  way. Before reading a file in order to change it, the lead asks whether the change is decided; if it is, it briefs
+  a worker instead.
 - **A worker never judges its own work.** It reads its own result as the result it meant to produce.
 - **A runner agent, a teammate whose only job is to run builds and tests and report their output, is for builds the
   lead would otherwise run, or for several workers contending for one build directory.** Never put one between a

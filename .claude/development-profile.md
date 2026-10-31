@@ -121,6 +121,11 @@ pre-push gate trusts it, so a build never writes to it.
 
 - Panel: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
   `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run locally.
+- When: the test review and the code review each run once per pull request, when it is first pushed: the test review,
+  then the code review over the head that carries its fixes. A later push, after a fix round or the owner's review
+  round, gets CI only; say what changed and the owner decides whether it gets another review, since a review costs far
+  more than a CI run and a fix round rarely needs a whole panel. A trivial pull request, such as one config line or a
+  one-line doc fix, gets neither review and opens ready.
 - Test review: `.claude/test-review-profile.md` exists. Run `/test-review` in the pull request's worktree before the
   code review, and commit and push the fixes wanted, so the panel reviews the tests as they will merge. Skipped when
   the pull request changes no test, or its test changes are trivial enough for the owner to check at a glance.
@@ -140,7 +145,7 @@ pre-push gate trusts it, so a build never writes to it.
   `--strict-mcp-config` keeps the user's MCP servers out of a review that is posted publicly. Before posting, check
   `jq '{is_error, permission_denials}' <run log>`: a blocked call is skipped and the report still looks whole. The
   report and payload land in a run directory under the scratch directory. A draft is reviewed like any other pull
-  request. A trivial change the owner can check at a glance skips both reviews and opens ready.
+  request.
 - Posting: the bot posts the result as one comment-type review from the payload the skill wrote. Run the second
   command only when GitHub rejects the first, which it does for the whole review when one comment misses the diff. It
   posts the report as the body alone, cut below GitHub's 65,536-character limit for a review body. No tooling posts
@@ -155,11 +160,16 @@ pre-push gate trusts it, so a build never writes to it.
     -f body="$(head -c 60000 <run dir>/review.md)"
   ```
 
-- Findings: the merge rule is CI green and no open Critical or High. A Normal is optional and may be declined on its
-  thread with a one-line reason (`.claude/code-review-profile.md`, "Severity calibration").
+- Findings: the merge rule is CI green and no open Critical or High. A fixed Critical or High needs CI on the new
+  head, not another review round. A Normal is optional: fix it in the same round, decline it on its thread with a
+  one-line reason (`.claude/code-review-profile.md`, "Severity calibration"), or defer it to a `from-review` issue
+  (section 1).
 - External reviewer: none.
-- Reply text: check each with `scan.sh --text <file> . origin/main` from the installed harness before posting.
-  Pull request bodies go through `review-text.sh`, as in section 1.
+- Public text: pull request bodies, reviewer guides and replies say what a change does and why in terms of the
+  behaviour it targets, never where a rule came from: not the machine it was measured on, the owner's own setup or
+  tools, or what was left out for them, since naming what was kept out reveals it. The scans catch identifiers and
+  secrets, not such descriptions. Check a pull request body or a reviewer guide with `review-text.sh` (section 1), and
+  a reply with `scan.sh --text <file> . origin/main` from the installed harness, before posting.
 
 ## 10. Commit and push
 
@@ -179,9 +189,9 @@ pre-push gate trusts it, so a build never writes to it.
 - With only the remote half present there is no standing grant: commit, push and open the pull request when the owner
   says so at the end of the task, or for the whole run where the owner has granted that.
 - Pull request: `gh pr create --draft --base main --body-file <file>`, then the test review and the code review
-  (section 9). It leaves draft with `gh pr ready <n>`
-  once the review has run, its Critical and High findings are fixed and pushed, every thread is
-  answered and the fixed ones resolved, and the reviewer guide is posted. The owner squash-merges.
+  (section 9; a trivial pull request skips both and the draft). It leaves draft with `gh pr ready <n>` once the
+  review has run, its Critical and High findings are fixed and pushed, every thread is answered and resolved as the
+  develop skill's step 8 says, and the reviewer guide is posted. The owner squash-merges.
 
 ## 11. Hand-off
 

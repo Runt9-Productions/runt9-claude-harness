@@ -31,7 +31,7 @@ worktree. The language-server trap returns a clean "not found" rather than an er
 - [trap] A session runs one language server, rooted where it was first started. Once the lead has started it in the main checkout, a worktree agent's queries resolve against the main checkout and a worktree-only symbol comes back "No definition found." with no error #silent-failure #measured
 - [fact] When the worktree agent makes the first language-server call, or the session itself was started with `--worktree`, the server resolves the worktree's own files #measured
 - [trap] The `LSP` tool prints paths relative to the caller's directory, so an answer pointing into the main checkout shows only as an absolute path #measured
-- [fact] The delegation skill has a worktree agent confirm its own new symbols with the build or a text search, never the language server (`SKILL.md:83`).
+- [fact] The delegation skill has a worktree agent confirm its own new symbols with the build or a text search, never the language server (`SKILL.md:88`).
 
 ## Relations
 

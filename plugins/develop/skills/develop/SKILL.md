@@ -196,7 +196,11 @@ code. Decline a finding with a one-line reason on its thread when the case it gu
 the added code costs more than it protects. The target is clean, defensible code, not perfection.
 
 One engineer handles the unambiguous findings and CI failures. Anything that needs judgment becomes a decision, and
-is flagged when it reverses something the owner was told earlier. Answer every thread and resolve the fixed ones.
+is flagged when it reverses something the owner was told earlier.
+
+After each fix push, answer the threads it settled and resolve them, rather than in a batch at the end, where they
+pile up unanswered: a fix names the fix, a deferral names where the finding went, a decline gives its reason, and a
+finding the owner ruled out quotes the ruling. A thread still waiting on a decision stays open.
 
 Before pushing, run the comment sweep: spawn `develop:comment-sweeper` unless section 5 names a substitute, and move
 any reviewer justification it hands back into `reviewer-notes.md`. Section 5's doc writer brings the docs up to date
@@ -231,7 +235,8 @@ notes often exposes a behaviour change nobody decided on; that becomes a decisio
 ### 12. Review loop
 
 Classify each incoming comment as a fix, an answer or a decision. An engineer makes the fixes. A design change sends
-the work back through steps 4 to 8, with a new panel. Every push in this step refreshes the step 10 notes and
+the work back through steps 4 to 8, except that step 7 runs again only when the owner, asked, wants a new review,
+since a review costs far more than a CI run. Every push in this step refreshes the step 10 notes and
 evidence it made stale. When the host rejects a review because the owner has an unsubmitted one, ask them to submit
 it. The pull request still leaves draft only as the standing rules say.
 

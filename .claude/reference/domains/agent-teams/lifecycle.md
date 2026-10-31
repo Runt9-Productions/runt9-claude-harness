@@ -3,7 +3,7 @@ title: Teammate Lifecycle
 type: note
 permalink: agent-teams/lifecycle
 tags: [agent-teams, teammates, forked-skills, delegation]
-verified: 2026-10-29
+verified: 2026-10-31
 coverage: partial
 measured_on: "Claude Code 2.1.312"
 sources:
@@ -26,10 +26,10 @@ interactive sessions differ on three of these behaviours, so a headless run does
 - [fact] Interactive, the lead's idle notification carries the teammate's final turn text in its `result` field, so a teammate that also sends the same report with `SendMessage` lands it twice #measured (interactive, 2026-10-30)
 - [fact] A teammate's `Skill` call on a `context: fork` skill returns only "launched (forked execution, running in the background)"; the fork's result reaches the lead as a task notification and never the teammate #measured (interactive)
 - [trap] In `-p` the same call returns the fork's result to the teammate's own `Skill` call, and the lead model gets no notification for the fork, though the stream-json still emits its task events #measured (`-p`)
-- [fact] The delegation skill tells the lead to pass a forked skill's result on to the teammate that needs it (`SKILL.md:109`), and lens-review says its report goes to the lead even when a teammate invoked it (`SKILL.md:25`); both rest on the interactive result.
+- [fact] The delegation skill tells the lead to pass a forked skill's result on to the teammate that needs it (`SKILL.md:114`), and lens-review says its report goes to the lead even when a teammate invoked it (`SKILL.md:25`); both rest on the interactive result.
 - [trap] A background command finishing does not wake a teammate that ended its turn: it ran again only when the lead messaged it, 65 s after the command finished #silent-failure #measured (interactive)
 - [fact] In `-p`, with the lead kept alive, the same completion restarted the teammate under its own task id and it read the output #measured (`-p`)
-- [fact] The delegation skill has teammates run builds in the foreground for that reason (`SKILL.md:93`).
+- [fact] The delegation skill has teammates run builds in the foreground for that reason (`SKILL.md:98`).
 - [fact] `ListAgents` and `TaskStop` are in the tool list with Agent Teams on and off alike, and there is no `TeamCreate` #measured (`-p`, the session's `init` tool list)
 - [fact] `TaskStop` stops a teammate at once, including the `Bash` call it has in flight #measured (`-p`, teams on and off)
 - [trap] A shutdown request is processed only when the teammate's turn ends: it ran its remaining four steps, ended its turn, then approved #measured (interactive)
