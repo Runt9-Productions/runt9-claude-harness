@@ -20,7 +20,7 @@ away. It ends when the plugin merges with its README's mode table backed by kit 
 
 ## Where it stands
 
-- [status] Built and verified live; its draft pull request (#80) is fixing the panel review's findings.
+- [status] Built, verified live and reviewed; its draft pull request (#80) waits on the owner's review.
 
 ## Goal
 

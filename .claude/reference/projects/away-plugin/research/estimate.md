@@ -53,3 +53,10 @@ estimate, and unlike handoff it drives two other plugins, so its tests stand in 
 
 - That the engine calls the mode table needs behave on 2.1.316 as handoff's do; tests will show drift. Up to 20% more
   test lines if the kit's timer handling differs from handoff's use of it.
+## Actual
+
+28 files against `main`. Away itself: 929 production lines of TypeScript in four modules (`register.tsx`,
+`board-posts.ts`, `sandbox-hold.ts`, `settings-file.ts`) plus 31 of config and types, 836 test lines, and a 151-line
+README. Production ran about 30% over the high end, and tests about 50% over. The estimate missed that the sandbox
+needed a second key, a check of the settings sources above the local file and the deletion of a file away creates.
+It also missed the knowledge base notes and the develop skill change that the branch carried.

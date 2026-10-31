@@ -11,7 +11,7 @@ tags:
 
 ## Status
 
-- **Live item:** step 8, fix the panel review's findings on draft pull request #80
+- **Live item:** step 12, the owner's review of draft pull request #80
 - **How far along:** tasks 01 to 04 committed and verified; panel review done, its findings being fixed
 - **Blocked on:** nothing
 - **Last moved:** 2026-10-31
