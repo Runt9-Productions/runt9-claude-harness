@@ -13,7 +13,8 @@ Model: `opus` with `effort: high` for a reviewer that judges whether code is cor
 there ships. `sonnet` with `effort: medium` for a pattern pass, one that checks the diff against lists in the profile
 and confirms each hit with one read, since its work is lookup, not judgment.
 
-`disallowedTools` keeps a reviewer from changing what it reviews. The reviewer brief arrives at the top of every
+`disallowedTools` takes away the file-editing tools, but Bash stays, so a reviewer can still change the tree through
+a shell command; the reviewer brief tells it not to. The brief arrives at the top of every
 prompt the skill sends, so this file does not point at it. -->
 
 # <Reviewer name>

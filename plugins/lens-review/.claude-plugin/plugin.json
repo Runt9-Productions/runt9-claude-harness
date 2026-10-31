@@ -1,6 +1,6 @@
 {
   "name": "lens-review",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Runs a repository's own panel of reviewer agents over a diff, merges their findings into one graded report and delivers it where the repository's profile says",
   "author": {
     "name": "Runt9 Productions"

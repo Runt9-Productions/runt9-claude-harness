@@ -21,7 +21,15 @@
       "Read(//**/*.keytab)",
       "Read(//**/*.keystore)",
       "Read(//**/*.truststore)",
-      "Read(//**/.env)"
+      "Read(//**/.env)",
+      "Read(//**/.env.*)",
+      "Read(//**/*.pem)",
+      "Read(//**/*.key)",
+      "Read(~/.ssh/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.kube/**)",
+      "Read(~/.npmrc)",
+      "Read(~/.gradle/gradle.properties)"
     ]
   }
 }

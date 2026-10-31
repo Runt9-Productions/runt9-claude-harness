@@ -12,7 +12,9 @@ your own settings, not here.
 
 The three name credential stores in the form each layer reads, so their lists differ: `Read` deny rules take globs
 anywhere on disk, the sandbox takes paths, and the auto-mode classifier reads prose. The
-sandbox list leaves out `~/.claude/.credentials.json`, which a nested `claude` reads to log in.
+sandbox list leaves out `~/.claude/.credentials.json`, which a nested `claude` reads to log in. The `Read` rules match
+by name, so they also refuse a `.env` of public defaults, a `.env.example` and a public certificate in a `.pem` file; `.npmrc` and
+`gradle.properties` are denied only in the home directory, since a project keeps its own as plain configuration.
 
 ## Auto mode
 

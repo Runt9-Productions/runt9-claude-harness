@@ -3,6 +3,7 @@ name: test-review
 description: Judges whether existing tests earn their place (each name claims only what it asserts, the scenario can really happen, a wrong implementation would fail it, no other test already catches the same defect), proves each verdict by breaking the code under test, fixes the tests and reports what changed. Use for "/test-review", "review my tests", "are these tests any good", "are these tests meaningful", "do we have too many tests", "are any of these redundant".
 argument-hint: "[<test file or directory>...]"
 context: fork
+background: false
 allowed-tools: Bash, Read, Agent
 ---
 
