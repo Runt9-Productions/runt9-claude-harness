@@ -15,7 +15,7 @@ source copies of what moved.
 
 ## Where it stands
 
-- [status] Steps 01 to 08 are merged, 07 without its judge mod, which is tabled. 09 is under way: board and handoff are merged, away is in progress and context-budget is dropped. 10's pieces in this repository are filed as issues.
+- [status] Steps 01 to 08 are merged; 09 is under way.
 
 ## Documents
 

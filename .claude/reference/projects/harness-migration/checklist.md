@@ -31,8 +31,8 @@ same process. 04 and 05 stack on 03: 04 adds a bootstrap component, and 05 needs
 - [x] 04 Style-guide skills
 - [x] 05 reference-kb plugin and this repository's knowledge base
 - [x] 06 Delegation and the dev-process plugins, shipped as four pull requests
-- [x] 07 Guardrails, plus bootstrap's settings merge: the settings merge with the credential-store deny list (#36), and the auto-mode rules with a baseline sandbox (#47); the judge mod is tabled
-- [x] 08 CLAUDE.md template and fragments: the fragment install (#32), the template with the working-agreement, voice and reasoning fragments (#34), and the security fragment (#70)
-- [ ] 09 board (#54) and handoff (#53), merged; away (#67); context-budget dropped
-- [ ] 10 no-progress-reminder (#74) and the GitHub App identity component (#75); of the machine-local hooks, only a Kotlin language-server nudge stays, as a local hook outside this repository
+- [x] 07 Guardrails, plus bootstrap's settings merge (judge mod tabled)
+- [x] 08 CLAUDE.md template and fragments
+- [ ] 09 board, handoff and away (context-budget dropped)
+- [ ] 10 no-progress-reminder and the GitHub App identity component; the remaining machine-local hooks are dropped or stay local, outside this repository
 - [ ] 11 Cleanup: remove the source copies of what moved

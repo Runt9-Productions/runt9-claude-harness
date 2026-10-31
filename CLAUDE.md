@@ -74,6 +74,9 @@ write, so no example ships.
 Start a separate session with `claude --plugin-dir plugins/<name>`. It replaces the installed copy of that plugin
 for that session only.
 
+Check any plugin with `claude plugin validate --strict plugins/<name>`, as CI does: it refuses some mistakes a mod's
+kit test passes, such as a state key its types contract does not declare.
+
 To check a mod, run `npm ci` once at the root, then load the mod as above, which writes the types `tsc` needs into
 the plugin. Then run `npx tsc -p plugins/<name>`, `npx oxlint -c .oxlintrc.json plugins/<name>` and
 `claude plugin test plugins/<name>`.
