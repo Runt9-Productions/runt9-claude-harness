@@ -128,8 +128,8 @@ present.
   the branch and raises no error.
 - **Handoff.** Write `handoff.md` in the working directory, because decision-tool state may not carry across
   sessions and this file is the bridge. When a fresh build session follows, no worktree exists yet, so it is written
-  in the main checkout's working directory and the build session moves it into its own. Every path in it is
-  absolute. It holds:
+  in the main checkout's working directory and the build session copies it into its own and keeps only the copy up
+  to date. Every path in it is absolute. It holds:
   - the ticket, the repository, the main checkout, the worktree path, the branch and the base commit;
   - the working directory;
   - the spec paths in the main checkout, and the first task;
@@ -142,7 +142,7 @@ Exit: every decision answered and step 4 unblocked.
 
 ### 4. Develop, one task at a time
 
-The build session opens by reading the handoff, moving it into the worktree's working directory when it was written
+The build session opens by reading the handoff, copying it into the worktree's working directory when it was written
 in the main checkout, making one trial write there to prove it has access, posting the task-progress items, and
 making section 1's "work started" ticket update.
 

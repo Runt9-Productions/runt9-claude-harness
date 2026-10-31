@@ -8,7 +8,7 @@ tags:
 - board
 - handoff
 - sandbox
-status: research
+status: implementation
 opened: '2026-10-31'
 ---
 
@@ -20,12 +20,12 @@ away. It ends when the plugin merges with its README's mode table backed by kit 
 
 ## Where it stands
 
-- [status] Built and verified live; in review on its pull request.
+- [status] Built and verified live; its draft pull request (#80) is fixing the panel review's findings.
 
 ## Goal
 
-- A mod with three attention modes whose behaviour the mode table in [[Away Plugin Spec]] sets, which stops harness
-  writes while away by turning the Bash sandbox on rather than by refusing them itself.
+- A mod with three attention modes whose behaviour the mode table in `plugins/away/README.md` sets, which stops
+  harness writes while away by turning the Bash sandbox on rather than by refusing them itself.
 - Couple to `board` and `handoff` only through the contract rows in `.claude/code-review-profile.md`, adding away's
   own row: it relies on what `read_board` lists.
 
@@ -45,7 +45,7 @@ away. It ends when the plugin merges with its README's mode table backed by kit 
 
 - [[Away Plugin Checklist]]: the units of work and which is live
 - [[Away Plugin Decisions]]: rulings taken and questions still open
-- [[Away Plugin Spec]]: the per-file map and the draft issue text
+- [[Away Plugin Spec]]: the per-file map, the draft issue text and the engine choices the README does not state
 - [[Away Plugin Estimate]]: the size, in files and lines
 
 ## Relations

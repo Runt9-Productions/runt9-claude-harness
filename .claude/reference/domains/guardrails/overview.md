@@ -21,9 +21,11 @@ sources:
 > its network closed so nothing could install, one to three runs per case (2026-10-29 to 2026-10-31); the earlier
 > ones were not re-run when this note was written. The line on `sandbox.enabled` in the local settings was measured on
 > 2.1.316, with the file changed from outside the session between commands, and how soon a change applies below 5 s
-> was not measured. Not covered: macOS and Windows sandboxing, the Read tool's path
-> through auto mode (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build
-> run end to end in the sandbox.
+> was not measured. The three lines after it, on which local file applies outside a repository-root start and on
+> `autoAllowBashIfSandboxed`, were measured on 2.1.316 in `claude -p` sessions in scratch repositories, worktrees and
+> subdirectories, one or two sessions per case, with no sandbox key in user or project settings. Not covered: macOS
+> and Windows sandboxing, the Read tool's path through auto mode (only the documentation's account), pushes over HTTPS
+> from inside the sandbox, and any JVM build run end to end in the sandbox.
 
 Read this before writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to
 stop a call.
@@ -88,6 +90,17 @@ stop a call.
   after the local file gained `enabled: true` ran sandboxed, and one started after the key was removed or set to
   `false` ran unsandboxed, 2 of 2 runs. The local key overrode only that key: the rest of the config still applied.
   #measured
+- [fact] A session started in a linked worktree or a repository subdirectory applies `sandbox.enabled` from both
+  local files: the starting directory's `.claude/settings.local.json`, read at start and also when created
+  mid-session, and the repository root's (the main checkout's, for a worktree). Each turned the sandbox on
+  mid-session; only the main checkout's file was also measured turning it off again. #measured
+- [trap] The repository root's local file wins over the starting directory's on a key both set: with the root file
+  holding `enabled: false`, `enabled: true` written in a worktree's or subdirectory's file left commands
+  unsandboxed. Only that direction was measured. In a worktree the root file is the main checkout's, shared with
+  every session started there. #measured #silent-failure
+- [trap] With the sandbox on and `autoAllowBashIfSandboxed` absent, a command that matches no allow rule runs
+  sandboxed without approval; `autoAllowBashIfSandboxed: false` makes it need approval (denied under `-p`). So turning
+  the sandbox on with the key unset also stops Bash from prompting. #measured
 - [trap] The per-user temp directory (`$TMPDIR`, `/tmp/claude-<uid>`) is writable as a whole, which takes in every
   other session's scratchpad. The rest of `/tmp` is read-only. #measured
 - [trap] The working directory's `.git/hooks` and `.git/config` are mounted read-only, but a directory added with
