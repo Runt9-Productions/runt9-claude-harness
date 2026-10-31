@@ -110,6 +110,8 @@ declare module 'claude-code' {
       now: number
       /** The newly posted decisions whose line is drawn inverted at this point of their flash. */
       litIds: string[]
+      /** True for a moment after a waiting decision leaves the list, while the first one's hotkeys are drawn off. */
+      areHotkeysHeld: boolean
     }
   }
 }

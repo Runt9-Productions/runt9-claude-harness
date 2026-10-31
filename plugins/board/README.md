@@ -31,8 +31,8 @@ With no surface, as in `claude -p`, nothing is added.
 | `mcp__board__read_board` | Lists the open tasks with who holds each, and the decisions and tasks still waiting on you. |
 
 Only the agent that posted a decision or a task for you, or the main session, can change or withdraw it. When the
-main session changes another agent's item, that agent is told with a `[board]` message. An id is never issued
-twice in a session, even after its item is dropped or cleared.
+main session rewords or withdraws another agent's decision, or withdraws its task for you, that agent is told with a
+`[board]` message. An id is never issued twice in a session, even after its item is dropped or cleared.
 
 ## The pane
 
@@ -41,7 +41,8 @@ twice in a session, even after its item is dropped or cleared.
 - **Waiting on you**: each decision with its option buttons, a Dismiss button and a note box, then each task for
   you with Start, Done and its items to tick. A new decision or task flashes for four seconds. A note typed before
   pressing an option goes with that option; Enter in the note box sends the note alone as "Other". Dismiss answers
-  that no option was chosen.
+  that no option was chosen. Keys 1 to 4 press the first decision's options; once it is answered or withdrawn, the
+  next one takes them after a second and a half.
 - **Tasks**: the agents' own tasks, in progress first, with who holds each and how much of its checklist is ticked.
   Expand shows the note and the items. Done tasks are counted until Show lists them, and Clear removes them.
 - **Answered, not yet sent to Claude**: each answer or change until a model request of the agent that asked has
@@ -54,16 +55,20 @@ A line above the prompt counts the decisions and tasks waiting on you and the ta
 
 Your answer, and each tick, Start and Done on a task for you, is added to the conversation of the agent that posted
 it as a message starting `[board]`. A running agent reads it at its next step; an idle main session reads it with
-your next prompt. A teammate that has ended its turn is sent the same text as a message instead, which wakes it.
-A toast says whether it arrived.
+your next prompt. A teammate idle between turns is sent the same text as a message instead, which wakes it. An agent
+that has finished or been stopped is not, since a message would start it again: the answer or change is listed as
+not delivered, and "Dismiss (I told it)" clears it. A toast says whether an answer or a Done arrived; a tick or a
+Start has one only when it did not.
 
 ## Nudges
 
-The board watches every tool call the model makes, and adds a `[board]` line to the result the calling agent
-reads:
+The board watches every tool call the model makes, and while a surface draws the pane it adds a `[board]` line to
+the result the calling agent reads:
 
 - When an agent's status is 20 tool calls or 10 minutes of working time old, once per status. Time spent idle or on
-  a permission prompt does not count. The line also names the tasks the agent holds and their unticked items.
+  a permission prompt does not count. The line also names the tasks the agent holds and their unticked items. An
+  agent with no status yet is asked to set one only if its prompt carries the board's guidance (the main session
+  and teammates) or it holds a task.
 - Every 20 tool calls, and after each commit, while the agent holds an in-progress task with unticked items: the
   line names those items. Each `set_task` call by that agent starts the count again.
 

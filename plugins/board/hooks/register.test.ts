@@ -27,18 +27,22 @@ type EngineOptions = {
   session?: { id: string }
   /** What $.agent.list() answers. */
   agents?: AgentInfo[]
-  /** Refuses the mod's own appends, as a teammate that has ended its turn does. Otherwise the kit stores them. */
+  /** Refuses the mod's own appends, as a loop that is not running does. Otherwise the kit stores them. */
   isAppendRefused?: boolean
+  /** What $.session.surfaces() answers; empty as in `claude -p`. */
+  surfaces?: string[]
 }
 
 /** The engine nouns the mod calls, answered in memory. Returns the store so a test can read it. */
 function engine(on: On, options: EngineOptions = {}): Map<string, unknown> {
-  const { toasts = [], seed = {}, transcriptToolUseIds = [], time = { ms: 1_000 }, clock, session = { id: 'test-session' }, agents = [], isAppendRefused = false } = options
+  const { toasts = [], seed = {}, transcriptToolUseIds = [], time = { ms: 1_000 }, clock, session = { id: 'test-session' }, agents = [] } = options
+  const { isAppendRefused = false, surfaces = ['terminal'] } = options
   if (isAppendRefused) on('session.append', { door: 'note' }, () => ({ deny: 'the loop is not running' }))
   const store = new Map<string, unknown>(Object.entries(seed))
   const toolUses = transcriptToolUseIds.map(id => ({ tool_use_id: id, tool: 'Bash', input: {} }))
   on('session.messages', () => ({ value: [{ role: 'assistant', text: '', toolUses }] }) as never)
   on('session.id', () => ({ value: session.id }) as never)
+  on('session.surfaces', () => ({ value: surfaces }) as never)
   if (!clock) on('clock.now', () => ({ value: time.ms }) as never)
   on('agent.list', () => ({ value: agents }) as never)
   // Any tool the mod does not answer itself, as core would run it.
@@ -92,7 +96,14 @@ async function step($: Engine, agentId?: string) {
 const saved = (store: Map<string, unknown>, key = SESSION_KEY) => JSON.stringify(store.get(key))
 
 // A teammate's own calls carry an id that differs from the `name@session` one its spawn answered.
-const SCOUT: AgentInfo = { id: 'ascout-1', name: 'scout', description: 'A long brief that should never reach the board', type: 'teammate', status: 'running' }
+const SCOUT: AgentInfo = {
+  id: 'ascout-1',
+  teammateId: 'scout@team',
+  name: 'scout',
+  description: 'A long brief that should never reach the board',
+  type: 'teammate',
+  status: 'running',
+}
 const SPAWN_SCOUT = { tool: 'Agent', description: 'Survey the parser', prompt: SCOUT.description, name: 'scout' }
 
 for (const surface of ['terminal', 'desktop'] as const) {
@@ -175,13 +186,10 @@ test("a teammate's decision names who asked and is not answered to the lead", as
 
 test('an answer the append cannot deliver to an idle teammate reaches it as a message', async ($, on) => {
   const toasts: string[] = []
-  const sent: { to: string; text: string }[] = []
-  const store = engine(on, { toasts, isAppendRefused: true })
-  on('session.send', (_$, e) => {
-    sent.push({ to: e.to, text: e.text })
-    return { isDelivered: true }
-  })
-  await $.tool.call({ ...ASK, agentId: 'worker' } as never)
+  const agents: AgentInfo[] = [{ ...WORKER, status: 'idle' }]
+  const store = engine(on, { toasts, agents, isAppendRefused: true })
+  const sent = captureSends(on, agents)
+  await $.tool.call({ ...ASK, agentId: WORKER.id } as never)
   const pane = await mountPane($)
   await pane.press({ key: 'D1-option-1' })
 
@@ -193,14 +201,25 @@ test('an answer the append cannot deliver to an idle teammate reaches it as a me
   expect(saved(store)).toContain('"delivery":"sent"')
 })
 
+test('an answer to an agent the owner stopped is not sent as a message, which would resume it, and Dismiss clears it', async ($, on) => {
+  const toasts: string[] = []
+  const agents: AgentInfo[] = [{ ...WORKER, status: 'killed' }]
+  const store = engine(on, { toasts, agents, isAppendRefused: true })
+  const sent = captureSends(on, agents)
+  await $.tool.call({ ...ASK, agentId: WORKER.id } as never)
+  const pane = await mountPane($)
+  await pane.press({ key: 'D1-option-1' })
+
+  expect(sent).toEqual([])
+  expect(toasts.join()).toContain('NOT delivered to worker')
+  await pane.press({ key: 'D1-dismiss' })
+  expect(store.has(SESSION_KEY)).toBe(false)
+})
+
 test("the main session's answer is never sent as a message, which would reach the lead unasked", async ($, on) => {
   const toasts: string[] = []
-  const sent: string[] = []
   engine(on, { toasts, isAppendRefused: true })
-  on('session.send', (_$, e) => {
-    sent.push(e.to)
-    return { isDelivered: true }
-  })
+  const sent = captureSends(on)
   await $.tool.call(ASK as never)
   const pane = await mountPane($)
   await pane.press({ key: 'D1-option-0' })
@@ -210,15 +229,15 @@ test("the main session's answer is never sent as a message, which would reach th
 
 test('Retry delivers a failed answer once the message gets through', async ($, on) => {
   const toasts: string[] = []
-  const recipient = { isReachable: false }
-  const store = engine(on, { toasts, isAppendRefused: true })
-  on('session.send', () => (recipient.isReachable ? { isDelivered: true } : { isDelivered: false, reason: 'gone' }))
-  await $.tool.call({ ...ASK, agentId: 'worker' } as never)
+  const agents: AgentInfo[] = []
+  const store = engine(on, { toasts, agents, isAppendRefused: true })
+  captureSends(on, agents)
+  await $.tool.call({ ...ASK, agentId: WORKER.id } as never)
   const pane = await mountPane($)
   await pane.press({ key: 'D1-option-0' })
   expect(saved(store)).toContain('"delivery":"failed"')
 
-  recipient.isReachable = true
+  agents.push({ ...WORKER, status: 'idle' })
   await pane.press({ key: 'D1-retry' })
   expect(saved(store)).toContain('"delivery":"sent"')
   expect(toasts.at(-1)).toContain('D1 answered')
@@ -300,6 +319,19 @@ test('options posted as bare strings still draw and answer', async ($, on) => {
   expect(saved(store)).toContain('"answer":"Draft it"')
 })
 
+test('options without a label are refused, on a post and a reword, so they never reach the pane', async ($, on) => {
+  const store = engine(on)
+  const unlabelled = [{ text: 'Yes' }, { text: 'No' }]
+  expect(resultText(await $.tool.call({ ...ASK, options: unlabelled } as never))).toContain('Nothing posted: a new decision needs a label on every option.')
+  expect(store.has(SESSION_KEY)).toBe(false)
+
+  await $.tool.call(ASK as never)
+  const reworded = await $.tool.call({ tool: ASK.tool, id: 'D1', options: unlabelled } as never)
+  expect(resultText(reworded)).toContain('Nothing changed: a decision needs a label on every option.')
+  const pane = await mountPane($)
+  expect((await pane.find({ key: 'D1-option-0' }))?.props.label).toBe('Skip (recommended)')
+})
+
 test('on mobile, which draws no Input, the options still answer', async ($, on) => {
   const store = engine(on)
   await $.tool.call(ASK as never)
@@ -321,6 +353,46 @@ test('a pane press after the session id changed does not answer the old conversa
   expect(saved(store, 'session:old')).not.toContain('"answer"')
   expect(store.has('session:new')).toBe(false)
   expect(toasts).toEqual([])
+})
+
+test("a press on a frame drawn for one session does not answer another session's decision with the same id", async ($, on) => {
+  const session = { id: 'old' }
+  const otherBoard = {
+    decisions: [
+      { id: 'D1', question: 'Force-push the release branch?', options: [{ label: 'Skip' }, { label: 'Push' }], agentId: 'worker', askedBy: 'worker' },
+    ],
+    lastDecisionNumber: 1,
+    savedAt: 500,
+  }
+  const store = engine(on, { session, seed: { 'session:new': otherBoard } })
+  const appended = captureAppends(on)
+  await $.tool.call(ASK as never)
+  const pane = await mountPane($)
+
+  session.id = 'new'
+  await pane.press({ key: 'D1-option-0' })
+  expect(saved(store, 'session:new')).not.toContain('"answer"')
+  expect(appended()).toEqual([])
+
+  // The press redrew the pane for the new session, whose own options answer.
+  expect((await pane.find({ key: 'D1-option-1' }))?.props.label).toBe('Push')
+  await pane.press({ key: 'D1-option-0' })
+  expect(saved(store, 'session:new')).toContain('"answer":"Skip"')
+})
+
+test('when the first decision is answered, the next one takes the hotkeys only after a pause', async ($, on) => {
+  const clock = mock.clock(on)
+  engine(on, { clock })
+  await $.tool.call(ASK as never)
+  await $.tool.call({ ...ASK, question: 'Close the stale PRs?' } as never)
+  const pane = await mountPane($)
+  const hotkey = async (key: string) => (await pane.find({ key }))?.props.hotkey
+  expect([await hotkey('D1-option-0'), await hotkey('D2-option-0')]).toEqual(['1', undefined])
+
+  await pane.press({ key: 'D1-option-0' })
+  expect(await hotkey('D2-option-0')).toBeUndefined()
+  await clock.advance(1_500)
+  expect(await hotkey('D2-option-0')).toBe('1')
 })
 
 test('a dropped task leaves the board and its id is not issued again', async ($, on) => {
@@ -394,8 +466,8 @@ test('the guidance is added only where a surface draws', async ($, on) => {
 const WORKER_CALL = { tool: 'Read', file_path: 'notes.md', agentId: 'worker' }
 const isNudge = (result: unknown) => JSON.stringify(result).includes('[board]')
 
-test('an agent is nudged once when its status reaches the call limit, and again only after a new status', async ($, on) => {
-  engine(on)
+test('a teammate is nudged once when its status reaches the call limit, and again only after a new status', async ($, on) => {
+  engine(on, { agents: [WORKER] })
   const nudged: boolean[] = []
   for (let i = 0; i < 21; i++) nudged.push(isNudge(await $.tool.call(WORKER_CALL as never)))
   // The 20th call is the first stale one; the 21st is not nudged again.
@@ -405,6 +477,32 @@ test('an agent is nudged once when its status reaches the call limit, and again 
   await $.tool.call({ tool: 'mcp__board__set_status', status: 'reading notes', agentId: 'worker' } as never)
   const afterStatus = await $.tool.call(WORKER_CALL as never)
   expect(isNudge(afterStatus)).toBe(false)
+})
+
+test('with no surface, as in claude -p, neither the main session nor a teammate is nudged', async ($, on) => {
+  engine(on, { surfaces: [], agents: [WORKER] })
+  // The main session is mid-turn, so its own calls count.
+  await step($)
+  const results: unknown[] = []
+  for (let i = 0; i < 20; i++) {
+    results.push(await $.tool.call({ tool: 'Read', file_path: 'notes.md' } as never))
+    results.push(await $.tool.call(WORKER_CALL as never))
+  }
+  expect(results.some(isNudge)).toBe(false)
+})
+
+test('a subagent, whose prompt carries no guidance, is asked about its status only once it has set one', async ($, on) => {
+  const explorer: AgentInfo = { id: 'explorer', description: 'Find the parser', type: 'Explore', status: 'running' }
+  engine(on, { agents: [explorer] })
+  const call = { ...WORKER_CALL, agentId: explorer.id }
+  const beforeStatus: boolean[] = []
+  for (let i = 0; i < 25; i++) beforeStatus.push(isNudge(await $.tool.call(call as never)))
+  expect(beforeStatus.some(Boolean)).toBe(false)
+
+  await $.tool.call({ tool: 'mcp__board__set_status', status: 'reading notes', agentId: explorer.id } as never)
+  const afterStatus: string[] = []
+  for (let i = 0; i < 20; i++) afterStatus.push(resultText(await $.tool.call(call as never)))
+  expect(afterStatus.at(-1)).toContain('Your board status \\"reading notes\\"')
 })
 
 test("another plugin's own tool calls do not spend the main session's nudge", {
@@ -519,7 +617,7 @@ for (const [name, transcriptId, isAdopted] of [
 }
 
 const READ_BOARD = { tool: 'mcp__board__read_board' }
-const WORKER: AgentInfo = { id: 'worker', name: 'worker', description: 'Worker', type: 'teammate', status: 'running' }
+const WORKER: AgentInfo = { id: 'worker', teammateId: 'worker@team', name: 'worker', description: 'Worker', type: 'teammate', status: 'running' }
 const resultText = (result: unknown) => JSON.stringify(result)
 
 test('in_progress claims a task, and another agent claiming it is refused by name until the holder releases it', async ($, on) => {
@@ -762,11 +860,14 @@ test("a commit names the committing agent's unticked items at once, and not once
 
 const OWNER_TASK = { tool: 'mcp__board__set_owner_task', title: 'Re-review the PRs', items: ['PR 11', 'PR 12', 'PR 13'] }
 
-/** Captures every message sent to a loop, as `session.send` would deliver it while `recipient.isReachable`. */
-function captureSends(on: On, recipient = { isReachable: true }): { to: string; text: string }[] {
+/**
+ * Answers `session.send` as the engine does for an agent: delivered to any agent `agents` lists, one that has ended
+ * by resuming it, and refused for one it does not list. Returns every message delivered.
+ */
+function captureSends(on: On, agents: readonly AgentInfo[] = []): { to: string; text: string }[] {
   const sent: { to: string; text: string }[] = []
   on('session.send', (_$, e) => {
-    if (!recipient.isReachable) return { isDelivered: false, reason: 'gone' }
+    if (!agents.some(a => a.id === e.to || a.name === e.to)) return { isDelivered: false, reason: `no agent named ${e.to}` }
     sent.push({ to: e.to, text: e.text })
     return { isDelivered: true }
   })
@@ -1031,8 +1132,7 @@ test('Start marks a task for the owner started and tells the poster, and Unstart
 test('Unstart drops a Start that failed to reach the poster, so Retry cannot send it', async ($, on) => {
   const clock = mock.clock(on)
   const store = engine(on, { clock, isAppendRefused: true })
-  const recipient = { isReachable: false }
-  const sent = captureSends(on, recipient)
+  const sent = captureSends(on)
   await $.tool.call({ tool: 'mcp__board__set_owner_task', title: 'Try the change', agentId: 'worker' } as never)
   await clock.advance(10_000)
   const pane = await mountPane($)
@@ -1067,10 +1167,10 @@ test('a ticked item marks a task for the owner started until none is ticked, and
 
 test('a change that failed to reach the poster is listed with Retry, which sends it once the poster is reachable', async ($, on) => {
   const toasts: string[] = []
-  const recipient = { isReachable: false }
-  const store = engine(on, { toasts, isAppendRefused: true })
-  const sent = captureSends(on, recipient)
-  await $.tool.call({ ...OWNER_TASK, agentId: 'worker' } as never)
+  const agents: AgentInfo[] = []
+  const store = engine(on, { toasts, agents, isAppendRefused: true })
+  const sent = captureSends(on, agents)
+  await $.tool.call({ ...OWNER_TASK, agentId: WORKER.id } as never)
   const pane = await mountPane($)
   await pane.press({ key: 'O1-expand' })
   await pane.press({ key: 'O1-item-2' })
@@ -1078,7 +1178,7 @@ test('a change that failed to reach the poster is listed with Retry, which sends
   expect(toasts.join()).toContain('O1: ticked \\"PR 13\\" saved on the board but NOT delivered to worker')
   expect((await pane.find({ type: 'Text', text: 'O1 →' }))?.text).toContain('not delivered')
 
-  recipient.isReachable = true
+  agents.push({ ...WORKER, status: 'idle' })
   await pane.press({ key: 'O1-retry' })
   expect(sent.map(s => s.text)).toEqual(['[board] The owner ticked "PR 13" on O1 "Re-review the PRs". 1 of 3 ticked; not yet: PR 11, PR 12.'])
   expect(saved(store)).toContain('"delivery":"sent"')
@@ -1087,7 +1187,7 @@ test('a change that failed to reach the poster is listed with Retry, which sends
 
 test('Dismiss clears a failed change from the unsent list and leaves the task waiting', async ($, on) => {
   engine(on, { isAppendRefused: true })
-  captureSends(on, { isReachable: false })
+  captureSends(on)
   await $.tool.call({ ...OWNER_TASK, agentId: 'worker' } as never)
   const pane = await mountPane($)
   await pane.press({ key: 'O1-expand' })
@@ -1124,7 +1224,7 @@ test('a board holding only tasks for the owner is restored, and their ids are no
 
 test("a slow delivery of an older change does not overwrite the newer change's delivery", async ($, on) => {
   const toasts: string[] = []
-  const store = engine(on, { toasts, isAppendRefused: true })
+  const store = engine(on, { toasts, agents: [{ ...WORKER, status: 'idle' }], isAppendRefused: true })
   let releaseFirst = () => {}
   const firstHeld = new Promise<void>(resolve => (releaseFirst = resolve))
   let calls = 0

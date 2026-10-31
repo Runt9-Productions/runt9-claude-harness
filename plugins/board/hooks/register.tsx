@@ -59,6 +59,7 @@ const expandedNotes = atom({ plugin: 'board', key: 'expandedNotes' } as const, [
 const activity = atom({ plugin: 'board', key: 'activity' } as const, [])
 const now = atom({ plugin: 'board', key: 'now' } as const, 0)
 const litIds = atom({ plugin: 'board', key: 'litIds' } as const, [])
+const areHotkeysHeld = atom({ plugin: 'board', key: 'areHotkeysHeld' } as const, false)
 
 async function openBoard($: EngineInterface) {
   return $.ui.open({ id: PANE, title: 'Board' })
@@ -156,6 +157,17 @@ async function bind($: EngineInterface) {
   }
   boundSessionId = id
   await restore($)
+}
+
+/**
+ * Runs a pane press only while the board is the one its frame was drawn from (`drawnFor`, the bound session then).
+ * Ids start again at D1, T1 and O1 in every session, so after the id changes the same id names another
+ * conversation's item.
+ */
+async function pressOnBoard($: EngineInterface, drawnFor: string | undefined, act: () => Promise<void>) {
+  await bind($)
+  if (boundSessionId !== drawnFor) return
+  await act()
 }
 
 async function restore($: EngineInterface) {
@@ -294,6 +306,8 @@ async function countCall($: EngineInterface, agentId: string, isCommit: boolean)
   const rows: BoardActivity[] = await read($, activity)
   const row = rows.find(a => a.agentId === agentId)
   if (!row) return undefined
+  // As with the guidance: with no surface, nobody sees the pane a nudge asks the agent to keep current.
+  if ((await $.session.surfaces()).length === 0) return undefined
   const allTasks: BoardTask[] = await read($, tasks)
   const held = allTasks.filter(t => t.holderId === agentId)
   return (await staleStatusNudge($, row, held)) ?? (await checklistNudge($, row, held, isCommit))
@@ -307,9 +321,22 @@ async function staleStatusNudge($: EngineInterface, row: BoardActivity, held: re
   const workedMs = row.workedMsSinceStatus + currentWorkMs(row, at)
   const isStale = row.callsSinceStatus >= STALE_CALLS || workedMs >= STALE_MS
   if (!isStale) return undefined
+  // A subagent's prompt carries no guidance, so one that has not used the board is not told to load a tool it may
+  // not have. Marked nudged all the same, so the agent list is read once per status rather than on every call.
+  const hasUsedBoard = row.status !== undefined || held.length > 0
+  if (!hasUsedBoard && !(await isToldOfBoard($, row.agentId))) {
+    await setActivity($, row.agentId, { isNudged: true })
+    return undefined
+  }
   // It names the held tasks' unticked items too, so the checklist reminder starts its count again.
   await setActivity($, row.agentId, { isNudged: true, callsSinceChecklist: 0 })
   return nudgeText(row, at, held)
+}
+
+/** The main session and teammates: the loops whose prompts carry the guidance. */
+async function isToldOfBoard($: EngineInterface, agentId: string): Promise<boolean> {
+  if (agentId === MAIN) return true
+  return (await $.agent.list()).some(a => a.id === agentId && a.teammateId !== undefined)
 }
 
 /** Every CHECKLIST_CALLS calls, and after a commit, while the agent holds an in-progress task with unticked items. */
@@ -417,7 +444,17 @@ function asOption(option: BoardOption | string): BoardOption {
   return typeof option === 'string' ? { label: option } : option
 }
 
-const hasOptionCount = (options: readonly unknown[]) => options.length >= 2 && options.length <= 4
+/**
+ * What a decision's options lack, worded to follow "a decision", or undefined when they can be posted. Checked before
+ * saving, since one option without a label is enough to take the pane down.
+ *
+ * needs a label on every option
+ */
+function optionsRefusal(options: readonly (BoardOption | string)[]): string | undefined {
+  if (options.length < 2 || options.length > 4) return 'needs 2 to 4 options'
+  const isEveryLabelled = options.map(asOption).every(o => typeof o.label === 'string' && o.label.trim() !== '')
+  return isEveryLabelled ? undefined : 'needs a label on every option'
+}
 
 /** Posts, rewords or withdraws a decision for the calling loop; `agentId` is absent for the main session. */
 async function askDecision($: EngineInterface, agentId: string | undefined, input: AskDecisionInput): Promise<string> {
@@ -425,7 +462,8 @@ async function askDecision($: EngineInterface, agentId: string | undefined, inpu
   if (input.withdraw) return withdrawDecision($, agentId, input.id)
   if (input.id !== undefined) return rewordDecision($, agentId, input.id, input)
   if (!input.question) return 'Nothing posted: a new decision needs a question.'
-  if (!hasOptionCount(input.options ?? [])) return 'Nothing posted: a new decision needs 2 to 4 options.'
+  const refusal = optionsRefusal(input.options ?? [])
+  if (refusal !== undefined) return `Nothing posted: a new decision ${refusal}.`
   const id = await nextId($, 'D')
   const rows: BoardActivity[] = await read($, activity)
   const decision: BoardDecision = {
@@ -460,7 +498,8 @@ function notPosterText(rows: readonly BoardActivity[], id: string, posterId: str
 }
 
 async function rewordDecision($: EngineInterface, agentId: string | undefined, id: string, input: AskDecisionInput): Promise<string> {
-  if (input.options !== undefined && !hasOptionCount(input.options)) return 'Nothing changed: a decision needs 2 to 4 options.'
+  const optionsProblem = input.options === undefined ? undefined : optionsRefusal(input.options)
+  if (optionsProblem !== undefined) return `Nothing changed: a decision ${optionsProblem}.`
   const options = input.options?.map(asOption)
   const rows: BoardActivity[] = await read($, activity)
   // Decided inside the update, which retries on a conflicting write, so an answer pressed meanwhile is never reworded.
@@ -536,6 +575,7 @@ async function withdrawDecision($: EngineInterface, agentId: string | undefined,
     return all.filter(d => d !== withdrawn)
   })
   if (withdrawn === undefined) return `Nothing withdrawn: the owner answered ${id} meanwhile.`
+  await holdHotkeys($)
   await save($)
   const rows: BoardActivity[] = await read($, activity)
   $.ui.toast(`${id} withdrawn by ${agentLabel(rows, agentId) ?? 'Claude'}: "${withdrawn.question}"`)
@@ -573,6 +613,18 @@ async function blink($: EngineInterface) {
   await update($, litIds, ids => (ids.length > 0 ? [] : [...flashEnds.keys()]))
 }
 
+// Keys 1 to 4 answer whichever decision is first in the waiting list. When that one leaves, the next takes the keys
+// only after this long, so a second press meant for the one answered cannot answer the next unread.
+const HOTKEY_HOLD_MS = 1_500
+
+let hotkeyTimer: Timer | undefined
+
+async function holdHotkeys($: EngineInterface) {
+  hotkeyTimer?.cancel()
+  await update($, areHotkeysHeld, () => true)
+  hotkeyTimer = $.clock.after(HOTKEY_HOLD_MS, () => void update($, areHotkeysHeld, () => false))
+}
+
 async function answer($: EngineInterface, id: string, text: string) {
   await bind($)
   // Claimed inside the update, which retries on a conflicting write, so two quick presses answer once.
@@ -582,6 +634,7 @@ async function answer($: EngineInterface, id: string, text: string) {
     return all.map(d => (d === claimed ? { ...d, answer: text, delivery: 'sending' as const } : d))
   })
   if (!claimed) return
+  await holdHotkeys($)
   await save($)
   await sendAnswer($, claimed, text)
 }
@@ -624,7 +677,7 @@ async function sendAnswer($: EngineInterface, decision: BoardDecision, text: str
 /**
  * Appends the row to the loop that asked or posted (`agentId` absent for the main session), where a running loop reads
  * it at its next step; resolves undefined when delivered, else why not. The main session, when idle, reads it with the
- * owner's next prompt.
+ * owner's next prompt. An agent that has ended is not reached, and its item is cleared with "Dismiss (I told it)".
  */
 async function deliver($: EngineInterface, agentId: string | undefined, row: string): Promise<string | undefined> {
   let appendFailure: string | undefined
@@ -638,7 +691,9 @@ async function deliver($: EngineInterface, agentId: string | undefined, row: str
     appendFailure = String(err)
   }
   if (appendFailure === undefined || agentId === undefined) return appendFailure
-  // A teammate that has ended its turn refuses the append, and only a message wakes it. Addressed to that loop
+  // A message would resume an agent that finished or was stopped, with its tools, so one is never sent there.
+  if (!isPresent(await $.agent.list(), agentId)) return `${appendFailure}; it has ended`
+  // A teammate idle between turns refuses the append, and only a message wakes it. Addressed to that loop
   // alone: the lead must not receive an answer it never asked for.
   try {
     const sent = await $.session.send({ to: { agentId }, text: row })
@@ -1193,8 +1248,9 @@ export const register: Register = on => {
     for (const tool of [ASK_DECISION, SET_OWNER_TASK, SET_TASK, SET_STATUS, READ_BOARD]) await $.tool.register(tool)
     await $.command.register({ name: 'board', description: 'Open the Board pane' })
     await bind($)
-    // A reload stops the flash timer, which would leave a lit line lit.
+    // A reload stops the flash and hotkey timers, which would leave a lit line lit and the hotkeys held.
     await update($, litIds, () => [])
+    await update($, areHotkeysHeld, () => false)
     // Rows kept across a hot reload may predate the current row shape: fill what they lack, keep their status.
     await update($, activity, all =>
       all.map(a => ({
@@ -1345,6 +1401,9 @@ export const register: Register = on => {
     const expanded: string[] = await read($, expandedNotes)
     const lit: string[] = await read($, litIds)
     const holderLabel = (holderId: string) => loops.find(a => a.agentId === holderId)?.label ?? (holderId === MAIN ? 'Claude' : holderId)
+    const hotkeysHeld: boolean = await read($, areHotkeysHeld)
+    const drawnFor = boundSessionId
+    const onBoard = (act: () => Promise<void>) => () => void pressOnBoard($, drawnFor, act)
 
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -1386,12 +1445,12 @@ export const register: Register = on => {
                 <Button
                   key={`${d.id}-option-${i}`}
                   label={i === d.recommended ? `${option.label} (recommended)` : option.label}
-                  hotkey={index === 0 ? String(i + 1) : undefined}
+                  hotkey={index === 0 && !hotkeysHeld ? String(i + 1) : undefined}
                   variant={i === d.recommended ? 'primary' : undefined}
-                  onPress={() => void answerWithNote($, d.id, option.label)}
+                  onPress={onBoard(() => answerWithNote($, d.id, option.label))}
                 />
               ))}
-              <Button key={`${d.id}-dismiss-question`} label="Dismiss" onPress={() => void answerWithNote($, d.id, DISMISSED_ANSWER)} />
+              <Button key={`${d.id}-dismiss-question`} label="Dismiss" onPress={onBoard(() => answerWithNote($, d.id, DISMISSED_ANSWER))} />
             </Box>
             {Input && (
               // Input wraps to the pane's full width rather than its own box, so it must not sit inside the root's paddingX.
@@ -1400,8 +1459,8 @@ export const register: Register = on => {
                   key={`${d.id}-other`}
                   placeholder="Note: goes with the option you press, or Enter sends it alone as Other"
                   submitLabel="send"
-                  onInput={value => void setNote($, d.id, value)}
-                  onSubmit={value => void answerOther($, d.id, value)}
+                  onInput={value => void pressOnBoard($, drawnFor, () => setNote($, d.id, value))}
+                  onSubmit={value => void pressOnBoard($, drawnFor, () => answerOther($, d.id, value))}
                 />
               </Box>
             )}
@@ -1426,9 +1485,9 @@ export const register: Register = on => {
                 )}
                 {/* A ticked item keeps the task started, so Unstart would change nothing. */}
                 {ticked === 0 && (
-                  <Button key={`${t.id}-start`} label={t.isStartPressed ? 'Unstart' : 'Start'} onPress={() => void toggleStart($, t.id)} />
+                  <Button key={`${t.id}-start`} label={t.isStartPressed ? 'Unstart' : 'Start'} onPress={onBoard(() => toggleStart($, t.id))} />
                 )}
-                <Button key={`${t.id}-done`} label="Done" onPress={() => void completeOwnerTask($, t.id)} />
+                <Button key={`${t.id}-done`} label="Done" onPress={onBoard(() => completeOwnerTask($, t.id))} />
               </Box>
               {isExpanded && t.description && <Text italic>{t.description}</Text>}
               {isExpanded &&
@@ -1437,7 +1496,7 @@ export const register: Register = on => {
                     key={`${t.id}-item-${i}`}
                     plain
                     label={`${item.isTicked ? '[x]' : '[ ]'} ${item.label}`}
-                    onPress={() => void toggleItem($, t.id, item.label)}
+                    onPress={onBoard(() => toggleItem($, t.id, item.label))}
                   />
                 ))}
             </Box>
@@ -1482,7 +1541,7 @@ export const register: Register = on => {
               label={isDoneListed ? 'Hide' : 'Show'}
               onPress={() => void update($, isDoneShown, shown => !shown)}
             />
-            <Button key="done-clear" label="Clear" onPress={() => void clearDone($)} />
+            <Button key="done-clear" label="Clear" onPress={onBoard(() => clearDone($))} />
           </Box>
         )}
 
@@ -1495,9 +1554,9 @@ export const register: Register = on => {
                   {d.id} → {d.answer}
                   {d.delivery === 'failed' ? ` (not delivered${d.askedBy ? ` to ${d.askedBy}` : ''}) ` : ''}
                 </Text>
-                {d.delivery === 'failed' && <Button key={`${d.id}-retry`} label="Retry" onPress={() => void retry($, d.id)} />}
+                {d.delivery === 'failed' && <Button key={`${d.id}-retry`} label="Retry" onPress={onBoard(() => retry($, d.id))} />}
                 {d.delivery === 'failed' && (
-                  <Button key={`${d.id}-dismiss`} label="Dismiss (I told it)" onPress={() => void dismiss($, d.id)} />
+                  <Button key={`${d.id}-dismiss`} label="Dismiss (I told it)" onPress={onBoard(() => dismiss($, d.id))} />
                 )}
               </Box>
             ))}
@@ -1509,9 +1568,9 @@ export const register: Register = on => {
                     {t.id} → {t.lastChange?.summary}
                     {isFailed ? ` (not delivered${t.postedBy ? ` to ${t.postedBy}` : ''}) ` : ''}
                   </Text>
-                  {isFailed && <Button key={`${t.id}-retry`} label="Retry" onPress={() => void retryOwnerChange($, t.id)} />}
+                  {isFailed && <Button key={`${t.id}-retry`} label="Retry" onPress={onBoard(() => retryOwnerChange($, t.id))} />}
                   {isFailed && (
-                    <Button key={`${t.id}-dismiss`} label="Dismiss (I told it)" onPress={() => void dismissOwnerChange($, t.id)} />
+                    <Button key={`${t.id}-dismiss`} label="Dismiss (I told it)" onPress={onBoard(() => dismissOwnerChange($, t.id))} />
                   )}
                 </Box>
               )
