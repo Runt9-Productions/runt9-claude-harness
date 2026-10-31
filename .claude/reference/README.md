@@ -16,6 +16,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Guardrails](domains/guardrails/overview.md) | writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to stop a call |
 | [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, or anything under `.github/workflows/` |
 | [Harness Migration](projects/harness-migration/overview.md) | resuming the harness migration |
+| [Away Plugin](projects/away-plugin/overview.md) | building or changing the `away` plugin (issue #67) |
 
 ## Local conventions
 
