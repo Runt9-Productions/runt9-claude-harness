@@ -122,13 +122,14 @@ export const OWNER_TASK = { tool: 'mcp__board__set_owner_task', title: 'Re-revie
 
 /**
  * Answers `session.send` as the engine does for an agent: delivered to any agent `agents` lists, one that has ended
- * by resuming it, and refused for one it does not list. Returns every message delivered.
+ * by resuming it, and refused for one it does not list. Returns every message the mod tried to send, refused or not,
+ * so a send that must never happen is seen even where nobody could receive it.
  */
 export function captureSends(on: On, agents: readonly AgentInfo[] = []): { to: string; text: string }[] {
   const sent: { to: string; text: string }[] = []
   on('session.send', (_$, e) => {
-    if (!agents.some(a => a.id === e.to || a.name === e.to)) return { isDelivered: false, reason: `no agent named ${e.to}` }
     sent.push({ to: e.to, text: e.text })
+    if (!agents.some(a => a.id === e.to || a.name === e.to)) return { isDelivered: false, reason: `no agent named ${e.to}` }
     return { isDelivered: true }
   })
   return sent

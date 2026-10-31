@@ -36,7 +36,7 @@ test('open tasks list in progress first, and Clear removes only the done ones', 
   expect(saved(store)).toContain('Waiting')
 })
 
-test('in_progress claims a task, and another agent claiming it is refused by name until the holder releases it', async ($, on) => {
+test("in_progress claims a task for its caller: another agent's claim is refused by name, the holder's own is not", async ($, on) => {
   const store = engine(on, { agents: [SCOUT, WORKER] })
   await $.tool.call(SPAWN_SCOUT as never)
   await $.tool.call({ tool: SET_TASK, title: 'Fix the parser', status: 'in_progress', agentId: SCOUT.id } as never)
@@ -89,6 +89,8 @@ test('a note is kept when an update omits it, cleared by an empty one, and refus
   const tooLong = await $.tool.call({ tool: SET_TASK, id: 'T1', title: 'Renamed', status: 'done', note: 'x'.repeat(201) } as never)
   expect(resultText(tooLong)).toContain('Nothing changed')
   expect(saved(store)).not.toContain('Renamed')
+  const atCap = await $.tool.call({ tool: SET_TASK, id: 'T1', note: 'x'.repeat(200) } as never)
+  expect(resultText(atCap)).toContain('Task T1 is in_progress.')
 
   await $.tool.call({ tool: SET_TASK, id: 'T1', title: 'Probe', status: 'in_progress', note: '' } as never)
   expect(saved(store)).not.toContain('"note"')
@@ -207,14 +209,15 @@ test('an update that omits the title and status keeps them, and ticking alone le
 })
 
 test('set_task naming an id not on the board changes nothing, so a dropped task does not come back', async ($, on) => {
-  const store = engine(on)
+  engine(on)
   await $.tool.call({ tool: SET_TASK, title: 'Mistake', status: 'pending' } as never)
   await $.tool.call({ tool: SET_TASK, id: 'T1', status: 'dropped' } as never)
   const revived = await $.tool.call({ tool: SET_TASK, id: 'T1', title: 'Mistake', status: 'done' } as never)
   expect(resultText(revived)).toContain('Nothing changed: there is no T1')
   expect(resultText(await $.tool.call({ tool: SET_TASK, id: 'T7', status: 'dropped' } as never))).toContain('Nothing dropped: there is no T7')
   expect(resultText(await $.tool.call({ tool: SET_TASK, title: 'No status' } as never))).toContain('a new task needs a title and a status')
-  expect(store.has(SESSION_KEY)).toBe(false)
+  const pane = await mountPane($)
+  expect(await pane.find({ type: 'Text', text: 'No tasks.' })).toBeDefined()
   // The refused add used up no id.
   expect(resultText(await $.tool.call({ tool: SET_TASK, title: 'Next', status: 'pending' } as never))).toContain('Task T2 is pending')
 })

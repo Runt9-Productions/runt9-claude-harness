@@ -3,11 +3,13 @@ import type { AgentInfo } from 'claude-code'
 
 import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, engine, mountPane, resultText, saved, step } from './test-support'
 
-test('a task for the owner posts at once, flashes, and collapses its checklist to one line with progress', async ($, on) => {
+test('a task for the owner posts at once, flashes on the pane and in the band, and collapses its checklist to one line with progress', async ($, on) => {
   on('ui.render', () => ({ type: 'Box', props: {} }) as never)
   const clock = mock.clock(on)
   engine(on, { clock })
   await $.tool.call(ASK as never)
+  // Past the decision's own flash, so whatever is lit is lit by the task.
+  await clock.advance(10_000)
   // Counted apart from decisions, so the first one is O1 whatever else is on the board.
   expect(resultText(await $.tool.call({ ...OWNER_TASK, agentId: 'worker' } as never))).toContain('Posted O1')
 
@@ -22,7 +24,9 @@ test('a task for the owner posts at once, flashes, and collapses its checklist t
   expect(title?.text).toContain('0/3')
   expect(title?.props.backgroundColor).toBe('yellow')
   expect((await pane.find({ type: 'Text', text: 'WAITING ON YOU' }))?.text).toContain('(2)')
-  expect((await band.find({ type: 'Text', text: 'Board:' }))?.text).toContain('1 decision waiting · 1 task for you')
+  const bandLine = await band.find({ type: 'Text', text: 'Board:' })
+  expect(bandLine?.text).toContain('1 decision waiting · 1 task for you')
+  expect(bandLine?.props.backgroundColor).toBe('yellow')
 
   expect(await pane.find({ key: 'O1-item-0' })).toBeUndefined()
   await pane.press({ key: 'O1-expand' })
@@ -199,7 +203,6 @@ test('Start marks a task for the owner started and tells the poster, and Unstart
 test('Unstart drops a Start that failed to reach the poster, so Retry cannot send it', async ($, on) => {
   const clock = mock.clock(on)
   const store = engine(on, { clock, isAppendRefused: true })
-  const sent = captureSends(on)
   await $.tool.call({ tool: 'mcp__board__set_owner_task', title: 'Try the change', agentId: 'worker' } as never)
   await clock.advance(10_000)
   const pane = await mountPane($)
@@ -210,7 +213,6 @@ test('Unstart drops a Start that failed to reach the poster, so Retry cannot sen
   expect(await pane.find({ type: 'Text', text: 'O1 →' })).toBeUndefined()
   expect(await pane.find({ key: 'O1-retry' })).toBeUndefined()
   expect(saved(store)).not.toContain('"summary":"started"')
-  expect(sent).toEqual([])
 })
 
 test('a ticked item marks a task for the owner started until none is ticked, and hides Start meanwhile', async ($, on) => {
@@ -271,6 +273,9 @@ test("a change leaves the unsent list once a request of the poster's loop has ca
   await pane.press({ key: 'O1-done' })
   expect(await pane.find({ type: 'Text', text: 'O1 →' })).toBeDefined()
 
+  // A request of the main loop does not carry what was appended to the worker's.
+  await step($)
+  expect(await pane.find({ type: 'Text', text: 'O1 →' })).toBeDefined()
   await step($, 'worker')
   expect(saved(store)).toContain('"delivery":"seen"')
   expect(await pane.find({ type: 'Text', text: 'O1 →' })).toBeUndefined()

@@ -88,12 +88,13 @@ for (const [name, transcriptId, isAdopted] of [
 test('a board holding only tasks for the owner is restored, and their ids are not issued again', async ($, on) => {
   const onlyOwnerTasks = {
     ownerTasks: [{ id: 'O4', title: 'Carried over', items: [], isDone: false }],
-    lastOwnerTaskNumber: 4,
+    // O5 and O6 were withdrawn before the save, so only the restored counter knows them.
+    lastOwnerTaskNumber: 6,
     savedAt: 500,
   }
   engine(on, { seed: { [SESSION_KEY]: onlyOwnerTasks } })
   await $.turn.start({ text: '', turnId: 't0' })
   const pane = await mountPane($)
   expect(await pane.find({ type: 'Text', text: 'Carried over' })).toBeDefined()
-  expect(resultText(await $.tool.call(OWNER_TASK as never))).toContain('Posted O5')
+  expect(resultText(await $.tool.call(OWNER_TASK as never))).toContain('Posted O7')
 })

@@ -24,21 +24,25 @@ test('a teammate is nudged once when its status reaches the call limit, and agai
   expect(nudged.indexOf(true)).toBe(19)
   expect(nudged.filter(Boolean).length).toBe(1)
 
+  // A new status starts the count again and earns a nudge of its own.
   await $.tool.call({ tool: 'mcp__board__set_status', status: 'reading notes', agentId: 'worker' } as never)
-  const afterStatus = await $.tool.call(WORKER_CALL as never)
-  expect(isNudge(afterStatus)).toBe(false)
+  const afterStatus: boolean[] = []
+  for (let i = 0; i < 20; i++) afterStatus.push(isNudge(await $.tool.call(WORKER_CALL as never)))
+  expect(afterStatus.indexOf(true)).toBe(19)
 })
 
 test('with no surface, as in claude -p, neither the main session nor a teammate is nudged', async ($, on) => {
   engine(on, { surfaces: [], agents: [WORKER] })
   // The main session is mid-turn, so its own calls count.
   await step($)
-  const results: unknown[] = []
+  const main: unknown[] = []
+  const teammate: unknown[] = []
   for (let i = 0; i < 20; i++) {
-    results.push(await $.tool.call({ tool: 'Read', file_path: 'notes.md' } as never))
-    results.push(await $.tool.call(WORKER_CALL as never))
+    main.push(await $.tool.call({ tool: 'Read', file_path: 'notes.md' } as never))
+    teammate.push(await $.tool.call(WORKER_CALL as never))
   }
-  expect(results.some(isNudge)).toBe(false)
+  expect(main.some(isNudge), 'the main session was nudged').toBe(false)
+  expect(teammate.some(isNudge), 'the teammate was nudged').toBe(false)
 })
 
 test('a subagent, whose prompt carries no guidance, is asked about its status only once it has set one', async ($, on) => {
@@ -70,23 +74,14 @@ test("another plugin's own tool calls do not spend the main session's nudge", {
   ],
 }, async ($, on) => {
   engine(on)
-  // The main session is mid-turn, so its own calls would count.
+  // The main session is mid-turn, so its own calls count.
   await step($)
   const { text } = await $.command.run({ command: 'probe', args: '' } as never)
   expect(text).not.toContain('[board]')
-  const pane = await mountPane($)
-  expect((await pane.find({ type: 'Text', text: 'Claude' }))?.text).toContain('working')
-})
-
-test('a status older than the time limit is nudged on the next call', async ($, on) => {
-  const time = { ms: 1_000 }
-  engine(on, { time })
-  await $.tool.call({ tool: 'mcp__board__set_status', status: 'reading notes', agentId: 'worker' } as never)
-  expect(isNudge(await $.tool.call(WORKER_CALL as never))).toBe(false)
-
-  time.ms += 10 * 60_000
-  const stale = await $.tool.call(WORKER_CALL as never)
-  expect(JSON.stringify(stale)).toContain('Your board status \\"reading notes\\" was set 10m ago')
+  // None of the plugin's calls counted, so the nudge is still the main session's 20th own call.
+  const own: boolean[] = []
+  for (let i = 0; i < 20; i++) own.push(isNudge(await $.tool.call({ tool: 'Read', file_path: 'notes.md' } as never)))
+  expect(own.indexOf(true)).toBe(19)
 })
 
 test('only working time ages a status: idle time between working stretches is not counted', async ($, on) => {

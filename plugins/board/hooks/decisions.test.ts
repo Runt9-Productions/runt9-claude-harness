@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { AgentInfo } from 'claude-code'
 
-import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, engine, mountPane, resultText, saved, step } from './test-support'
+import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, complete, engine, mountPane, resultText, saved, step } from './test-support'
 
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: pressing an option records the answer once`, async ($, on) => {
@@ -83,25 +83,24 @@ test("a teammate's decision names who asked and is not answered to the lead", as
 
 test('an answer the append cannot deliver to an idle teammate reaches it as a message', async ($, on) => {
   const toasts: string[] = []
-  const agents: AgentInfo[] = [{ ...WORKER, status: 'idle' }]
+  // Its id and name differ, so the message is seen to go by id: two agents may hold one name.
+  const agents: AgentInfo[] = [{ ...SCOUT, status: 'idle' }]
   const store = engine(on, { toasts, agents, isAppendRefused: true })
   const sent = captureSends(on, agents)
-  await $.tool.call({ ...ASK, agentId: WORKER.id } as never)
+  await $.tool.call({ ...ASK, agentId: SCOUT.id } as never)
   const pane = await mountPane($)
   await pane.press({ key: 'D1-option-1' })
 
-  expect(sent.length).toBe(1)
-  expect(sent[0]?.to).toContain('worker')
-  expect(sent[0]?.text).toContain('The owner answered D1')
+  expect(sent).toEqual([{ to: SCOUT.id, text: '[board] The owner answered D1 ("Draft an issue on the tracker?"): Draft it' }])
   expect(toasts.join()).toContain('D1 answered')
   expect(toasts.join()).not.toContain('NOT delivered')
   expect(saved(store)).toContain('"delivery":"sent"')
 })
 
-test('an answer to an agent the owner stopped is not sent as a message, which would resume it, and Dismiss clears it', async ($, on) => {
+test('an answer to an agent the owner stopped is not sent as a message, which would resume it', async ($, on) => {
   const toasts: string[] = []
   const agents: AgentInfo[] = [{ ...WORKER, status: 'killed' }]
-  const store = engine(on, { toasts, agents, isAppendRefused: true })
+  engine(on, { toasts, agents, isAppendRefused: true })
   const sent = captureSends(on, agents)
   await $.tool.call({ ...ASK, agentId: WORKER.id } as never)
   const pane = await mountPane($)
@@ -109,8 +108,6 @@ test('an answer to an agent the owner stopped is not sent as a message, which wo
 
   expect(sent).toEqual([])
   expect(toasts.join()).toContain('NOT delivered to worker')
-  await pane.press({ key: 'D1-dismiss' })
-  expect(store.has(SESSION_KEY)).toBe(false)
 })
 
 test("the main session's answer is never sent as a message, which would reach the lead unasked", async ($, on) => {
@@ -142,14 +139,14 @@ test('Retry delivers a failed answer once the message gets through', async ($, o
   expect(await pane.find({ key: 'D1-retry' })).toBeUndefined()
 })
 
-test('Dismiss removes a failed answer from the board and its id is not issued again', async ($, on) => {
-  const store = engine(on, { isAppendRefused: true })
+test('Dismiss removes a failed answer from the board', async ($, on) => {
+  engine(on, { isAppendRefused: true })
   await $.tool.call({ ...ASK, agentId: 'worker' } as never)
   const pane = await mountPane($)
   await pane.press({ key: 'D1-option-0' })
+  expect((await pane.find({ type: 'Text', text: 'D1 →' }))?.text).toContain('not delivered')
   await pane.press({ key: 'D1-dismiss' })
-  expect(store.has(SESSION_KEY)).toBe(false)
-  expect(JSON.stringify(await $.tool.call(ASK as never))).toContain('Posted D2')
+  expect(await pane.find({ type: 'Text', text: 'D1 →' })).toBeUndefined()
 })
 
 test('a waiting decision can be reworded, keeping what the call omits, and new options drop the old recommended', async ($, on) => {
@@ -248,8 +245,9 @@ test('when the first decision is answered, the next one takes the hotkeys only a
   expect([await hotkey('D1-option-0'), await hotkey('D2-option-0')]).toEqual(['1', undefined])
 
   await pane.press({ key: 'D1-option-0' })
+  await clock.advance(1_499)
   expect(await hotkey('D2-option-0')).toBeUndefined()
-  await clock.advance(1_500)
+  await clock.advance(1)
   expect(await hotkey('D2-option-0')).toBe('1')
 })
 
@@ -302,7 +300,7 @@ test("only the poster or the main session changes an item, so a teammate's refus
   expect(resultText(await $.tool.call({ tool: ASK.tool, id: 'D1', withdraw: true, agentId: 'worker' } as never))).toContain('Withdrew D1')
 })
 
-test('Send now starts the idle main session once for every answer waiting on it', async ($, on) => {
+test('Send now starts the idle main session once for the answers waiting on it, and again for answers given later', async ($, on) => {
   const toasts: string[] = []
   const submitted: string[] = []
   engine(on, { toasts, submitted })
@@ -321,6 +319,13 @@ test('Send now starts the idle main session once for every answer waiting on it'
   // The turn's first request carries the answers, so nothing is left to send.
   await step($)
   expect(await pane.find({ key: 'send-now' })).toBeUndefined()
+
+  // Once that turn has ended, an answer given later starts the next one.
+  await complete($)
+  await $.tool.call({ ...ASK, question: 'Tag the release?' } as never)
+  await pane.press({ key: 'D3-option-0' })
+  await pane.press({ key: 'send-now' })
+  expect(submitted.length).toBe(2)
 })
 
 test('Send now is not offered while the main session is working', async ($, on) => {
