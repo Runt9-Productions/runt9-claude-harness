@@ -7,7 +7,7 @@ that name your own machine, repositories or accounts belong in your own settings
 | Fragment | What it adds |
 |---|---|
 | `guardrails-stores` | `permissions.deny` rules for `Read` of common credential stores, private keys and keystores. |
-| `guardrails-automode` | Auto-mode `environment`, `allow` and `soft_deny` rules for this harness's conventions. |
+| `guardrails-automode` | Auto-mode rules: blocks on reading credentials, changing installed software, unrequested downloads, losing git work, skipping git hooks, remote access and routing around a refusal, plus allows for proving tests and editing agent definitions. |
 | `guardrails-sandbox` | A sandbox configuration, shipped with `enabled: false`. |
 
 The three name credential stores in the form each layer reads, so their lists differ: `Read` deny rules take globs
@@ -19,7 +19,9 @@ sandbox list leaves out `~/.claude/.credentials.json`, which a nested `claude` r
 Every list starts with `"$defaults"`, so the built-in rules stay and these add to them. Auto mode reads rules only
 from user, managed and `--settings` scope, which is why the fragment goes into `~/.claude/settings.json`. A list from
 which you removed `"$defaults"` on purpose gets it back from the merge; take it out again by hand.
-`claude auto-mode config` prints the rules in effect, and `claude auto-mode critique` reviews your own.
+`claude auto-mode config` prints the rules in effect, and `claude auto-mode critique` reviews your own. Where a
+rule here is stricter than a built-in allow, such as Toolchain Bootstrap, it says that it takes precedence. Sending
+code or credentials out needs no rule here: the built-in Data Exfiltration rule blocks it unconditionally.
 
 ## Sandbox
 
