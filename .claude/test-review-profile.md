@@ -11,7 +11,7 @@ Facts about this repository's tests that `/test-review` and its `test-review:tes
 | Kind | Files | Helpers | Run | Reading the result |
 |---|---|---|---|---|
 | bats | `**/*.bats` | `.github/scripts/tests/helpers.bash` | `bats <file>`, or one test with `bats -f '<regex>' <file>` | TAP: `1..N`, then one `ok` or `not ok` line per test |
-| mod kit | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | none | `claude plugin test plugins/<name>` | one `(pass)` or `(fail)` line per test, then `N pass` and `N fail` |
+| mod kit | `plugins/**/*.test.ts`, `plugins/**/*.test.tsx` | `plugins/*/hooks/test-support.ts` | `claude plugin test plugins/<name>` | one `(pass)` or `(fail)` line per test, then `N pass` and `N fail` |
 | pytest | `**/test_*.py` | none | `python -m pytest -p no:cacheprovider -v <file>`, or one test with `-k '<name>'`, using the packages `requirements-dev.txt` pins | one `PASSED` or `FAILED` line per test, then `N passed` and `N failed` |
 
 Production code is every file that is neither a test nor a helper listed above.

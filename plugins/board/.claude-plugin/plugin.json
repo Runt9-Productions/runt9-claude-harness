@@ -1,0 +1,9 @@
+{
+  "name": "board",
+  "version": "0.1.0",
+  "description": "A pane of decisions and tasks waiting on the owner, the agents' own tasks and what each agent is doing, kept on screen until answered",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "types": "./types/index.d.ts"
+}
