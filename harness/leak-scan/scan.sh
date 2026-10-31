@@ -29,23 +29,31 @@ ref_names=()
 export_dir=
 text_file=
 allow_message_hex=false
-while [[ ${1:-} == --ref || ${1:-} == --export || ${1:-} == --text || ${1:-} == --allow-message-hex ]]; do
-    if [[ $1 == --allow-message-hex ]]; then
-        allow_message_hex=true
-        shift
-        continue
-    fi
-    (( $# >= 2 )) || usage
+while (( $# )); do
     case $1 in
-        --ref) ref_names+=("$2") ;;
-        --export) export_dir=$2 ;;
-        --text) text_file=$2 ;;
+        --allow-message-hex)
+            allow_message_hex=true
+            shift
+            ;;
+        --ref | --export | --text)
+            (( $# >= 2 )) || usage
+            case $1 in
+                --ref) ref_names+=("$2") ;;
+                --export) export_dir=$2 ;;
+                --text) text_file=$2 ;;
+            esac
+            shift 2
+            ;;
+        *)
+            break
+            ;;
     esac
-    shift 2
 done
 if [[ -n $text_file ]]; then
     (( $# == 2 )) || usage
-    [[ -z $export_dir && ${#ref_names[@]} -eq 0 && $allow_message_hex == false ]] || usage
+    [[ -z $export_dir ]] || usage
+    (( ${#ref_names[@]} == 0 )) || usage
+    [[ $allow_message_hex == false ]] || usage
 else
     (( $# >= 3 )) || usage
 fi
@@ -209,9 +217,8 @@ else
     printf '%s\n' "${ref_names[@]}" > "$work/push/text/ref-names"
     scan "$work/push" "$mirror" "$work/shapes.toml" "${revisions[@]}"
     if [[ $allow_message_hex == true ]]; then
-        jq --arg text "$work/push/text/" '
-            map(select(.RuleID != "hex-identifier" or (.File | ltrimstr($text) | test("^[0-9a-f]+\\.message$") | not)))
-        ' "$work/push/shapes-text.json" > "$work/push/shapes-text.kept.json"
+        jq 'map(select((.RuleID == "hex-identifier" and (.File | endswith(".message"))) | not))' \
+            "$work/push/shapes-text.json" > "$work/push/shapes-text.kept.json"
         mv "$work/push/shapes-text.kept.json" "$work/push/shapes-text.json"
     fi
 fi
