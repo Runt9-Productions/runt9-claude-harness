@@ -15,7 +15,7 @@ source copies of what moved.
 
 ## Where it stands
 
-- [status] Steps 01 to 06 are merged. 07 is in review, and 08 is under way with its first pull request merged.
+- [status] Steps 01 to 08 are merged; 09 is under way.
 
 ## Documents
 

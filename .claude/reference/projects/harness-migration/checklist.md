@@ -9,12 +9,12 @@ tags: [migration, harness]
 
 ## Status
 
-- **Live item:** 08, the CLAUDE.md template and fragments: bootstrap's fragment install (#32) is merged, and #34 is in
-  review
-- **How far along:** 01 to 06 merged; 07's first pull request, bootstrap's settings merge with the credential-store
-  deny fragment, in review; its auto-mode and sandbox fragment and the judge plugin follow
-- **Blocked on:** nothing
-- **Last moved:** 2026-10-30
+- **Live item:** 09: board (#54) and handoff (#53) are merged, and away is in progress as #67; context-budget is
+  dropped (#73, closed as not planned)
+- **How far along:** 01 to 08 merged; 07 without its judge mod, which is tabled; 10's pieces in this repository are
+  filed as #74 and #75
+- **Blocked on:** nothing outside the project
+- **Last moved:** 2026-10-31
 
 ## Build Order
 
@@ -31,8 +31,8 @@ same process. 04 and 05 stack on 03: 04 adds a bootstrap component, and 05 needs
 - [x] 04 Style-guide skills
 - [x] 05 reference-kb plugin and this repository's knowledge base
 - [x] 06 Delegation and the dev-process plugins, shipped as four pull requests
-- [ ] 07 Guardrails, plus bootstrap's settings merge
-- [ ] 08 CLAUDE.md template and fragments
-- [ ] 09 context-budget, board, handoff and away
-- [ ] 10 no-progress-reminder and whatever is left
+- [x] 07 Guardrails, plus bootstrap's settings merge (judge mod tabled)
+- [x] 08 CLAUDE.md template and fragments
+- [ ] 09 board, handoff and away (context-budget dropped)
+- [ ] 10 no-progress-reminder and the GitHub App identity component; the remaining machine-local hooks are dropped or stay local, outside this repository
 - [ ] 11 Cleanup: remove the source copies of what moved
