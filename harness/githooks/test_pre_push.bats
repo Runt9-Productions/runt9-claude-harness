@@ -149,15 +149,18 @@ leak="write to someone@acme-corp"".com"
 }
 
 @test "a state directory the hook cannot write: every push is reviewed, and nothing is kept" {
-    mkdir "$install/state"
+    # passed/ exists and stays writable, so only the working directory's mktemp fails.
+    mkdir -p "$install/state/passed"
     chmod a-w "$install/state"
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
     [ "$calls" -eq 1 ]
+    [[ $output == *"pre-push: cannot write $install/state, reviewing without the pass cache"* ]]
     push fail "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
-    [ "$(find "$install/state" -mindepth 1 | wc -l)" -eq 0 ]
+    [ "$(find "$install/state" -type f | wc -l)" -eq 0 ]
+    chmod u+w "$install/state"
 }
 
 @test "a pass under an earlier copy of the gate is not reused" {

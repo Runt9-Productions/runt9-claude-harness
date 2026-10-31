@@ -74,8 +74,9 @@ already public.
 
 A passing review is cached in `<dir>/state/passed/`, keyed by the hash of what the agent read and of every file in the
 installed copy. Pushing the same commits again costs nothing; updating the installed copy reviews them again. Where
-the hook cannot write `<dir>/state/`, as in a sandbox that runs it as the agent, it works in a temporary directory and
-caches nothing, so every push is reviewed in full.
+the hook cannot write `<dir>/state/`, as in a sandbox that runs it as the agent, it says so, works in a temporary
+directory and caches nothing: every push is reviewed in full, and the review's inputs are only as safe from the agent
+as that directory.
 
 **Override:** `LEAK_SCAN_SKIP=1 git push` skips the scan and the review, but only on an SSH remote, and never the
 authorship check. On any other remote it refuses the push instead. It is for the owner, for example to push a binary
@@ -97,7 +98,8 @@ python3 bootstrap.py harness hooks-path --repo <path> [--repo <path> ...]
 repository named. By hand, copy `githooks/` and `leak-scan/` side by side into one directory `<dir>/<copy>` outside
 the repository and run `git config core.hooksPath <dir>/<copy>/githooks` in each repository the agent works in.
 
-The leak gate keeps its pass cache and working files in `<dir>/state/`, beside the copy, so they survive a new version.
+The leak gate keeps its pass cache and working files in `<dir>/state/`, beside the copy, so they survive a new version
+(or, where it cannot write there, works in a temporary directory without the cache).
 Whatever keeps the agent from writing to the installed copy has to cover all of `<dir>`. Nothing in this repository
 does that; it is your harness's job.
 
