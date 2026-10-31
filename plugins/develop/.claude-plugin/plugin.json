@@ -1,6 +1,6 @@
 {
   "name": "develop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A ticket-to-reviewed-draft-pull-request process driven by a per-repository development profile, with an effort-estimate skill and a comment-sweep agent",
   "author": {
     "name": "Runt9 Productions"
