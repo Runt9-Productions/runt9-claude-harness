@@ -94,6 +94,8 @@ Behaviour other plugins or the engine rely on. A change to either side of a row 
 | `teammate-delivery` | Diverts only sends whose origin is the model; sends a plugin makes are left alone. | any plugin that sends to a teammate |
 | `teammate-delivery` | An idle receiver sees the lead under the name `team-lead`, which must equal `LEAD_NAME` in the module. | any tool text that tells a teammate who a message is from |
 | `teammate-delivery` | A diverted send returns `{ isDelivered: true }` and never calls `next`. Lower `session.send` hooks and every `session.receive` hook therefore never see it, and the receiver knows the sender only by the name in the row's header, never by a verified `origin.teammate`. | any plugin with a `session.send` or `session.receive` hook, and any tool text that names a message's sender |
+| `handoff` | A `/handoff` run whose origin is the plugin named `away` is unattended; a run from anywhere else is the owner's. | `away` |
+| `handoff` | The state keys `phase`, `isUnattended` and `ceilingPercent` keep the names and meanings in `types/index.d.ts`, and `phase` and `ceilingPercent` are written on every `session.start` and `turn.start`. | `away`, which reads them |
 | `board` | The tools keep the names `mcp__board__ask_decision`, `set_task` and `read_board`, and a new decision's result starts with `Posted D<n>`. | `away`, which posts decisions and parses the id |
 | `board` | A decision posted by a plugin's own call carries no `agentId`, so its answer is delivered to the main session. | `away` |
 | `board` | A new decision flashes on the pane and in the band above the prompt. | `away`, whose only alert it is in distracted mode |
@@ -117,6 +119,7 @@ A new plugin with a contract adds its rows here.
 | a marketplace entry's `description` | the plugin's `plugin.json` `description` | hand |
 | a `# vX` comment beside a pinned action | the SHA it annotates | Dependabot |
 | the "tuned on" version in `harness/leak-scan/README.md` | `version` in `install-betterleaks.sh` | hand |
+| the `warn_percent` and `ceiling_percent` defaults in `plugins/handoff/.claude-plugin/plugin.json` | the 30% and 60% in `harness/fragments/delegation.md` and the delegation skill | hand |
 | each request under "Other callers" | the `request` text in `harness/githooks/pre-push`, `harness/leak-scan/review-text.sh` and `harness/leak-scan/review.sh` | hand |
 
 ## Companions
