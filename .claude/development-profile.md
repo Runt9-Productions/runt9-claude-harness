@@ -82,7 +82,8 @@ a knowledge base note already answers a question, this file points there.
   leak scan, then a `public-leak` review through `claude -p` costing about $0.10 to $0.50. Any finding above Normal,
   or any open question, refuses the push. It reads commit messages too. What CI fails that is cheapest to catch first:
   a missing version rise, `ruff format`, and a note left unverified after its sources changed.
-- Duration: `CI` takes about 1.5 minutes (recent runs, 2026-10-28). A local code review's duration is not measured.
+- Duration: `CI` takes about 1.5 minutes (recent runs, 2026-10-28); a local code review took 8 and 16 minutes
+  (two runs, 2026-10-31).
 
 ## 7. Verification
 
@@ -112,12 +113,17 @@ pre-push gate trusts it, so a build never writes to it.
 
   ```
   CODE_REVIEW_OUTPUT=<scratch dir> claude -p "/lens-review <n> auto" --plugin-dir plugins/lens-review \
-    --permission-mode auto --no-session-persistence
+    --permission-mode auto --strict-mcp-config --no-session-persistence --output-format json > <run log>
   ```
 
-  Always `--permission-mode auto`, never `dontAsk` or a bypass mode: the run reads pull request content, so every
-  action it takes still goes through the auto-mode classifier, and `dontAsk` refuses any tool not allowed in advance.
-  The report and payload land in a run directory under the scratch directory. A draft is reviewed like any other pull
+  The run loads the head's own project settings, hooks and plugin code, and those run outside the auto-mode
+  classifier. So review only a branch of this repository, never a fork, and when the head adds or changes
+  `.claude/settings*.json`, `.mcp.json` or anything under `plugins/lens-review/hooks/`, the owner reads that change
+  before the run starts. Always `--permission-mode auto`, never `dontAsk` or a bypass mode: the tool calls the run
+  makes on pull request content go through the classifier, and `dontAsk` refuses any tool not allowed in advance.
+  `--strict-mcp-config` keeps the user's MCP servers out of a review that is posted publicly. Before posting, check
+  `jq '{is_error, permission_denials}' <run log>`: a blocked call is skipped and the report still looks whole. The
+  report and payload land in a run directory under the scratch directory. A draft is reviewed like any other pull
   request. A trivial change the owner can check at a glance skips both reviews and opens ready.
 - Posting: the bot posts the result as one comment-type review from the payload the skill wrote. Run the second
   command only when GitHub rejects the first, which it does for the whole review when one comment misses the diff. It

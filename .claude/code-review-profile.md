@@ -153,6 +153,8 @@ something the ruling did not account for.
 - The invisible-character check flagging emoji variation selectors.
 - Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
   common mistakes only. (2026-10-25)
+- A pull request reviewed with its own `.claude/`, `CLAUDE.md` and `plugins/lens-review`, which follows from running
+  the review in its worktree with `--plugin-dir` (2026-10-25, reworded for the local run 2026-10-31).
 - `bootstrap.py harness` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
   (2026-10-27)
 
@@ -177,8 +179,10 @@ answer goes in the structured output.
 - **The report.** Write the complete report to `<review-dir>/review.md` and nowhere else. Subagent writes to files
   named `REPORT*`, `SUMMARY*`, `FINDINGS*` or `ANALYSIS*` are refused. A run that writes no report says why in its
   final message.
+- **The run never posts.** It writes the files below; the session that started it posts them afterwards
+  (`.claude/development-profile.md`, section 9).
 - **PR targets** also write `<review-dir>/review-payload.json`, which is posted as written with `event: "COMMENT"`
-  added (`.claude/development-profile.md`, section 9):
+  added:
   - `commit_id`: the 40-hex head SHA the diff was fetched at. Without it GitHub reviews the newest head.
   - `body`: the review summary. It keeps all three severity headings, and a finding placed inline appears there as a
     one-line pointer to its comment.
@@ -187,8 +191,8 @@ answer goes in the structured output.
 - **Body cap.** Keep `body` under 60,000 characters, below GitHub's 65,536-character limit for a review. When the full
   body would pass that, shorten every finding in it to one line with its location, and say that the full text is in
   the inline comments and in `review.md`.
-- **Fallback.** GitHub rejects the whole review when one comment does not land on the diff. Then post `review.md`
-  alone as the review body, cut to 60,000 bytes, so `review.md` holds every finding in full, inline or not.
+- **Fallback.** GitHub rejects the whole review when one comment does not land on the diff, and `review.md` is
+  then posted alone as the body, so it holds every finding in full, inline or not.
 
 ## Standing instructions
 
