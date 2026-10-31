@@ -6,6 +6,8 @@ zero=0000000000000000000000000000000000000000
 
 setup() {
     export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+    # Run from a Claude Code session, the suite would otherwise check authorship wherever a bot is named.
+    unset CLAUDE_CODE_SESSION_ID
     local source_root
     source_root=$(cd "$BATS_TEST_DIRNAME/../.." && pwd)
     # Laid out as bootstrap.py installs it: the hook runs through `current`, and keeps its state beside it.
@@ -22,29 +24,39 @@ setup() {
     mkdir -p "$HOME/.local/bin" "$stub_dir"
     ln -s "$(command -v betterleaks)" "$HOME/.local/bin/betterleaks"
     # The hook gives claude a fixed environment, so the stub reads its verdict from ~/stub/mode. Every call is counted,
-    # and the bundle and environment it was given are kept for inspection.
+    # and the bundle and environment it was given are kept for inspection. Every mode but short reports each file read
+    # to its last line; short stops one line before the end of commits.patch.
     cat > "$HOME/.local/bin/claude" << 'EOF'
 #!/usr/bin/env bash
 echo call >> "$HOME/stub/calls"
 env > "$HOME/stub/env"
 rm -rf "$HOME/stub/bundle"
 cp -r . "$HOME/stub/bundle"
+mode=$(cat "$HOME/stub/mode")
 read=
 for file in *; do
-    read+="{\"file\":\"$file\",\"lines\":$(wc -l < "$file")},"
+    lines=$(wc -l < "$file")
+    if [[ $mode == short && $file == commits.patch ]]; then
+        lines=$(( lines - 1 ))
+    fi
+    read+="{\"file\":\"$file\",\"lines\":$lines},"
 done
 read="[${read%,}]"
 finding() { printf '[{"severity":"%s","location":"a","text":"t","reveals":"r"}]' "$1"; }
-case $(cat "$HOME/stub/mode") in
-    normal) output="{\"findings\":$(finding Normal),\"open_questions\":[],\"read\":$read}" ;;
+case $mode in
+    normal|crash) output="{\"findings\":$(finding Normal),\"open_questions\":[],\"read\":$read}" ;;
     high) output="{\"findings\":$(finding High),\"open_questions\":[],\"read\":$read}" ;;
     unknown) output="{\"findings\":$(finding Low),\"open_questions\":[],\"read\":$read}" ;;
     question) output="{\"findings\":[],\"open_questions\":[{\"location\":\"a\",\"text\":\"t\",\"question\":\"q\"}],\"read\":$read}" ;;
-    unread) output='{"findings":[],"open_questions":[],"read":[]}' ;;
+    short) output="{\"findings\":[],\"open_questions\":[],\"read\":$read}" ;;
     unstructured) echo '{"result":"no verdict"}'; exit 0 ;;
     fail) exit 1 ;;
 esac
 echo "{\"structured_output\":$output}"
+# crash prints a passing verdict and still exits non-zero.
+if [[ $mode == crash ]]; then
+    exit 1
+fi
 EOF
     chmod +x "$HOME/.local/bin/claude"
 
@@ -95,8 +107,8 @@ push() {
 # Split so this file does not trip the scan it tests.
 leak="write to someone@acme-corp"".com"
 
-@test "claude fails: refused" {
-    push fail "$remote" "$(new_branch)"
+@test "claude exits non-zero, even after printing a passing verdict: refused" {
+    push crash "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
     [[ $output == *"leak-review: did not run (claude exited 1)"* ]]
@@ -130,11 +142,12 @@ leak="write to someone@acme-corp"".com"
     [[ $output == *"raised 1 question(s) or finding(s) not rated Normal"* ]]
 }
 
-@test "review that did not read its inputs to the end: refused" {
-    push unread "$remote" "$(new_branch)"
+@test "review that stopped one line before the end of an input: refused" {
+    push short "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
-    [[ $output == *"leak-review: read 0 of the "*" lines in commits.patch"* ]]
+    patch_lines=$(( $(wc -l < "$stub_dir/bundle/commits.patch") ))
+    [[ $output == *"leak-review: read $(( patch_lines - 1 )) of the $patch_lines lines in commits.patch"* ]]
 }
 
 @test "Normal finding only: allowed, and only the pass is kept, under the install directory" {
@@ -148,10 +161,42 @@ leak="write to someone@acme-corp"".com"
     [ "$(find "$install/state" -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 ]
 }
 
+@test "a state directory the hook cannot write: every push is reviewed, and nothing is kept" {
+    if (( EUID == 0 )); then
+        skip "root writes into a read-only directory"
+    fi
+    # passed/ exists and stays writable, so only the working directory's mktemp fails.
+    mkdir -p "$install/state/passed"
+    chmod a-w "$install/state"
+    # The fallback works under TMPDIR, so an empty one afterwards shows it removed its working files.
+    export TMPDIR=$BATS_TEST_TMPDIR/tmp
+    mkdir "$TMPDIR"
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 0 ]
+    [ "$calls" -eq 1 ]
+    [[ $output == *"pre-push: cannot write $install/state, reviewing without the pass cache"* ]]
+    push fail "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 1 ]
+    [ "$(find "$install/state" -type f | wc -l)" -eq 0 ]
+    [ -z "$(ls -A "$TMPDIR")" ]
+    chmod u+w "$install/state"
+}
+
 @test "a pass under an earlier copy of the gate is not reused" {
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
     echo "# changed" >> "$install/current/leak-scan/shapes.toml"
+    push fail "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 1 ]
+}
+
+@test "a pass for other content is not reused" {
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 0 ]
+    echo "another ordinary line" >> "$repo/new.txt"
+    commit more
     push fail "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
@@ -276,17 +321,18 @@ leak="write to someone@acme-corp"".com"
 }
 
 @test "the caller's environment does not reach the review, but its API key and proxy do" {
-    ANTHROPIC_BASE_URL=http://127.0.0.1:9 NODE_OPTIONS=--require=/x HTTPS_PROXY=http://127.0.0.1:9 \
-        ANTHROPIC_API_KEY=synthetic-key push normal "$remote" "$(new_branch)"
+    ANTHROPIC_BASE_URL=http://127.0.0.1:9 NODE_OPTIONS=--require=/x SYNTHETIC_CALLER_SETTING=1 \
+        HTTPS_PROXY=http://127.0.0.1:9 ANTHROPIC_API_KEY=synthetic-key push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
-    run grep -e ANTHROPIC_BASE_URL -e NODE_OPTIONS "$stub_dir/env"
+    run grep -e ANTHROPIC_BASE_URL -e NODE_OPTIONS -e SYNTHETIC_CALLER_SETTING "$stub_dir/env"
     [ "$status" -eq 1 ]
     grep -qx ANTHROPIC_API_KEY=synthetic-key "$stub_dir/env"
     grep -qx HTTPS_PROXY=http://127.0.0.1:9 "$stub_dir/env"
 }
 
 @test "a line too long to read in one piece reaches the review whole, in overlapping pieces" {
-    { printf 'start '; head -c 9000 /dev/zero | tr '\0' x; printf ' end-of-line\n'; } > "$repo/long.txt"
+    # 7801 characters with the patch's +: one past the end of the second piece, so the third holds only the last one.
+    { printf 'start '; head -c 7782 /dev/zero | tr '\0' x; printf ' end-of-line\n'; } > "$repo/long.txt"
     commit long
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
@@ -343,8 +389,13 @@ agent_push() {
     [[ $output == *"is authored by test <$bot_email>, not by the bot"* ]]
 }
 
-@test "a ref outside the bot's branch prefix, with claude.branchPrefix empty, from a session: refused under claude/" {
+@test "a ref outside claude.branchPrefix, from a session: refused, under claude/ when it is set empty" {
     use_bot
+    git -C "$repo" config claude.branchPrefix bots/
+    agent_push normal "$remote" "$(update_of refs/heads/claude/bot)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"pushes and deletes only branches under bots/, not refs/heads/claude/bot"* ]]
     git -C "$repo" config claude.branchPrefix ''
     agent_push normal "$remote" "$(update_of refs/heads/main)"
     [ "$status" -eq 1 ]
@@ -368,12 +419,13 @@ agent_push() {
     [ "$calls" -eq 1 ]
 }
 
-@test "outside a session: the owner's push is not checked for authorship" {
-    name_bot
-    unset CLAUDE_CODE_SESSION_ID
-    push normal "$remote" "$(new_branch)"
+@test "authorship is not checked in a session where git config names no bot, nor outside a session" {
+    agent_push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
     [ "$calls" -eq 1 ]
+    name_bot
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 0 ]
 }
 
 @test "a commit the bot authored but did not commit, from a session: refused, naming the committer" {

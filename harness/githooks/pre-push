@@ -105,9 +105,17 @@ fi
 # The pass cache and the review's working files live beside the installed copy, in the directory the agent's write
 # guards cover. In the repository's .git or in /tmp, an agent could plant a pass or edit the review's inputs. `root`
 # keeps the symlink git ran the hook through, so under ~/.claude/harness/current this is ~/.claude/harness/state.
+# Where the hook cannot write there, as inside a sandbox that runs it as the agent, it works in a temporary directory
+# and keeps no cache: every push is reviewed in full and no pass can be planted, but the review's inputs are only as
+# safe from the agent as that directory.
 state=${root%/*}/state
-mkdir -p "$state/passed"
-work=$(mktemp -d "$state/push.XXXXXX")
+cache_args=()
+if mkdir -p "$state/passed" 2> /dev/null && work=$(mktemp -d "$state/push.XXXXXX" 2> /dev/null); then
+    cache_args=(--cache "$state/passed")
+else
+    echo "pre-push: cannot write $state, reviewing without the pass cache" >&2
+    work=$(mktemp -d)
+fi
 trap 'rm -rf "$work"' EXIT
 
 # Everything below reads a bare mirror that borrows the repo's objects and holds the remote's refs as fetched now, so
@@ -178,7 +186,7 @@ and tag names it creates or updates)."
 
 mkdir "$work/review"
 status=0
-"$root/leak-scan/review.sh" --cache "$state/passed" "$work/review" "$mirror" "$trusted" "$request" \
+"$root/leak-scan/review.sh" "${cache_args[@]}" "$work/review" "$mirror" "$trusted" "$request" \
     "$inputs/commits.patch" "$inputs/identities.txt" "$inputs/file-names.txt" "$inputs/binary-files.txt" \
     "$inputs/tags.txt" "$inputs/ref-names.txt" || status=$?
 if (( status == 1 )); then
