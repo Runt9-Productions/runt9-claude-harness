@@ -38,9 +38,9 @@ const HANDOFF_STEPS =
   'repo and branch state, decisions the owner settled, what is in flight, and the ordered next steps. Put it in ' +
   "the repo's .claude/output for work on that repo, otherwise ~/.claude/output. The file holds the current state " +
   'only: if a handoff file for this work exists, rewrite it rather than adding a section to it, drop whatever is ' +
-  'done or superseded, and move decisions that outlast this work to memory, the knowledge base or the plan. Write ' +
-  'it from the current state rather than from the previous handoff file, and point to the documents the repo ' +
-  'keeps, such as its process, a plan or a spec, rather than restating them. Then ' +
+  'done or superseded, and move decisions that outlast this work to memory, the knowledge base or the plan. Build ' +
+  'it fresh from the current state rather than by editing the previous handoff file, and point to the documents ' +
+  'the repo keeps, such as its process, a plan or a spec, rather than restating them. Then ' +
   'load mcp__handoff__compact_with through ToolSearch and call it with your compaction message: what to keep, what ' +
   'to drop, and the handoff file to read first. Then end the turn without starting anything else; the session ' +
   'compacts when the turn ends.'
@@ -92,8 +92,11 @@ const COMPACT_WITH: ToolSpec = {
 // compact() off.
 const runningTurnIds = new Set<string>()
 
-// A compact() call in flight cannot be taken back, so Cancel refuses while one runs.
-let isCompactCallRunning = false
+// compact() and cancel() each hold these from their first step to their last, and back off while the other runs.
+// State reads and writes await, so a check on state alone lets a Cancel pass between compact()'s nonce check and the
+// compaction, or between the compaction and the reset, and claim nothing compacts.
+let isCompacting = false
+let isCancelling = false
 
 async function setPhase($: EngineInterface, next: HandoffPhase) {
   await update($, phase, () => next)
@@ -150,28 +153,35 @@ async function submit($: EngineInterface, text: string): Promise<string | undefi
   }
 }
 
-/** `id` is the handoff's nonce: a retry left over from a cancelled handoff finds it gone and stops. */
-async function compact($: EngineInterface, id: string, attempt: number) {
-  if ((await read($, handoffNonce)) !== id) return
+async function compact($: EngineInterface, nonce: string, attempt: number) {
+  if (isCancelling) return
+  isCompacting = true
+  try {
+    await compactUnlessCancelled($, nonce, attempt)
+  } finally {
+    isCompacting = false
+  }
+}
+
+/** A retry left over from a cancelled handoff finds its nonce gone and stops. */
+async function compactUnlessCancelled($: EngineInterface, nonce: string, attempt: number) {
+  if ((await read($, handoffNonce)) !== nonce) return
   // A running turn rejects every attempt for as long as it runs, so waiting on one uses up none of them.
   if (runningTurnIds.size > 0) {
-    $.clock.after(COMPACT_RETRY_MS, () => void compact($, id, attempt))
+    $.clock.after(COMPACT_RETRY_MS, () => void compact($, nonce, attempt))
     return
   }
   let result
-  isCompactCallRunning = true
   try {
     result = await $.session.compact({ instructions: await read($, message) })
   } catch (err) {
     if (attempt < COMPACT_ATTEMPTS) {
-      $.clock.after(COMPACT_RETRY_MS, () => void compact($, id, attempt + 1))
+      $.clock.after(COMPACT_RETRY_MS, () => void compact($, nonce, attempt + 1))
       return
     }
     await refreshPercent($)
     await fail($, `Compaction failed: ${String(err)}`, 'The message is in the transcript; run /compact by hand')
     return
-  } finally {
-    isCompactCallRunning = false
   }
   await refreshPercent($)
   if ('skip' in result && result.skip) {
@@ -207,19 +217,26 @@ async function finish($: EngineInterface, isAborted: boolean) {
     $.ui.toast('Compacting with the message Claude wrote')
   }
   await setPhase($, 'compacting')
-  const id = await read($, handoffNonce)
-  $.clock.after(COMPACT_RETRY_MS, () => void compact($, id, 1))
+  const nonce = await read($, handoffNonce)
+  $.clock.after(COMPACT_RETRY_MS, () => void compact($, nonce, 1))
 }
 
 // A prompt already queued cannot be taken back, so a handoff cancelled while 'queued' still gets its turn, and
 // compact_with tells Claude there that nothing will compact.
 async function cancel($: EngineInterface) {
-  if (isCompactCallRunning) {
+  if (isCompacting) {
     $.ui.toast('The compaction has started and cannot be stopped')
     return
   }
-  await update($, handoffTurnId, () => '')
-  await stopWithout($, 'Handoff cancelled; nothing will compact')
+  isCancelling = true
+  try {
+    // A band not yet redrawn after the handoff ended still shows Cancel.
+    if ((await read($, phase)) === 'idle') return
+    await update($, handoffTurnId, () => '')
+    await stopWithout($, 'Handoff cancelled; nothing will compact')
+  } finally {
+    isCancelling = false
+  }
 }
 
 async function reset($: EngineInterface) {
@@ -251,6 +268,12 @@ async function publishSharedState($: EngineInterface, limits: Thresholds) {
   await update($, ceilingPercent, () => limits.ceilingPercent)
   // Written back unchanged: a key never written reads undefined to another plugin, whatever the atom's initial.
   await update($, phase, current => current)
+}
+
+const PHASE_LABELS: Record<Exclude<HandoffPhase, 'idle'>, string> = {
+  queued: 'handoff: waiting for the current turn to end',
+  writing: 'handoff: Claude is writing it',
+  compacting: 'handoff: compacting',
 }
 
 export const register: Register = (on, options) => {
@@ -339,16 +362,11 @@ export const register: Register = (on, options) => {
         {current === 'idle' ? (
           <Button key="handoff-start" label="Hand off and compact" onPress={() => void start($, '', 'owner')} />
         ) : (
-          <>
-            <Text italic>
-              {current === 'queued'
-                ? 'handoff: waiting for the current turn to end '
-                : current === 'writing'
-                  ? 'handoff: Claude is writing it '
-                  : 'handoff: compacting '}
-            </Text>
+          // A fragment is a column Box, which would put Cancel beneath the phase rather than beside it.
+          <Box>
+            <Text italic>{PHASE_LABELS[current]} </Text>
             <Button key="handoff-cancel" label="Cancel" onPress={() => void cancel($)} />
-          </>
+          </Box>
         )}
       </Box>
     )
