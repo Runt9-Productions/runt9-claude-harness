@@ -40,6 +40,8 @@ function engine(on: On, compacted: object = COMPACTED, isTurnRunning = () => fal
   })
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
+  // What the other plugins draw in the band; the handoff hook draws its line beneath it.
+  on('ui.render', () => ({ type: 'Box', props: {} }) as never)
   return { submitted, toasts, compactions, clock }
 }
 
@@ -179,18 +181,68 @@ test('another plugin reads the phase as idle before any handoff', { plugins: [PR
   expect(await handoffState($, 'phase')).toBe('idle')
 })
 
-test('after the compaction, the band shows the estimated fill rather than 0%', async ($, on) => {
-  // What the other plugins draw in the band; the handoff hook draws its line beneath it.
-  on('ui.render', () => ({ type: 'Box', props: {} }) as never)
-  const h = engine(on)
-  await runHandoff($, h)
-  const band = await $.ui.mount({
+/** The band above the prompt. */
+async function mountBand($: Engine) {
+  return $.ui.mount({
     plugin: 'handoff',
     surface: 'terminal',
     component: 'AbovePrompt',
     props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80 },
   } as never)
+}
+
+test('after the compaction, the band shows the estimated fill rather than 0%', async ($, on) => {
+  const h = engine(on)
+  await runHandoff($, h)
+  const band = await mountBand($)
   expect((await band.find({ type: 'Text' }))?.text).toContain('Context 3%')
+})
+
+test('Cancel on a queued handoff compacts nothing when its turn runs, and the next press starts one', async ($, on) => {
+  const h = engine(on)
+  await press($, h)
+  await (await mountBand($)).press({ key: 'handoff-cancel' })
+  expect(h.toasts.join()).toContain('Handoff cancelled')
+
+  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
+  expect(JSON.stringify(await $.tool.call(COMPACT_WITH as never))).toContain('the owner cancelled it')
+  await turnComplete($, 't1')
+  await h.clock.advance(10_000)
+  expect(h.compactions).toEqual([])
+
+  await press($, h)
+  expect(h.submitted.length).toBe(2)
+})
+
+test('Cancel while Claude writes the handoff compacts nothing when the turn ends', async ($, on) => {
+  const h = engine(on)
+  await press($, h)
+  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
+  await $.tool.call(COMPACT_WITH as never)
+  await (await mountBand($)).press({ key: 'handoff-cancel' })
+  await turnComplete($, 't1')
+  await h.clock.advance(10_000)
+  expect(h.compactions).toEqual([])
+  expect(h.toasts.join()).not.toContain('Compacting')
+})
+
+test('Cancel while the compaction waits on a running turn stops it before it compacts', async ($, on) => {
+  let isBusy = false
+  const h = engine(on, COMPACTED, () => isBusy)
+  await press($, h)
+  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
+  await $.tool.call(COMPACT_WITH as never)
+  await turnComplete($, 't1')
+  isBusy = true
+  await turnStart($, '<teammate-message>found it</teammate-message>', 'tB')
+  await h.clock.advance(5_000)
+  await (await mountBand($)).press({ key: 'handoff-cancel' })
+
+  isBusy = false
+  await turnComplete($, 'tB')
+  await h.clock.advance(10_000)
+  expect(h.compactions).toEqual([])
+  expect(h.submitted.length).toBe(1)
 })
 
 const failures = (h: Handoff) => h.submitted.filter(s => s.includes('The handoff failed'))

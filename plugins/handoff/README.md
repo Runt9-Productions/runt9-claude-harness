@@ -16,7 +16,7 @@ prompt has Claude read the handoff file back.
 A line above the prompt shows how full the context window is, yellow from 30% and red from 60%, with a
 **Hand off and compact** button. The two points are the plugin's `warn_percent` and `ceiling_percent` options, set in
 `/config`; the defaults match the delegation rules' figures for where rule-following degrades and its ceiling. While a handoff runs, the button gives way to its phase: waiting for the current
-turn to end, Claude writing it, or compacting.
+turn to end, Claude writing it, or compacting, with a **Cancel** button beside it.
 
 ## A handoff
 
@@ -53,6 +53,9 @@ empty or not text.
 A toast says why each time:
 
 - A handoff is already under way: a second request is refused.
+- You press Cancel: nothing is compacted. A queued `[handoff]` prompt cannot be taken back, so its turn still runs,
+  and `compact_with` tells Claude there that the handoff was cancelled. Once the compaction itself has started, Cancel
+  is refused.
 - You interrupt the handoff turn: nothing is compacted.
 - Claude ends the turn without calling `compact_with`: nothing is compacted.
 - The compaction is skipped, or keeps failing for about five seconds with no turn running: no resume prompt is sent.

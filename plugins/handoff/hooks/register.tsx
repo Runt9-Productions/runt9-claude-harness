@@ -90,6 +90,9 @@ const COMPACT_WITH: ToolSpec = {
 // compact() off.
 const runningTurnIds = new Set<string>()
 
+// A compact() call in flight cannot be taken back, so Cancel refuses while one runs.
+let isCompactCallRunning = false
+
 async function setPhase($: EngineInterface, next: HandoffPhase) {
   await update($, phase, () => next)
 }
@@ -145,23 +148,28 @@ async function submit($: EngineInterface, text: string): Promise<string | undefi
   }
 }
 
-async function compact($: EngineInterface, attempt: number) {
+/** `id` is the handoff's nonce: a retry left over from a cancelled handoff finds it gone and stops. */
+async function compact($: EngineInterface, id: string, attempt: number) {
+  if ((await read($, handoffNonce)) !== id) return
   // A running turn rejects every attempt for as long as it runs, so waiting on one uses up none of them.
   if (runningTurnIds.size > 0) {
-    $.clock.after(COMPACT_RETRY_MS, () => void compact($, attempt))
+    $.clock.after(COMPACT_RETRY_MS, () => void compact($, id, attempt))
     return
   }
   let result
+  isCompactCallRunning = true
   try {
     result = await $.session.compact({ instructions: await read($, message) })
   } catch (err) {
     if (attempt < COMPACT_ATTEMPTS) {
-      $.clock.after(COMPACT_RETRY_MS, () => void compact($, attempt + 1))
+      $.clock.after(COMPACT_RETRY_MS, () => void compact($, id, attempt + 1))
       return
     }
     await refreshPercent($)
     await fail($, `Compaction failed: ${String(err)}`, 'The message is in the transcript; run /compact by hand')
     return
+  } finally {
+    isCompactCallRunning = false
   }
   await refreshPercent($)
   if ('skip' in result && result.skip) {
@@ -197,7 +205,19 @@ async function finish($: EngineInterface, isAborted: boolean) {
     $.ui.toast('Compacting with the message Claude wrote')
   }
   await setPhase($, 'compacting')
-  $.clock.after(COMPACT_RETRY_MS, () => void compact($, 1))
+  const id = await read($, handoffNonce)
+  $.clock.after(COMPACT_RETRY_MS, () => void compact($, id, 1))
+}
+
+// A prompt already queued cannot be taken back, so a handoff cancelled while 'queued' still gets its turn, and
+// compact_with tells Claude there that nothing will compact.
+async function cancel($: EngineInterface) {
+  if (isCompactCallRunning) {
+    $.ui.toast('The compaction has started and cannot be stopped')
+    return
+  }
+  await update($, handoffTurnId, () => '')
+  await stopWithout($, 'Handoff cancelled; nothing will compact')
 }
 
 async function reset($: EngineInterface) {
@@ -258,7 +278,11 @@ export const register: Register = (on, options) => {
     // Only the handoff's own turn saves a message: while 'queued' that turn has not started, so a call is another's.
     const isHandoffTurn = e.agentId === undefined && (await read($, phase)) === 'writing'
     if (!isHandoffTurn) {
-      return { result: "This turn is not a handoff's, so nothing will compact. Do not call this unprompted." }
+      return {
+        result:
+          'No handoff is waiting on this call (none was asked for, or the owner cancelled it), so nothing will compact. ' +
+          'Do not call this again unless a new "[handoff]" prompt asks.',
+      }
     }
     const text = e.message
     if (typeof text !== 'string' || !text.trim()) {
@@ -313,13 +337,16 @@ export const register: Register = (on, options) => {
         {current === 'idle' ? (
           <Button key="handoff-start" label="Hand off and compact" onPress={() => void start($, '', 'owner')} />
         ) : (
-          <Text italic>
-            {current === 'queued'
-              ? 'handoff: waiting for the current turn to end'
-              : current === 'writing'
-                ? 'handoff: Claude is writing it'
-                : 'handoff: compacting'}
-          </Text>
+          <>
+            <Text italic>
+              {current === 'queued'
+                ? 'handoff: waiting for the current turn to end '
+                : current === 'writing'
+                  ? 'handoff: Claude is writing it '
+                  : 'handoff: compacting '}
+            </Text>
+            <Button key="handoff-cancel" label="Cancel" onPress={() => void cancel($)} />
+          </>
         )}
       </Box>
     )
