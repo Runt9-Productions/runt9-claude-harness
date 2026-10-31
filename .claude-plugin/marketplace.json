@@ -39,6 +39,11 @@
       "name": "handoff",
       "source": "./plugins/handoff",
       "description": "One press or /handoff: Claude writes a handoff file and a compaction message, then the session compacts with it"
+    },
+    {
+      "name": "board",
+      "source": "./plugins/board",
+      "description": "A pane of decisions and tasks waiting on the owner, the agents' own tasks and what each agent is doing, kept on screen until answered"
     }
   ]
 }

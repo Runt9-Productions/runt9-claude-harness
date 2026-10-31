@@ -96,6 +96,10 @@ Behaviour other plugins or the engine rely on. A change to either side of a row 
 | `teammate-delivery` | A diverted send returns `{ isDelivered: true }` and never calls `next`. Lower `session.send` hooks and every `session.receive` hook therefore never see it, and the receiver knows the sender only by the name in the row's header, never by a verified `origin.teammate`. | any plugin with a `session.send` or `session.receive` hook, and any tool text that names a message's sender |
 | `handoff` | A `/handoff` run whose origin is the plugin named `away` is unattended; a run from anywhere else is the owner's. | `away` |
 | `handoff` | The state keys `phase`, `isUnattended` and `ceilingPercent` keep the names and meanings in `types/index.d.ts`, and `phase` and `ceilingPercent` are written on every `session.start` and `turn.start`. | `away`, which reads them |
+| `board` | The tools keep the names `mcp__board__ask_decision`, `set_task` and `read_board`, and a new decision's result starts with `Posted D<n>`. | `away`, which posts decisions and parses the id |
+| `board` | A decision posted by a plugin's own call carries no `agentId`, so its answer is delivered to the main session. | `away` |
+| `board` | A new decision flashes on the pane and in the band above the prompt. | `away`, whose only alert it is in distracted mode |
+| `board` | `ENDED_STATUSES` lists the `$.agent.list()` statuses of a loop that has ended; `away` holds a copy. | `away` |
 
 A new plugin with a contract adds its rows here.
 
