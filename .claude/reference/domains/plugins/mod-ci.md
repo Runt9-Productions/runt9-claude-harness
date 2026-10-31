@@ -13,7 +13,7 @@ sources:
 
 # Mod CI Checks
 
-> **Scope.** How a mod is type-checked, linted and validated without credentials, and the npm behaviour the pinned tools depend on. The `#measured` lines are carried from measurements on the versions in `measured_on` (type generation also on 2.1.307 and 2.1.309) and were not re-measured when this note was written; the `plugins` job in `.github/workflows/ci.yml` was read. Not covered: the invisible-character guard, the leak scan, and mods that declare `dependencies` beyond the one line below.
+> **Scope.** How a mod is type-checked, linted and validated without credentials, and the npm behaviour the pinned tools depend on. The `#measured` lines are carried from measurements on the versions in `measured_on` (type generation also on 2.1.307 and 2.1.309) and were not re-measured when this note was written; the `plugins` job in `.github/workflows/ci.yml` was read, and the `leak-scan` job's `PR_AUTHOR` setting was read and changes none of these claims. Not covered: the invisible-character guard, the leak scan, and mods that declare `dependencies` beyond the one line below.
 
 Read this before changing the `plugins` job or checking a mod by hand. Two of the checks below pass silently when
 their input is missing, which is why the job checks the input exists first.
