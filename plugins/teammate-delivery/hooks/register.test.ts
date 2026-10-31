@@ -21,6 +21,7 @@ const REVIEWER = agent('agent-0002', 'reviewer-b')
 type World = {
   sends: SessionSendInput[]
   toasts: string[]
+  agentLists: () => number
   rows: () => string[]
   // Texts the conversation has lost since they were stored, as a compaction would.
   dropped: Set<string>
@@ -43,13 +44,17 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
   const sends: SessionSendInput[] = []
   const toasts: string[] = []
   const dropped = new Set<string>()
+  let agentLists = 0
   const textsFor = (agentId?: string) =>
     session
       .appended()
       .filter(row => options.sharedLoop || row.agentId === agentId)
       .flatMap(row => row.message.content.map(block => String(block.text)))
 
-  on('agent.list', () => ({ value: [...agents] }))
+  on('agent.list', () => {
+    agentLists += 1
+    return { value: [...agents] }
+  })
   on('session.messages', (_, e) => {
     const messages: ApiMessage[] = [
       BRIEF,
@@ -80,7 +85,7 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
   })
   on('turn.complete', () => ({ text: '' }))
 
-  return { sends, toasts, rows: () => textsFor(WORKER.id), dropped }
+  return { sends, toasts, agentLists: () => agentLists, rows: () => textsFor(WORKER.id), dropped }
 }
 
 function modelSend($: Engine, to: string, text: string, from?: AgentInfo) {
@@ -176,25 +181,38 @@ describe('diverting into a running turn', () => {
     )
   })
 
-  const disguises: [string, string, string][] = [
-    ['a NEL after the name', '<sample-envelope\u0085x\u0085</sample-envelope\u0085', '<\\sample-envelope\n> x\n> <\\/sample-envelope\n> '],
-    ['a zero-width space in the name', '<sample\u200B-envelope>', '<\\sample\u200B-envelope>'],
-    ['a zero-width joiner after the <', '<\u200Dsample-envelope>', '<\\\u200Dsample-envelope>'],
-    ['a soft hyphen in the name', '<sam\u00ADple-envelope>', '<\\sam\u00ADple-envelope>'],
-    ['a word joiner before the /', '<\u2060/sample-envelope>', '<\\\u2060/sample-envelope>'],
-    ['a Unicode hyphen as the separator', '<sample‐envelope>', '<\\sample‐envelope>'],
-    ['a fullwidth <', '＜sample-envelope>', '＜\\sample-envelope>'],
-  ]
-  for (const [name, body, quoted] of disguises) {
-    test(`a tag disguised by ${name} is escaped`, async ($, on) => {
-      const w = world(on, [WORKER])
-      await start($, WORKER)
+  test('a tag disguised by look-alike or invisible characters is escaped', async ($, on) => {
+    // Each disguise's name, the body sent and the quoted body expected.
+    const disguises: [string, string, string][] = [
+      ['a NEL after the name', '<sample-envelope\u0085x\u0085</sample-envelope\u0085', '<\\sample-envelope\n> x\n> <\\/sample-envelope\n> '],
+      ['a zero-width space in the name', '<sample\u200B-envelope>', '<\\sample\u200B-envelope>'],
+      ['a zero-width joiner after the <', '<\u200Dsample-envelope>', '<\\\u200Dsample-envelope>'],
+      ['a combining mark after the <', '<\u0301sample-envelope>', '<\\\u0301sample-envelope>'],
+      ['a combining solidus after the <', '<\u0338sample-envelope>', '<\\\u0338sample-envelope>'],
+      ['a soft hyphen in the name', '<sam\u00ADple-envelope>', '<\\sam\u00ADple-envelope>'],
+      ['a lone soft hyphen as the separator', '<sample\u00ADenvelope>', '<\\sample\u00ADenvelope>'],
+      ['a word joiner before the /', '<\u2060/sample-envelope>', '<\\\u2060/sample-envelope>'],
+      ['a Unicode hyphen as the separator', '<sample\u2010envelope>', '<\\sample\u2010envelope>'],
+      ['a modifier minus as the separator', '<sample\u02D7envelope>', '<\\sample\u02D7envelope>'],
+      ['a ratio sign as the separator', '<sample\u2236envelope>', '<\\sample\u2236envelope>'],
+      ['a fullwidth <', '\uFF1Csample-envelope>', '\uFF1C\\sample-envelope>'],
+      ['modifier arrowheads', '\u02C2sample-envelope\u02C3', '\u02C2\\sample-envelope\u02C3'],
+      ['angle quotation marks', '\u2039sample-envelope\u203A', '\u2039\\sample-envelope\u203A'],
+      ['CJK angle brackets', '\u3008sample-envelope\u3009', '\u3008\\sample-envelope\u3009'],
+      ['mathematical angle brackets', '\u27E8sample-envelope\u27E9', '\u27E8\\sample-envelope\u27E9'],
+      ['a division slash', '<\u2215sample-envelope>', '<\\\u2215sample-envelope>'],
+      ['a fraction slash', '<\u2044sample-envelope>', '<\\\u2044sample-envelope>'],
+    ]
+    const w = world(on, [WORKER])
+    await start($, WORKER)
 
-      await modelSend($, 'worker-a', body)
+    for (const [, body] of disguises) await modelSend($, 'worker-a', body)
 
-      expect(w.rows()).toEqual([`Message from team-lead, delivered during your turn:\n> ${quoted}`])
-    })
-  }
+    // Paired with each name so a failure says which disguise slipped through.
+    const header = 'Message from team-lead, delivered during your turn:'
+    const expected = disguises.map(([name, , quoted]) => [name, `${header}\n> ${quoted}`])
+    expect(disguises.map(([name], i) => [name, w.rows()[i]])).toEqual(expected)
+  })
 
   test('a row another plugin rewrote is tracked as stored', async ($, on) => {
     const w = world(on, [WORKER])
@@ -232,12 +250,13 @@ describe('staying on the mailbox', () => {
     })
   }
 
-  test('a running teammate whose turn the module never saw open is sent by mailbox', async ($, on) => {
+  test('a running teammate whose turn the module never saw open is sent by mailbox without listing agents', async ($, on) => {
     const w = world(on, [WORKER])
 
     await modelSend($, 'worker-a', 'hello')
 
     expect(passedThrough(w)).toHaveLength(1)
+    expect(w.agentLists()).toBe(0)
   })
 
   test("a plugin's send passes straight through", async ($, on) => {

@@ -100,60 +100,23 @@ echo "$dir"
 
 An empty diff ends the run with that message, and so does a checkout that is not the PR's head: check out the head, or
 its merge, and run again.
-Every later block runs in a new shell, so start each by setting `dir` to the path this one printed. When a pull
+Every later block runs in a new shell, so give each the path this one printed as its run directory. When a pull
 request has no `head-sha`, it kept moving; leave `commit_id` out of the payload.
 
-A merge commit as target prints a combined diff, which the index below cannot read. Fetch it as the range
+A merge commit as target prints a combined diff, which the index below refuses. Fetch it as the range
 `<sha>^1..<sha>` instead and say so in the report.
 
 ## 4. Index the diff without reading it
 
-Run this on the run directory. It writes `manifest.tsv` (per file: lines added, lines removed, the file's line span
-inside `patch.diff`, and the path) and `hunks.txt` (per file: the new-side line spans its hunks cover, comma
-separated, or `-` for none, then the path). It prints the patch's line count.
-
-<!-- Claude Code replaces a dollar sign before a digit with an argument when it loads a skill, so every awk field in
-this file carries a backslash, which the load removes. -->
+Run the index on the run directory:
 
 ```bash
-set -euo pipefail
-dir='<run directory>'
-cd "$dir"
-# git apply reads a patch without applying it and prints each file's raw path, NUL-terminated, so quoting and the
-# tab git adds after a path with a space never reach the parsing below. Its records come in patch order.
-mapfile -d '' records < <(git apply --numstat -z < patch.diff)
-# One line per `diff --git` section: its first and last line in patch.diff, then the new-side spans of its hunks.
-mapfile -t sections < <(awk '
-    /^diff --git / { n++; start[n] = NR; if (n > 1) end[n - 1] = NR - 1; next }
-    n && /^@@+ / && match(\$0, /\+[0-9]+(,[0-9]+)?/) {
-        k = split(substr(\$0, RSTART + 1, RLENGTH - 1), part, ",")
-        count = k > 1 ? part[2] + 0 : 1
-        if (count > 0) spans[n] = spans[n] (spans[n] == "" ? "" : ",") part[1] "-" (part[1] + count - 1)
-    }
-    END { end[n] = NR; for (i = 1; i <= n; i++) printf "%d\t%d\t%s\n", start[i], end[i], spans[i] }
-' patch.diff)
-if (( ${#records[@]} != ${#sections[@]} )); then
-    echo "index: git apply found ${#records[@]} files but the patch has ${#sections[@]} sections" >&2
-    exit 1
-fi
-: > manifest.tsv
-: > hunks.txt
-for i in "${!records[@]}"; do
-    added=${records[i]%%$'\t'*}
-    rest=${records[i]#*$'\t'}
-    removed=${rest%%$'\t'*}
-    path=${rest#*$'\t'}
-    # Both files hold one tab-separated record per line, so such a path could forge a record of its own.
-    if [[ $path == *[$'\t\n']* ]]; then
-        echo "index: a path holds a tab or newline, which the index cannot carry: ${path@Q}" >&2
-        exit 1
-    fi
-    IFS=$'\t' read -r start end spans <<< "${sections[i]}"
-    printf '%s\t%s\t%s-%s\t%s\n' "$added" "$removed" "$start" "$end" "$path" >> manifest.tsv
-    printf '%s\t%s\n' "${spans:--}" "$path" >> hunks.txt
-done
-wc -l < patch.diff
+bash "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/index-diff.sh" '<run directory>'
 ```
+
+It writes `manifest.tsv` (per file: lines added, lines removed, the file's line span inside `patch.diff`, and the
+path) and `hunks.txt` (per file: the new-side line spans its hunks cover, comma separated, or `-` for none, then the
+path) into the run directory, and prints the patch's line count.
 
 If it fails, stop and report the error; a review placed from a wrong index puts comments on the wrong lines.
 
@@ -238,17 +201,7 @@ Write to create `$dir/locations.tsv` with one line per finding: its line number,
 `hunks.txt` gives it. Then run this, which prints each of those lines prefixed with `inline` or `body`:
 
 ```bash
-dir='<run directory>'
-awk -F'\t' '
-    { path = \$0; sub(/^[^\t]*\t/, "", path) }
-    FNR == NR { if (\$1 != "-") spans[path] = \$1; next }
-    {
-        line = \$1 + 0; hit = 0
-        n = split(spans[path], span, ",")
-        for (i = 1; i <= n; i++) if (split(span[i], b, "-") == 2 && line >= b[1] + 0 && line <= b[2] + 0) hit = 1
-        print (hit ? "inline" : "body") "\t" \$0
-    }
-' "$dir/hunks.txt" "$dir/locations.tsv"
+bash "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/place-findings.sh" '<run directory>'
 ```
 
 Check any JSON you write with `jq empty <file>` before ending.

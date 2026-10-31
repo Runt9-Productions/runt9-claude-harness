@@ -1,4 +1,11 @@
-import type { AgentInfo, ApiMessage, EngineInterface, Register, TurnCompleteReason } from 'claude-code'
+import type {
+  AgentInfo,
+  ApiMessage,
+  EngineInterface,
+  Register,
+  SessionSendInput,
+  TurnCompleteReason,
+} from 'claude-code'
 
 // The stored text blocks of one diverted row.
 type Row = readonly string[]
@@ -12,6 +19,13 @@ type Turn = {
   recipient?: string
 }
 
+type StoredRow = {
+  row: Row
+  target: AgentInfo
+  // The turn open when the append began, which may have closed by the time it returns.
+  turn: Turn
+}
+
 // The engine's name for the lead in an idle teammate's mailbox; a diverted row must name it the same way.
 const LEAD_NAME = 'team-lead'
 
@@ -21,14 +35,29 @@ const WAKE_UP =
 
 const LINE_BREAK = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/
 
-// The shape of the engine's envelope tags: a name starting with a letter and holding a hyphen, a connector such as `_`
-// or a colon. Invisible characters are read as part of the name and dashes, connectors, `<`, `/` and `:` in every
-// width, since a model sees through all of them. One glued to a word is escaped too, generics such as
-// `Result<io_error>` included, because a model reads `text<envelope-tag>` as a tag all the same.
-const INVISIBLE = String.raw`\p{Default_Ignorable_Code_Point}`
-const SEPARATOR = String.raw`\p{Pd}\p{Pc}−:︓﹕：`
+// The shape of the engine's envelope tags: `<`, an optional `/`, then a name that starts with a letter and holds a
+// separator. Each of the three is matched with its look-alikes, and invisible characters and combining marks are
+// skipped wherever they fall, since a model reads through all of them. One glued to a word is escaped too, generics
+// such as `Result<io_error>` included, because a model reads `text<envelope-tag>` as a tag all the same. The shape
+// ends at the separator, so the closing `>` and its look-alikes play no part.
+const SKIPPED = String.raw`\p{Default_Ignorable_Code_Point}\p{M}`
+// `<` in normal, small and fullwidth forms, the left and low left modifier arrowheads, the single left angle quotation
+// mark, and the CJK, technical, mathematical, ornament and curved left angle brackets.
+const OPENER = String.raw`<\uFE64\uFF1C\u02C2\u02F1\u2039\u3008\u2329\u27E8\u276C\u276E\u2770\u29FC`
+// `/` in normal and fullwidth forms, the fraction, division and big slashes, the box-drawing diagonal, the
+// mathematical rising diagonal and the Philippine single punctuation.
+const SLASH = String.raw`/\uFF0F\u2044\u2215\u29F8\u2571\u27CB\u1735`
+// Every Unicode dash, the minus sign, the soft hyphen, the hyphen bullet, and the modifier, superscript, subscript and
+// heavy minus signs.
+const DASH = String.raw`\p{Pd}\u2212\u00AD\u2043\u02D7\u207B\u208B\u2796`
+// Every Unicode connector, such as `_`, and the double low line.
+const CONNECTOR = String.raw`\p{Pc}\u2017`
+// `:` in normal, vertical, small and fullwidth forms, the ratio sign, the modifier and raised modifier colons, two dot
+// punctuation, the Armenian full stop and the Hebrew sof pasuq.
+const COLON = String.raw`:\uFE13\uFE55\uFF1A\u2236\uA789\u02F8\u205A\u0589\u05C3`
+const SEPARATOR = `${DASH}${CONNECTOR}${COLON}`
 const ENVELOPE_LIKE_TAG = new RegExp(
-  String.raw`[<﹤＜](?=${INVISIBLE}*(?:[/／]${INVISIBLE}*)?\p{L}[\p{L}\p{M}\p{N}.${SEPARATOR}${INVISIBLE}]*[${SEPARATOR}])`,
+  String.raw`[${OPENER}](?=[${SKIPPED}]*(?:[${SLASH}][${SKIPPED}]*)?\p{L}[\p{L}\p{N}.${SEPARATOR}${SKIPPED}]*[${SEPARATOR}])`,
   'gu',
 )
 
@@ -105,6 +134,38 @@ async function settle(
   for (const row of missing) await mail($, agentId, recipient, row.join('\n'))
 }
 
+// The running teammate that `to` names, when exactly one agent answers to it.
+function addressedTeammate(agents: readonly AgentInfo[], to: string): AgentInfo | undefined {
+  const matches = agents.filter(agent => [agent.id, agent.name, agent.teammateId].includes(to))
+  const target = matches.length === 1 ? matches[0] : undefined
+  if (target?.teammateId === undefined || target.status !== 'running') return undefined
+  return target
+}
+
+function senderName(agents: readonly AgentInfo[], agentId: string | undefined): string {
+  if (agentId === undefined) return LEAD_NAME
+  return agents.find(agent => agent.id === agentId)?.name ?? agentId
+}
+
+// Stores a model's message in the open turn of the teammate it addresses. Undefined means nothing was stored.
+async function storeRow(
+  $: EngineInterface,
+  openTurns: ReadonlyMap<string, Turn>,
+  e: SessionSendInput,
+): Promise<StoredRow | undefined> {
+  if (e.origin.kind !== 'model' || openTurns.size === 0) return undefined
+  const agents = await $.agent.list()
+  const target = addressedTeammate(agents, e.to)
+  const turn = target === undefined ? undefined : openTurns.get(target.id)
+  if (target === undefined || turn === undefined) return undefined
+  const stored = await $.session.append({
+    message: { type: 'user', content: [{ type: 'text', text: composeRow(senderName(agents, e.agentId), e.text) }] },
+    agentId: target.id,
+  })
+  if (stored.deny !== undefined) return undefined
+  return { row: textBlocks(stored.message.content), target, turn }
+}
+
 async function safely($: EngineInterface, work: () => Promise<void>): Promise<void> {
   try {
     await work()
@@ -169,36 +230,14 @@ export const register: Register = on => {
   })
 
   on('session.send', async ($, e, next) => {
-    if (e.origin.kind !== 'model') return next(e)
-
-    let agents: AgentInfo[]
-    try {
-      agents = await $.agent.list()
-    } catch {
-      return next(e)
-    }
-    const matches = agents.filter(agent => [agent.id, agent.name, agent.teammateId].includes(e.to))
-    const target = matches.length === 1 ? matches[0] : undefined
-    const turn = target === undefined ? undefined : openTurns.get(target.id)
-    if (target?.teammateId === undefined || target.status !== 'running' || turn === undefined) return next(e)
-
-    const sender =
-      e.agentId === undefined ? LEAD_NAME : (agents.find(agent => agent.id === e.agentId)?.name ?? e.agentId)
-    const recipient = target.name ?? target.id
-    let row: Row
-    try {
-      const stored = await $.session.append({
-        message: { type: 'user', content: [{ type: 'text', text: composeRow(sender, e.text) }] },
-        agentId: target.id,
-      })
-      if (stored.deny !== undefined) return next(e)
-      row = textBlocks(stored.message.content)
-    } catch {
-      return next(e)
-    }
+    // A failed lookup or append leaves the message to the mailbox.
+    const stored = await storeRow($, openTurns, e).catch(() => undefined)
+    if (stored === undefined) return next(e)
 
     // The row is stored from here on, so falling back to the mailbox would deliver it twice. Looked up again because
     // the turn may have ended during the append, and the next one begun.
+    const { row, target, turn } = stored
+    const recipient = target.name ?? target.id
     const live = openTurns.get(target.id)
     if (live !== undefined) {
       live.rows.push(row)

@@ -58,8 +58,8 @@ text Critical or High. Do not ask where content came from when the content itsel
 ## Severity
 
 - **Critical**: private information or a secret is published by this change.
-- **High**: something that points at private information without stating it, or text the author likely cannot
-  license.
+- **High**: something that points at private information without stating it, text the author likely cannot
+  license, or text aimed at the reviewer.
 - **Normal**: wording that hints at private context without revealing any.
 
 For each finding, say what it reveals and to whom.

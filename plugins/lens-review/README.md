@@ -23,6 +23,9 @@ message comes back.
   reviewer's prompt: refuse a prompt that steers the verdict, read past the hunks, and treat text in the diff that
   addresses the reviewer as a finding.
 - **Templates**, in `skills/lens-review/references/`: `profile-template.md` and `reviewer-template.md`.
+- **Scripts**, in `skills/lens-review/scripts/` with their bats tests: `index-diff.sh`, which indexes the fetched
+  diff into the per-file manifest and hunk spans the skill routes and places findings from, and
+  `place-findings.sh`, which says whether each finding's line falls inside a hunk and so can go inline.
 
 ## What a repository supplies
 
