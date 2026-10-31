@@ -144,8 +144,8 @@ Each prompt holds these parts and nothing else:
 
 1. The reviewer brief from step 1, copied word for word.
 2. The task: review this diff.
-3. Where the diff is: `$dir/patch.diff`, plus `$dir/pr.json` for a pull request. When the patch is under the
-   profile's inline threshold, put the diff itself in the prompt instead.
+3. Where the diff is: `patch.diff` in the run directory, plus `pr.json` there for a pull request. When the patch is
+   under the profile's inline threshold, put the diff itself in the prompt instead.
 4. The severity rubric below.
 5. The response format below.
 6. The profile's "Standing instructions" section, copied word for word.
@@ -197,8 +197,8 @@ Whether a finding goes inline is a lookup, not a judgment. A finding goes inline
 span listed for its path in `hunks.txt`; every other finding stays in the body alone.
 
 Never type a path into a command: paths come from the diff, and a file name can carry shell syntax. Instead, use
-Write to create `$dir/locations.tsv` with one line per finding: its line number, a tab, then its path exactly as
-`hunks.txt` gives it. Then run this, which prints each of those lines prefixed with `inline` or `body`:
+Write to create `locations.tsv` in the run directory with one line per finding: its line number, a tab, then its path
+exactly as `hunks.txt` gives it. Then run this, which prints each of those lines prefixed with `inline` or `body`:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/place-findings.sh" '<run directory>'

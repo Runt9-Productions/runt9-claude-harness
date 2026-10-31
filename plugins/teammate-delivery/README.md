@@ -23,8 +23,9 @@ so no line of the body can pass for a header.
 Inside the body, every `<` that starts something shaped like the engine's envelope tags gets a `\` inserted after
 it: `<example-tag>` becomes `<\example-tag>` and `</example-tag>` becomes `<\/example-tag>`. The shape is a `<`, an
 optional `/`, then a name that starts with a letter and holds at least one separator: a dash, a connector such as
-`_`, or a colon. Characters that look like `<`, `/` or a separator count as them, and invisible characters and
-combining marks are ignored, so none of them hides a tag. That holds even when the tag follows a word with no space,
+`_`, or a colon. The look-alikes of `<`, `/` and the separators that `hooks/register.ts` lists count as them, and
+invisible characters and combining marks are ignored, so none of those hides a tag. A look-alike that list does not
+name is not escaped. That holds even when the tag follows a word with no space,
 so a generic whose type name has a separator is escaped too (`Result<io_error>` becomes `Result<\io_error>`). Plain
 HTML such as `<div>`, one-word tags and a `<` followed by a space or by anything other than a letter (`a < b-c`,
 `x<-y`) are left alone. Case does not matter.

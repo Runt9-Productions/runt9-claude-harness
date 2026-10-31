@@ -19,13 +19,6 @@ type Turn = {
   recipient?: string
 }
 
-type StoredRow = {
-  row: Row
-  target: AgentInfo
-  // The turn open when the append began, which may have closed by the time it returns.
-  turn: Turn
-}
-
 // The engine's name for the lead in an idle teammate's mailbox; a diverted row must name it the same way.
 const LEAD_NAME = 'team-lead'
 
@@ -36,10 +29,10 @@ const WAKE_UP =
 const LINE_BREAK = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/
 
 // The shape of the engine's envelope tags: `<`, an optional `/`, then a name that starts with a letter and holds a
-// separator. Each of the three is matched with its look-alikes, and invisible characters and combining marks are
-// skipped wherever they fall, since a model reads through all of them. One glued to a word is escaped too, generics
-// such as `Result<io_error>` included, because a model reads `text<envelope-tag>` as a tag all the same. The shape
-// ends at the separator, so the closing `>` and its look-alikes play no part.
+// separator. Each of the three is matched with the look-alikes the constants below list, and no others. Invisible
+// characters and combining marks are skipped wherever they fall, since a model reads through all of them. One glued to
+// a word is escaped too, generics such as `Result<io_error>` included, because a model reads `text<envelope-tag>` as a
+// tag all the same. The shape ends at the separator, so the closing `>` and its look-alikes play no part.
 const SKIPPED = String.raw`\p{Default_Ignorable_Code_Point}\p{M}`
 // `<` in normal, small and fullwidth forms, the left and low left modifier arrowheads, the single left angle quotation
 // mark, and the CJK, technical, mathematical, ornament and curved left angle brackets.
@@ -148,18 +141,17 @@ function senderName(agents: readonly AgentInfo[], agentId: string | undefined): 
 }
 
 // Stores a model's message in the open turn of the teammate it addresses. Undefined means nothing was stored.
-async function storeRow(
-  $: EngineInterface,
-  openTurns: ReadonlyMap<string, Turn>,
-  e: SessionSendInput,
-): Promise<StoredRow | undefined> {
+async function storeRow($: EngineInterface, openTurns: ReadonlyMap<string, Turn>, e: SessionSendInput) {
   if (e.origin.kind !== 'model' || openTurns.size === 0) return undefined
   const agents = await $.agent.list()
   const target = addressedTeammate(agents, e.to)
-  const turn = target === undefined ? undefined : openTurns.get(target.id)
-  if (target === undefined || turn === undefined) return undefined
+  if (target === undefined) return undefined
+  const turn = openTurns.get(target.id)
+  if (turn === undefined) return undefined
+  const sender = senderName(agents, e.agentId)
+  const text = composeRow(sender, e.text)
   const stored = await $.session.append({
-    message: { type: 'user', content: [{ type: 'text', text: composeRow(senderName(agents, e.agentId), e.text) }] },
+    message: { type: 'user', content: [{ type: 'text', text }] },
     agentId: target.id,
   })
   if (stored.deny !== undefined) return undefined

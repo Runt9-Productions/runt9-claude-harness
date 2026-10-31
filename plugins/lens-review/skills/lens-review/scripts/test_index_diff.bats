@@ -20,10 +20,9 @@ commit() {
 # Writes the working tree's change against HEAD into a new run directory, as the skill's fetch does.
 diff_into() {
     run_dir=$1
-    git -C "$repo" add -A
-    git -C "$repo" diff HEAD > "$BATS_TEST_TMPDIR/patch.diff"
     mkdir -p "$run_dir"
-    mv "$BATS_TEST_TMPDIR/patch.diff" "$run_dir/"
+    git -C "$repo" add -A
+    git -C "$repo" diff HEAD > "$run_dir/patch.diff"
 }
 
 edit_both_files() {

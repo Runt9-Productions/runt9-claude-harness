@@ -32,9 +32,16 @@ mapfile -t sections < <(awk '
     /^@@+ / && match($0, /\+[0-9]+(,[0-9]+)?/) {
         parts = split(substr($0, RSTART + 1, RLENGTH - 1), range, ",")
         count = parts > 1 ? range[2] + 0 : 1
-        if (count > 0) spans[section] = spans[section] (spans[section] == "" ? "" : ",") range[1] "-" (range[1] + count - 1)
+        if (count > 0) {
+            separator = spans[section] == "" ? "" : ","
+            spans[section] = spans[section] separator range[1] "-" (range[1] + count - 1)
+        }
     }
-    END { end[section] = NR; for (each = 1; each <= section; each++) printf "%d\t%d\t%s\n", start[each], end[each], spans[each] }
+    END {
+        end[section] = NR
+        for (each = 1; each <= section; each++)
+            printf "%d\t%d\t%s\n", start[each], end[each], spans[each]
+    }
 ' patch.diff)
 if (( ${#records[@]} != ${#sections[@]} )); then
     echo "index: git apply found ${#records[@]} files but the patch has ${#sections[@]} sections" >&2
