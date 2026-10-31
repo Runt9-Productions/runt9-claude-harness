@@ -32,7 +32,8 @@ The press or the command queues a `[handoff]` prompt behind any turn that is run
    ordered next steps. It goes in the repository's `.claude/output/` for work on a repository, otherwise in
    `~/.claude/output/`. The file holds the current state only: an existing handoff file for the same work is
    rewritten, with whatever is done or superseded dropped, and decisions that outlast the work move to memory, a
-   knowledge base or the plan.
+   knowledge base or the plan. It is written from the current state, not from the previous file, and points to the
+   documents the repository keeps, such as its process or a plan, rather than restating them.
 2. Calls the `compact_with` tool with its compaction message: what to keep, what to drop, and the handoff file to
    read first.
 3. Ends the turn.

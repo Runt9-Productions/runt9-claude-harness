@@ -38,7 +38,9 @@ const HANDOFF_STEPS =
   'repo and branch state, decisions the owner settled, what is in flight, and the ordered next steps. Put it in ' +
   "the repo's .claude/output for work on that repo, otherwise ~/.claude/output. The file holds the current state " +
   'only: if a handoff file for this work exists, rewrite it rather than adding a section to it, drop whatever is ' +
-  'done or superseded, and move decisions that outlast this work to memory, the knowledge base or the plan. Then ' +
+  'done or superseded, and move decisions that outlast this work to memory, the knowledge base or the plan. Write ' +
+  'it from the current state rather than from the previous handoff file, and point to the documents the repo ' +
+  'keeps, such as its process, a plan or a spec, rather than restating them. Then ' +
   'load mcp__handoff__compact_with through ToolSearch and call it with your compaction message: what to keep, what ' +
   'to drop, and the handoff file to read first. Then end the turn without starting anything else; the session ' +
   'compacts when the turn ends.'
