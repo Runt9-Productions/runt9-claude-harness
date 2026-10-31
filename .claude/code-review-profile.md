@@ -161,6 +161,8 @@ something the ruling did not account for.
   the review in its worktree with `--plugin-dir` (2026-10-25, reworded for the local run 2026-10-31).
 - `bootstrap.py harness` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
   (2026-10-27)
+- A change naming the `board`, `handoff` or `away` plugin before it is in this repository: all three are this
+  marketplace's own, arriving one pull request at a time, so naming one publishes nothing private. (2026-10-31)
 
 ## Other callers
 
