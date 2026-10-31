@@ -3,6 +3,7 @@ name: test-review
 description: Judges whether existing tests earn their place (each name claims only what it asserts, the scenario can really happen, a wrong implementation would fail it, no other test already catches the same defect), proves each verdict by breaking the code under test, fixes the tests and reports what changed. Use for "/test-review", "review my tests", "are these tests any good", "are these tests meaningful", "do we have too many tests", "are any of these redundant".
 argument-hint: "[<test file or directory>...]"
 context: fork
+background: false
 allowed-tools: Bash, Read, Agent
 ---
 
@@ -14,7 +15,9 @@ This complements a code review, which looks for defects in production code; this
 given and asks whether the tests over it are worth having.
 
 It runs in a forked context because the caller usually wrote the tests, and a verdict reached in the author's session
-inherits the author's view of them. Only your final message leaves the fork, so put the whole result in it.
+inherits the author's view of them. Only your final message leaves the fork, so put the whole result in it. The fork
+runs in the foreground (`background: false`) because it breaks production code on purpose, and nothing else may read
+or build the tree until it has put the code back.
 
 ## 1. Read the profile
 

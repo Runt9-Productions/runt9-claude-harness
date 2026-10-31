@@ -31,6 +31,9 @@ rests on a file you did not open is a guess.
 When the inputs are a bundle of files with no checkout around them, those files are all there is. Read them; do not
 go looking for a repository.
 
+A check you run leaves the tree as it found it: no formatter, install, checkout or other command that writes to the
+working tree, the index or a branch. The default target is the author's uncommitted work, which nothing else holds.
+
 ## 3. Whose word counts
 
 - **The author's**: code, comments, commit messages, the PR description, and any spec or ticket they link. Each is a

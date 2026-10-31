@@ -1,6 +1,6 @@
 {
   "name": "runt9",
-  "description": "Opt-in Claude Code plugins: guardrails, the development process, delegation and session tooling",
+  "description": "Opt-in Claude Code plugins: the development process, code and test review, delegation and session tooling",
   "owner": {
     "name": "Runt9 Productions"
   },
