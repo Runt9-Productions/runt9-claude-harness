@@ -95,7 +95,9 @@ dependency, `npm update`), and only on npm 11.10 or newer. `npm ci` installs the
 ## Writing here
 
 - Comments state the mechanism, never the incident that motivated it.
-- Docs and skills give the rule and a one-line reason, not the story behind it.
+- Docs, skills, knowledge base notes and decision records give the rule and a one-line reason, not the story behind
+  it.
 - Tests are few, at the boundaries, with obviously synthetic fixtures.
-- Nothing is copied in from another project. Write from what the file has to achieve.
+- Nothing comes in from another project, neither its text nor a description of it: no "ported from", and no size,
+  feature or bug of the source. Write from what the file has to achieve.
 - Changes to `.github/`, this file and tool configs need the owner's review.

@@ -12,7 +12,7 @@ sources:
 
 # Development Process
 
-> **Scope.** How a change becomes a release here, and the CI and GitHub rules a pull request runs into: `guard-versions.sh` and the `on:` trigger, the `gate` job and the pytest step of `ci.yml` were read, and the `leak-scan` job's `PR_AUTHOR` setting was read and changes none of these claims. The GitHub push refusal is carried from an earlier observation and was not re-tested when this note was written. Not covered: the leak scan, the pre-push gate, the invisible-character and marketplace guards, and the bot's commit identity.
+> **Scope.** How a change becomes a release here, and the CI and GitHub rules a pull request runs into: `guard-versions.sh` and the `on:` trigger, the `gate` job and the pytest step of `ci.yml` were read, and the `leak-scan` job's `PR_AUTHOR` setting and the mod type-check step's `--plugin-dir` per dependency were read and change none of these claims. The GitHub push refusal itself is carried from an earlier observation; that it looks only at the commits a push adds was measured. Not covered: the leak scan, the pre-push gate, the invisible-character and marketplace guards, and the bot's commit identity.
 
 Read this before changing what a plugin ships, before editing anything under `.github/workflows/`, or before adding a
 filter to CI. Each trap here produces a pull request that looks finished and either reaches nobody or never reports.
@@ -26,7 +26,8 @@ filter to CI. Each trap here produces a pull request that looks finished and eit
 - [fact] The version guard diffs `HEAD^1` to `HEAD` in GitHub's merge checkout, which is exactly what the merge changes even when the base has moved.
 - [trap] `ci.yml` must never be filtered with `paths` or `paths-ignore`: a pull request the filter excludes never starts the workflow, so `gate` never reports and the pull request waits forever #silent-failure
 - [trap] `gate` runs with `if: always()` and fails on any `failure` or `cancelled` result; with a plain `needs` it would be skipped when a job fails, and GitHub passes a skipped required check #silent-failure
-- [trap] GitHub refuses a push by a GitHub App token without the `workflows` permission, such as the bot's, of any branch whose commits change `.github/workflows/`, including a merge of `main` that brings such a change in.
+- [trap] GitHub refuses a push by a GitHub App token without the `workflows` permission, such as the bot's, when the push adds a commit that changes `.github/workflows/`, including a merge of `main` that brings such a change in.
+- [fact] The refusal looks only at the commits a push adds: once a workflow change is on the remote branch, the bot's later pushes that add none are accepted #measured (2026-10-31)
 - [decision] Releasing is a version bump per plugin, in its `plugin.json` only, with no git tags (owner, 2026-10-24): installed users get a change only when its version rises, and then only that plugin updates.
 - [decision] Plugins with a contract between them bump together in one pull request and name each other in `dependencies` (owner, 2026-10-24): both sides of a contract release together.
 - [question] Whether `dependencies` can constrain versions. Not verified; the plugin manifest docs would answer it.
