@@ -9,6 +9,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 |---|---|
 | [Plugin Platform](domains/plugins/overview.md) | writing, loading or naming a plugin, its skills or its agents, or reasoning about how a change reaches users |
 | [Mod CI Checks](domains/plugins/mod-ci.md) | changing the `plugins` CI job, or checking a mod locally |
+| [Hooks Module Loader](domains/plugins/hooks-module-loader.md) | splitting a mod's hooks module across files, or moving a function, atom or matcher value between them |
 | [Skill Loading](domains/skills/overview.md) | relying on a skill being in context: when it loads, and what survives compaction |
 | [Teammate Mailbox](domains/agent-teams/mailbox.md) | sending text between teammates that holds tags |
 | [Teammate Lifecycle](domains/agent-teams/lifecycle.md) | writing a rule about how teammates report, wait or stop, or testing one headless |

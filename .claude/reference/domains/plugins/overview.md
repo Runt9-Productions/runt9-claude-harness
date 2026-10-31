@@ -45,6 +45,7 @@ running something else, or a name that resolves to a different skill.
 ## Relations
 
 - see_also [[Mod CI Checks]]
+- see_also [[Hooks Module Loader]]
 - see_also [[Development Process]]
 - see_also [[Skill Loading]]
 - see_also [[Teammate Mailbox]]
