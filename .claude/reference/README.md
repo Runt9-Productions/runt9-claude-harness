@@ -18,6 +18,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, or anything under `.github/workflows/` |
 | [Harness Migration](projects/harness-migration/overview.md) | resuming the harness migration |
 | [Away Plugin](projects/away-plugin/overview.md) | building or changing the `away` plugin (issue #67) |
+| [Bootstrap Split](projects/bootstrap-split/overview.md) | splitting `bootstrap.py` into its package (issue #14) |
 
 ## Local conventions
 
