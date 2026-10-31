@@ -122,7 +122,7 @@ function holdAppends(on: On) {
   return { atGate, release }
 }
 
-const passedThrough =(w: World) => w.sends.filter(send => send.origin.kind === 'model')
+const passedThrough = (w: World) => w.sends.filter(send => send.origin.kind === 'model')
 const mailed = (w: World) => w.sends.filter(send => send.origin.kind === 'plugin')
 
 describe('diverting into a running turn', () => {
@@ -236,7 +236,8 @@ describe('staying on the mailbox', () => {
     ['a finished teammate', [agent(WORKER.id, 'worker-a', 'completed')], 'worker-a'],
     ['an unknown recipient', [WORKER], 'nobody-here'],
     ['a running agent that is no teammate', [agent(WORKER.id, 'worker-a', 'running', false)], 'worker-a'],
-    ['a name a finished agent also holds', [agent('agent-0009', 'worker-a', 'completed'), WORKER], 'worker-a'],
+    // Listed first, the running one is what taking the first match would pick.
+    ['a name a finished agent also holds', [WORKER, agent('agent-0009', 'worker-a', 'completed')], 'worker-a'],
   ]
   for (const [name, agents, to] of cases) {
     test(`${name} is sent by mailbox`, async ($, on) => {
@@ -250,13 +251,23 @@ describe('staying on the mailbox', () => {
     })
   }
 
-  test('a running teammate whose turn the module never saw open is sent by mailbox without listing agents', async ($, on) => {
+  test('a send while no turn is open goes by mailbox without listing agents', async ($, on) => {
     const w = world(on, [WORKER])
 
     await modelSend($, 'worker-a', 'hello')
 
     expect(passedThrough(w)).toHaveLength(1)
     expect(w.agentLists()).toBe(0)
+  })
+
+  test('a running teammate whose own turn the module never saw open is sent by mailbox', async ($, on) => {
+    const w = world(on, [WORKER, REVIEWER])
+    await start($, REVIEWER)
+
+    await modelSend($, 'worker-a', 'hello')
+
+    expect(passedThrough(w)).toHaveLength(1)
+    expect(w.rows()).toHaveLength(0)
   })
 
   test("a plugin's send passes straight through", async ($, on) => {
@@ -403,9 +414,9 @@ describe('the end of the turn', () => {
     await sending
     expect(mailed(w)).toHaveLength(0)
 
-    await step($, WORKER, 2, 'turn-2')
+    // No request carries it, so the second turn's end sends the one wake-up, which a dropped row would not.
     await end($, WORKER, 'answer', 'turn-2')
-    expect(mailed(w)).toHaveLength(0)
+    expect(mailed(w)).toHaveLength(1)
   })
 
   for (const reason of ['aborted', 'refusal', 'error'] as const) {

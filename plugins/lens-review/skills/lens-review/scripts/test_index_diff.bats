@@ -8,7 +8,7 @@ setup() {
     git init -q -b main "$repo"
     mkdir "$repo/dir"
     printf 'one\ntwo\nthree\n' > "$repo/top.txt"
-    printf 'alpha\nbeta\n' > "$repo/dir/inner.txt"
+    printf 'line %s\n' {1..12} > "$repo/dir/inner.txt"
     commit base
 }
 
@@ -28,12 +28,13 @@ diff_into() {
 
 edit_both_files() {
     printf 'one\nTWO\nthree\n' > "$repo/top.txt"
-    printf 'gamma\n' >> "$repo/dir/inner.txt"
+    printf '%s\n' 'LINE 1' 'line '{2..13} > "$repo/dir/inner.txt"
 }
 
-# The patch lists dir/inner.txt on lines 1 to 8 with one line added, then top.txt on lines 9 to 17 with one changed.
-expected_manifest=$'1\t0\t1-8\tdir/inner.txt\n1\t1\t9-17\ttop.txt'
-expected_hunks=$'1-3\tdir/inner.txt\n1-3\ttop.txt'
+# The patch lists dir/inner.txt on lines 1 to 15, with its first line changed and a line added after its last, in two
+# hunks far enough apart that git keeps them separate; then top.txt on lines 16 to 24, with one line changed.
+expected_manifest=$'2\t1\t1-15\tdir/inner.txt\n1\t1\t16-24\ttop.txt'
+expected_hunks=$'1-4,10-13\tdir/inner.txt\n1-3\ttop.txt'
 
 @test "a run directory inside the work tree, below none of the patched paths, indexes every file" {
     edit_both_files
@@ -41,7 +42,7 @@ expected_hunks=$'1-3\tdir/inner.txt\n1-3\ttop.txt'
     diff_into "$run_dir"
     run "$index_diff" "$run_dir"
     [ "$status" -eq 0 ]
-    [ "$output" = 17 ]
+    [ "$output" = 24 ]
     [ "$(< "$run_dir/manifest.tsv")" = "$expected_manifest" ]
     [ "$(< "$run_dir/hunks.txt")" = "$expected_hunks" ]
 }
@@ -68,12 +69,17 @@ expected_hunks=$'1-3\tdir/inner.txt\n1-3\ttop.txt'
     [ "$(< "$BATS_TEST_TMPDIR/run/hunks.txt")" = $'1-1\tdir/with space ü.txt' ]
 }
 
-@test "a path holding a tab is refused" {
-    printf 'new\n' > "$repo/dir/tab"$'\t'"name.txt"
-    diff_into "$BATS_TEST_TMPDIR/run"
-    run "$index_diff" "$BATS_TEST_TMPDIR/run"
-    [ "$status" -eq 1 ]
-    [[ $output == *"a path holds a tab or newline"* ]]
+# Each character gets a patch of its own, since the index stops at the first path it refuses.
+@test "a path holding a tab or a newline is refused" {
+    for char in $'\t' $'\n'; do
+        git -C "$repo" reset -q --hard
+        rm -rf "$BATS_TEST_TMPDIR/run"
+        printf 'new\n' > "$repo/dir/odd${char}name.txt"
+        diff_into "$BATS_TEST_TMPDIR/run"
+        run "$index_diff" "$BATS_TEST_TMPDIR/run"
+        [ "$status" -eq 1 ]
+        [[ $output == *"a path holds a tab or newline"* ]]
+    done
 }
 
 @test "a file deleted whole has no new-side span" {
@@ -100,6 +106,6 @@ expected_hunks=$'1-3\tdir/inner.txt\n1-3\ttop.txt'
     grep -q '^diff --cc top.txt$' "$BATS_TEST_TMPDIR/run/patch.diff"
     run "$index_diff" "$BATS_TEST_TMPDIR/run"
     [ "$status" -eq 1 ]
-    [[ $output == *"index: "* ]]
+    [[ $output == *"index: git apply could not read patch.diff"* ]]
     [ ! -e "$BATS_TEST_TMPDIR/run/manifest.tsv" ]
 }
