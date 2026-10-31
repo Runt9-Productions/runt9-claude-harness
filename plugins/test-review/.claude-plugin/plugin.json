@@ -1,6 +1,6 @@
 {
   "name": "test-review",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Judges whether existing tests earn their place, proves each verdict by breaking the code under test, and fixes the tests",
   "author": {
     "name": "Runt9 Productions"
