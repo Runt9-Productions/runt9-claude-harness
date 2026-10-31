@@ -32,6 +32,20 @@
         { "path": "~/.pypirc", "mode": "deny" },
         { "path": "~/.my.cnf", "mode": "deny" },
         { "path": "~/.gradle/gradle.properties", "mode": "deny" }
+      ],
+      "envVars": [
+        { "name": "GH_TOKEN", "mode": "deny" },
+        { "name": "GITHUB_TOKEN", "mode": "deny" },
+        { "name": "GITLAB_TOKEN", "mode": "deny" },
+        { "name": "NPM_TOKEN", "mode": "deny" },
+        { "name": "NODE_AUTH_TOKEN", "mode": "deny" },
+        { "name": "AWS_ACCESS_KEY_ID", "mode": "deny" },
+        { "name": "AWS_SECRET_ACCESS_KEY", "mode": "deny" },
+        { "name": "AWS_SESSION_TOKEN", "mode": "deny" },
+        { "name": "GOOGLE_APPLICATION_CREDENTIALS", "mode": "deny" },
+        { "name": "AZURE_CLIENT_SECRET", "mode": "deny" },
+        { "name": "OPENAI_API_KEY", "mode": "deny" },
+        { "name": "HF_TOKEN", "mode": "deny" }
       ]
     }
   }
