@@ -34,6 +34,11 @@
       "name": "delegation",
       "source": "./plugins/delegation",
       "description": "How a lead session spawns, briefs, answers and shuts down Agent Teams teammates, with engineer, web-researcher, code-researcher, verifier and triager agent templates"
+    },
+    {
+      "name": "handoff",
+      "source": "./plugins/handoff",
+      "description": "One press or /handoff: Claude writes a handoff file and a compaction message, then the session compacts with it"
     }
   ]
 }

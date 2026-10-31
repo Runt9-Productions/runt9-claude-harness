@@ -1,0 +1,9 @@
+{
+  "name": "handoff",
+  "version": "0.1.0",
+  "description": "One press or /handoff: Claude writes a handoff file and a compaction message, then the session compacts with it",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "types": "./types/index.d.ts"
+}
