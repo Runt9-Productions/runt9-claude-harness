@@ -38,9 +38,11 @@ a knowledge base note already answers a question, this file points there.
 - Renaming the branch: what it changes about the built-in worktree's cleanup has not been measured here.
 - Shared with the main checkout: the git config, so `core.hooksPath` and the `claude.*` keys the hooks read apply in
   every worktree, and commits made in one are visible to all. Writes through it work.
-- Working directory: `.claude/output/<ticket>/` in the main checkout, ignored by the tracked `.gitignore`. It is
-  scratch: working documents that must last go in the spec location. No comment or doc may point at it, because no
-  other clone has it.
+- A `claude --worktree` session is confined to its worktree: it can read the main checkout but neither write files
+  nor run git there (2026-10-31).
+- Working directory: `.claude/output/<ticket>/` in the checkout the session works in, the ticket's worktree once one
+  exists, ignored by the tracked `.gitignore`. It is scratch and goes when the worktree does: working documents that
+  must last go in the spec location. No comment or doc may point at it, because no other clone has it.
 - Fresh session: yes, started with `claude --worktree <name>`, because a session's language server stays rooted where
   the session started.
 
