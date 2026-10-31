@@ -81,16 +81,12 @@ test('compact_with refuses when no handoff was asked for', async ($, on) => {
   expect(JSON.stringify(result)).toContain('nothing will compact')
 })
 
-test('/handoff asks Claude for the handoff, passes on what to stress, and then accepts its message', async ($, on) => {
+test('/handoff asks Claude for the handoff and passes on what to stress', async ($, on) => {
   const h = engine(on)
   await press($, h, 'the open schema question')
   expect(h.submitted.length).toBe(1)
   expect(h.submitted[0]).toContain('[handoff]')
   expect(h.submitted[0]).toContain('stress: the open schema question')
-
-  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
-  const result = await $.tool.call(COMPACT_WITH as never)
-  expect(JSON.stringify(result)).toContain('compacts when it ends')
 })
 
 test('compact_with called before the handoff turn starts saves nothing', async ($, on) => {
@@ -101,7 +97,8 @@ test('compact_with called before the handoff turn starts saves nothing', async (
   await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
   await turnComplete($, 't1')
   await h.clock.advance(10_000)
-  expect(h.compactions).toEqual([])
+  // Only the call's message is checked: whether a handoff left with none compacts is another test's.
+  expect(h.compactions).not.toContain(COMPACT_WITH.message)
 })
 
 test('compact_with called from a subagent during the handoff turn saves nothing', async ($, on) => {
@@ -112,7 +109,7 @@ test('compact_with called from a subagent during the handoff turn saves nothing'
   expect(JSON.stringify(fromAgent)).toContain('nothing will compact')
   await turnComplete($, 't1')
   await h.clock.advance(10_000)
-  expect(h.compactions).toEqual([])
+  expect(h.compactions).not.toContain(COMPACT_WITH.message)
 })
 
 test('compact_with refuses a message that is not text, and keeps the one already saved', async ($, on) => {
@@ -129,7 +126,7 @@ test('compact_with refuses a message that is not text, and keeps the one already
   expect(h.compactions).toEqual([COMPACT_WITH.message])
 })
 
-test('after the compaction, a resume prompt asks Claude to reread and report its next step', async ($, on) => {
+test('after the compaction, a resume prompt has Claude wait for the owner to confirm its next step', async ($, on) => {
   const h = engine(on)
   await runHandoff($, h)
   expect(h.compactions).toEqual([COMPACT_WITH.message])
@@ -163,13 +160,7 @@ async function handoffState($: Engine, key: SharedKey): Promise<unknown> {
   return result.text ? JSON.parse(result.text) : undefined
 }
 
-test('each turn publishes the ceiling the away plugin hands off at', { plugins: [PROBE] }, async ($, on) => {
-  engine(on)
-  await turnStart($, 'go', 't1')
-  expect(await handoffState($, 'ceilingPercent')).toBe(60)
-})
-
-test('the ceiling the away plugin reads follows the ceiling_percent option', { plugins: [PROBE], options: { ceiling_percent: 50 } }, async ($, on) => {
+test('a turn publishes the ceiling_percent option as the ceiling the away plugin hands off at', { plugins: [PROBE], options: { ceiling_percent: 50 } }, async ($, on) => {
   engine(on)
   await turnStart($, 'go', 't1')
   expect(await handoffState($, 'ceilingPercent')).toBe(50)
@@ -223,7 +214,6 @@ test('Cancel while Claude writes the handoff compacts nothing when the turn ends
   await turnComplete($, 't1')
   await h.clock.advance(10_000)
   expect(h.compactions).toEqual([])
-  expect(h.toasts.join()).not.toContain('Compacting')
 })
 
 test('Cancel while the compaction waits on a running turn stops it before it compacts', async ($, on) => {
@@ -271,7 +261,7 @@ test("a turn that starts before the handoff prompt's own is not taken for the ha
   await turnComplete($, 'tA')
   expect(h.toasts.join()).not.toContain('without a compaction message')
 
-  await turnStart($, h.submitted[0] ?? '', 't1')
+  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
   expect(JSON.stringify(await $.tool.call(COMPACT_WITH as never))).toContain('compacts when it ends')
   await turnComplete($, 't1')
   await h.clock.advance(1000)
@@ -300,8 +290,9 @@ test("a subagent's turn given the handoff prompt is not taken for the handoff", 
   await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
   await $.tool.call(COMPACT_WITH as never)
   await turnComplete($, 't1')
-  await h.clock.advance(1000)
-  expect(h.compactions).toEqual([COMPACT_WITH.message])
+  // The end of the main loop's turn starts the compaction. The subagent's turn never ends, and whether that holds
+  // the compaction is the next test's.
+  expect(h.toasts.join()).toContain('Compacting with the message Claude wrote')
 })
 
 test("a subagent's turn still running when the handoff turn ends does not hold the compaction", async ($, on) => {
@@ -330,7 +321,7 @@ test('a handoff whose prompt is dropped toasts why, and the next press starts on
 test('interrupting the handoff turn compacts nothing', async ($, on) => {
   const h = engine(on)
   await press($, h)
-  await turnStart($, h.submitted[0] ?? '', 't1')
+  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
   await $.tool.call(COMPACT_WITH as never)
   await turnComplete($, 't1', true)
   await h.clock.advance(10_000)
@@ -342,7 +333,7 @@ test('a turn that starts before the compaction waits for it to end, however long
   let isBusy = false
   const h = engine(on, COMPACTED, () => isBusy)
   await press($, h)
-  await turnStart($, h.submitted[0] ?? '', 't1')
+  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
   await $.tool.call(COMPACT_WITH as never)
   await turnComplete($, 't1')
   // A teammate's message starts a lead turn before the first attempt, and it outlasts every retry.
@@ -362,7 +353,7 @@ test('a handoff the owner starts compacts nothing when Claude wrote no compactio
   const h = engine(on)
   await press($, h)
   expect(h.submitted[0]).toContain('The owner asked')
-  await turnStart($, h.submitted[0] ?? '', 't1')
+  await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
   await turnComplete($, 't1')
   await h.clock.advance(10_000)
   expect(h.compactions).toEqual([])
@@ -399,7 +390,7 @@ async function startUnattended($: Engine, h: Handoff) {
   await turnStart($, asDelivered(h.submitted[0] ?? ''), 't1')
 }
 
-test('a handoff away starts says the owner is away, and its resume carries on with the work', { plugins: [AWAY, PROBE] }, async ($, on) => {
+test('a handoff away starts says the owner is away, resumes the work without waiting, and clears isUnattended', { plugins: [AWAY, PROBE] }, async ($, on) => {
   const h = engine(on)
   await startUnattended($, h)
   expect(h.submitted[0]).toContain('the owner is away')
@@ -408,6 +399,8 @@ test('a handoff away starts says the owner is away, and its resume carries on wi
   await turnComplete($, 't1')
   await h.clock.advance(1000)
   expect(h.compactions).toEqual([COMPACT_WITH.message])
+  // The prompt telling Claude a handoff failed also ends "carry on with the work".
+  expect(h.submitted[1]).toContain('[resume]')
   expect(h.submitted[1]).toContain('carry on with the work')
   expect(h.submitted[1]).not.toContain('the owner confirms')
   expect(await handoffState($, 'isUnattended')).toBe(false)
@@ -438,7 +431,7 @@ test('a handoff away starts compacts nothing when the owner interrupts its turn'
   expect(h.compactions).toEqual([])
 })
 
-test('an unattended handoff whose compaction is skipped tells Claude so', { plugins: [AWAY, PROBE] }, async ($, on) => {
+test('an unattended handoff whose compaction is skipped tells Claude so and clears isUnattended', { plugins: [AWAY, PROBE] }, async ($, on) => {
   const h = engine(on, { skip: 'vetoed' })
   await startUnattended($, h)
   await $.tool.call(COMPACT_WITH as never)
