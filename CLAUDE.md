@@ -20,8 +20,8 @@ nothing from an employer, a private project or a specific machine goes in, in co
   repositories named, adds the import line of each fragment picked to a marked block in `~/.claude/CLAUDE.md`, merges
   each settings fragment picked into `~/.claude/settings.json`, and installs plugins from the marketplace. A new part
   under `harness/` that must be wired into `~/.claude` or a repository registers a component in its
-  `HARNESS_COMPONENTS`; a new file in `harness/fragments/` or a new `.json` file in `harness/settings/` is a component without one. Its
-  tests are `test_bootstrap.py` beside it.
+  `HARNESS_COMPONENTS`; a new file in `harness/fragments/` or a new `.json` file in `harness/settings/` is a
+  component without one. Its tests are `test_bootstrap.py` beside it.
 - `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
   needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only, except PyYAML
   in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
