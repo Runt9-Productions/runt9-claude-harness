@@ -268,8 +268,9 @@ export const register: Register = on => {
     // A subagent's or teammate's turn is never the handoff's, and the compaction does not wait for one to end.
     if (e.agentId !== undefined) return next(e)
     runningTurnIds.add(e.turnId)
-    const isHandoffPrompt = e.text.includes(await read($, handoffNonce))
-    if (isHandoffPrompt && (await read($, phase)) === 'queued') {
+    const nonce = await read($, handoffNonce)
+    const isQueued = (await read($, phase)) === 'queued'
+    if (isQueued && nonce !== '' && e.text.includes(nonce)) {
       await setPhase($, 'writing')
       await update($, handoffTurnId, () => e.turnId)
     }
