@@ -16,6 +16,8 @@ const COMMITTED = { stdout: '', stderr: '', interrupted: false, gitOperation: { 
 
 type EngineOptions = {
   toasts?: string[]
+  /** Collects the text of each prompt the mod submits. */
+  submitted?: string[]
   /** What the store holds before the test's first call. */
   seed?: Record<string, unknown>
   /** tool_use ids the session's transcript holds, which tie it to a board saved under another id. */
@@ -65,6 +67,10 @@ function engine(on: On, options: EngineOptions = {}): Map<string, unknown> {
   on('ui.toast', ($, e) => {
     toasts.push(JSON.stringify(e))
     return { value: undefined } as never
+  })
+  on('prompt.submit', (_$, e) => {
+    options.submitted?.push(e.text)
+    return { text: e.text }
   })
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -1248,4 +1254,34 @@ test("a slow delivery of an older change does not overwrite the newer change's d
   for (let i = 0; i < 50 && toasts.length === 0; i++) await $.tool.call(READ_BOARD as never)
   expect(toasts.join()).toContain('ticked \\"PR 11\\" saved on the board but NOT delivered')
   expect(saved(store)).toContain('"delivery":"sent"')
+})
+
+test('Send now starts the idle main session once for every answer waiting on it', async ($, on) => {
+  const toasts: string[] = []
+  const submitted: string[] = []
+  engine(on, { toasts, submitted })
+  await $.tool.call(ASK as never)
+  await $.tool.call({ ...ASK, question: 'Rename the module?' } as never)
+  const pane = await mountPane($)
+  await pane.press({ key: 'D1-option-0' })
+  await pane.press({ key: 'D2-option-1' })
+
+  await pane.press({ key: 'send-now' })
+  await pane.press({ key: 'send-now' })
+  expect(submitted.length).toBe(1)
+  expect(submitted[0]).toContain('[board] The owner answered on the board')
+  expect(toasts.at(-1)).toContain('Already sent')
+
+  // The turn's first request carries the answers, so nothing is left to send.
+  await step($)
+  expect(await pane.find({ key: 'send-now' })).toBeUndefined()
+})
+
+test('Send now is not offered while the main session is working', async ($, on) => {
+  engine(on)
+  await $.tool.call(ASK as never)
+  await step($)
+  const pane = await mountPane($)
+  await pane.press({ key: 'D1-option-0' })
+  expect(await pane.find({ key: 'send-now' })).toBeUndefined()
 })

@@ -46,7 +46,9 @@ main session rewords or withdraws another agent's decision, or withdraws its tas
 - **Tasks**: the agents' own tasks, in progress first, with who holds each and how much of its checklist is ticked.
   Expand shows the note and the items. Done tasks are counted until Show lists them, and Clear removes them.
 - **Answered, not yet sent to Claude**: each answer or change until a model request of the agent that asked has
-  carried it. One that failed to arrive has Retry and "Dismiss (I told it)".
+  carried it. One that failed to arrive has Retry and "Dismiss (I told it)". While the main session is idle with
+  answers waiting for it, **Send now** starts its turn with a short `[board]` prompt, so it reads them all without
+  your typing one.
 
 A line above the prompt counts the decisions and tasks waiting on you and the tasks in progress, with an
 **Open board** button. It flashes with a new decision or task for you.

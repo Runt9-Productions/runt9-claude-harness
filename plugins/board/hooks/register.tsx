@@ -752,6 +752,30 @@ async function markSeen($: EngineInterface, agentId: string | undefined) {
   if (isChanged) await save($)
 }
 
+// The answers are already in the conversation as [board] rows, so the prompt only has to start the turn.
+const SEND_NOW_PROMPT = '[board] The owner answered on the board. Act on the [board] answers above.'
+
+// From the press until the main loop's next request, so a second press submits nothing more.
+let isSendNowQueued = false
+
+/** Starts the idle main session's turn, so it reads the answers appended to it without the owner typing a prompt. */
+async function sendNow($: EngineInterface) {
+  if (isSendNowQueued) {
+    $.ui.toast('Already sent; Claude reads the answers when its turn starts')
+    return
+  }
+  isSendNowQueued = true
+  let refusal: string | undefined
+  try {
+    refusal = (await $.prompt.submit({ text: SEND_NOW_PROMPT })).drop
+  } catch (err) {
+    refusal = String(err)
+  }
+  if (refusal === undefined) return
+  isSendNowQueued = false
+  $.ui.toast(`Not sent: ${refusal}`)
+}
+
 // ─── Tasks for the owner ─────────────────────────────────────────────────────────────────────────────────
 
 const NEW_OWNER_TASK_REFUSAL = 'Nothing posted: a new task for the owner needs a title.'
@@ -1319,6 +1343,7 @@ export const register: Register = on => {
   on('turn.step', async function* ($, e, next) {
     await setActivity($, e.agentId ?? MAIN, { state: 'working' })
     await markSeen($, e.agentId)
+    if (e.agentId === undefined) isSendNowQueued = false
     return yield* next(e)
   })
 
@@ -1393,6 +1418,11 @@ export const register: Register = on => {
     const unsent = allDecisions.filter(d => d.delivery !== undefined && d.delivery !== 'seen')
     const unsentOwnerTasks = allOwnerTasks.filter(t => t.lastChange !== undefined && t.lastChange.delivery !== 'seen')
     const loops: BoardActivity[] = await read($, activity)
+    // A working main loop reads its answers at its next step anyway; only an idle one needs its turn started.
+    const isMainIdle = loops.find(a => a.agentId === MAIN)?.state !== 'working'
+    const hasAnswersForMain =
+      unsent.some(d => d.agentId === undefined && d.delivery === 'sent') ||
+      unsentOwnerTasks.some(t => t.agentId === undefined && t.lastChange?.delivery === 'sent')
     const at = (await read($, now)) || (await $.clock.now())
     const hasOpenWork = allTasks.some(t => t.status === 'in_progress' || t.status === 'pending')
     const openTasks = OPEN_ORDER.flatMap(status => allTasks.filter(t => t.status === status))
@@ -1575,6 +1605,9 @@ export const register: Register = on => {
                 </Box>
               )
             })}
+            {isMainIdle && hasAnswersForMain && (
+              <Button key="send-now" label="Send now" onPress={onBoard(() => sendNow($))} />
+            )}
           </Box>
         )}
       </Box>
