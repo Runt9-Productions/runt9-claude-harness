@@ -164,6 +164,7 @@ const compact = ($: Engine, agentId?: string) =>
 
 test('/mode away shows in the status line, is kept for the session, and sends the away rules once', async ($, on) => {
   const away = engine(on)
+  await away.clock.set(1_000)
   const savedAt = away.clock.now()
   expect(await setMode($, away, 'away')).toBe('Mode: away.')
   expect(away.statuses.at(-1)).toBe('away')
@@ -178,7 +179,8 @@ test('/mode present clears the status line and the stored mode, and sends the pr
   const away = engine(on)
   await setMode($, away, 'distracted')
   await setMode($, away, 'present')
-  expect(away.statuses.at(-1)).toBe('')
+  // The first command's bind clears the line too, so the last two show this switch cleared it.
+  expect(away.statuses.slice(-2)).toEqual(['distracted', ''])
   expect(away.store.has(SESSION_KEY)).toBe(false)
   expect(rulesSent(away, 'present')).toBe(1)
 })
@@ -188,7 +190,8 @@ test('an unknown mode is refused and changes nothing, and a bare /mode reports t
   expect(await setMode($, away, 'asleep')).toContain('Unknown mode "asleep"')
   expect(away.store.size).toBe(0)
   expect(away.appended()).toEqual([])
-  expect(await setMode($, away, '')).toContain('Mode: present.')
+  await setMode($, away, 'distracted')
+  expect(await setMode($, away, '')).toContain('Mode: distracted.')
 })
 
 test('only the 20 most recently saved sessions keep a stored mode, and other keys are left alone', async ($, on) => {
@@ -271,7 +274,7 @@ test('after a compaction, the next turn is sent the rules again once, except in 
   expect(rulesSent(away, 'present')).toBe(1)
 })
 
-test("a compaction inside a turn is answered at the main loop's next request, never at a teammate's", async ($, on) => {
+test("a compaction inside a turn is answered at the main loop's next request, and a teammate's compaction or request is not", async ($, on) => {
   const away = engine(on)
   await setMode($, away, 'distracted')
   await compact($, 'worker-1')
@@ -297,12 +300,13 @@ const mountBand = ($: Engine, hasSurvey = false) =>
 test("the band shows the mode beneath the other plugins' lines, with a button for each other mode", async ($, on) => {
   const away = engine(on)
   const band = await mountBand($)
-  expect(await band.find({ type: 'Text', text: 'the other band' })).toBeDefined()
-  expect((await band.find({ type: 'Text', text: /Mode:/ }))?.text).toContain('Mode: present')
-  expect(await band.find({ key: 'mode-present' })).toBeUndefined()
+  const lines = async () => (await band.findAll({ type: 'Text' })).map(found => found.text)
+  const buttons = async () => (await band.findAll({ type: 'Button' })).map(found => found.key)
+  expect(await lines()).toEqual(['the other band', 'Mode: present '])
+  expect(await buttons()).toEqual(['mode-distracted', 'mode-away'])
   await band.press({ key: 'mode-away' })
   expect(away.statuses.at(-1)).toBe('away')
-  expect(await band.find({ key: 'mode-present' })).toBeDefined()
+  expect(await buttons()).toEqual(['mode-present', 'mode-distracted'])
 })
 
 test('the band draws nothing of its own while a survey is up', async ($, on) => {
@@ -375,8 +379,8 @@ test("while away, a main turn that called a tool is continued once, and the cont
 
   // A subagent's turn inside the continuation's own leaves it marked as the continuation's.
   await $.turn.start({ text: asDelivered(away.submitted.at(-1) ?? ''), turnId: 't2' })
-  await $.turn.start({ text: 'survey', turnId: 's1', agentId: 'scout-1' })
   await $.tool.call({ tool: 'Read', file_path: 'notes.md' } as never)
+  await $.turn.start({ text: 'survey', turnId: 's1', agentId: 'scout-1' })
   await endTurn($, 's1', 'answer', 'scout-1')
   await endTurn($, 't2')
   await away.clock.advance(10)
@@ -426,7 +430,7 @@ test('an interrupted or refused turn is not continued, and one ending while a ha
   expect(continuations(away)).toBe(1)
 })
 
-test('a turn that ends while a teammate the main loop spawned is mid-run is not continued; one idle does not hold it', async ($, on) => {
+test('a turn that ends while a teammate the main loop spawned is mid-run is not continued; one idle or ended does not hold it', async ($, on) => {
   const away = engine(on)
   await setMode($, away, 'away')
   away.agents.push({ ...WORKER, spawnedBy: 'caller' }, { ...WORKER, id: 'nested-1', parentId: 'worker-0' })
@@ -435,7 +439,7 @@ test('a turn that ends while a teammate the main loop spawned is mid-run is not 
   expect(continuations(away)).toBe(0)
 
   away.agents.pop()
-  away.agents.push({ ...WORKER, status: 'idle' })
+  away.agents.push({ ...WORKER, status: 'idle' }, { ...WORKER, id: 'worker-2', status: 'completed' })
   await mainTurn($, away, 't2')
   expect(continuations(away)).toBe(1)
 })
@@ -529,9 +533,11 @@ test('auto mode denials are posted outside present, once per loop, tool and cate
   expect(away.decisions.length).toBe(1)
   expect(away.decisions[0]?.question).toBe(`Auto mode denied Claude's Bash call [Data Exfiltration]: {"command":"npm publish"}`)
 
+  await setMode($, away, 'away')
   await $.classic.PermissionDenied({ ...PUBLISH, tool_use_id: 'toolu_4', reason: 'Denied [Irreversible Change]' })
   await $.classic.PermissionDenied({ ...PUBLISH, tool_use_id: 'toolu_5', reason: exfiltration, agent_id: 'worker-1' })
-  expect(away.decisions.length).toBe(3)
+  await $.classic.PermissionDenied({ tool_name: 'Write', tool_input: { file_path: 'notes.md' }, tool_use_id: 'toolu_6', reason: exfiltration })
+  expect(away.decisions.length).toBe(4)
 })
 
 test('past the ceiling while away, the running turn is asked once to end, then away runs /handoff', { plugins: [HANDOFF] }, async ($, on) => {
@@ -552,7 +558,7 @@ test('past the ceiling while away, the running turn is asked once to end, then a
   expect(continuations(away)).toBe(0)
 })
 
-test('the ceiling hands off again only after the fill has dropped below it, and never while distracted', { plugins: [HANDOFF] }, async ($, on) => {
+test('the ceiling hands off again only after the fill has dropped below it', { plugins: [HANDOFF] }, async ($, on) => {
   const away = engine(on)
   await setHandoff($, 'set-ceiling', 60)
   await setMode($, away, 'away')
@@ -566,7 +572,6 @@ test('the ceiling hands off again only after the fill has dropped below it, and 
   away.usage.percent = 61
   await mainTurn($, away, 't4')
   expect(away.handoffs.length).toBe(2)
-
 })
 
 test('past the ceiling while distracted, the turn is neither asked to end nor handed off', { plugins: [HANDOFF] }, async ($, on) => {
@@ -639,7 +644,10 @@ test('leaving away for distracted puts the sandbox back too, and distracted from
 })
 
 test('sessions sharing a root keep the sandbox on until the last leaves away, which puts back the value from before the first', async ($, on) => {
-  const away = engine(on, { [HOLD_KEY]: { holders: ['other-session'], earlier: false }, 'session:other-session': { mode: 'away', savedAt: 1 } })
+  const away = engine(on, {
+    [HOLD_KEY]: { holders: ['other-session'], earlier: false },
+    'session:other-session': { mode: 'away', savedAt: 1, sandboxRoot: ROOT },
+  })
   writeLocalSettings(away, { sandbox: { enabled: true } })
   const heldText = away.files.get(LOCAL_SETTINGS)
   await setMode($, away, 'away')
@@ -706,6 +714,7 @@ test('a session whose root moved while away puts the sandbox back under the root
   const away = engine(on)
   writeLocalSettings(away, { sandbox: { enabled: false } })
   await setMode($, away, 'away')
+  expect(localSettings(away)).toEqual({ sandbox: { enabled: true } })
   away.root = MOVED_ROOT
   await setMode($, away, 'present')
   expect(localSettings(away)).toEqual({ sandbox: { enabled: false } })
@@ -745,7 +754,7 @@ test('a session restarted away under another root gives up the hold it left in t
 })
 
 test('a session restarted away turns the sandbox on again where the owner turned it off', async ($, on) => {
-  const away = engine(on, { [SESSION_KEY]: { mode: 'away', savedAt: 1 }, [HOLD_KEY]: { holders: ['test-session'], earlier: false } })
+  const away = engine(on, { [SESSION_KEY]: { mode: 'away', savedAt: 1, sandboxRoot: ROOT }, [HOLD_KEY]: { holders: ['test-session'], earlier: false } })
   writeLocalSettings(away, { sandbox: { enabled: false } })
   await mainTurnStart($)
   expect(localSettings(away)).toEqual({ sandbox: { enabled: true } })
