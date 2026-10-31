@@ -38,7 +38,6 @@ type World = {
   repoRoot: string
   /** What `--settings` and managed settings hold, as $.settings.read({ source }) answers. */
   sources: { flag: Record<string, unknown>; policy: Record<string, unknown> }
-  /** Each slash command the mod registered. */
   commands: CommandSpec[]
 }
 

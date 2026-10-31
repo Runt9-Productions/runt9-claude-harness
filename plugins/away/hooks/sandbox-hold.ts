@@ -130,8 +130,8 @@ async function putSandboxBack($: EngineInterface, root: string, hold: SandboxHol
   const consequence = 'The sandbox stays on until /mode present can put it back'
   const isPutBack = await editLocalSettings($, path, consequence, settings => {
     const restored = withSandboxValues(settings, hold.earlier)
-    // Claude Code adds the file to the global git excludes only when it writes it, so `git add -A` would commit this one.
     const isLeftEmpty = renderLocalSettings(restored) === EMPTY_SETTINGS
+    // Claude Code adds the file to the global git excludes only when it writes it, so `git add -A` would commit this one.
     return hold.isFileCreated && isLeftEmpty ? undefined : restored
   })
   if (isPutBack) await $.store.delete(key)
@@ -200,10 +200,7 @@ async function isDeleted($: EngineInterface, path: string): Promise<boolean> {
 
 /**
  * Toasts each value above the session root's local file that undoes one of AWAY_VALUES, since it wins over away's and
- * nothing else would say so. One toast reads:
- *
- * --settings sets sandbox.enabled to false, which wins over /work/wt/.claude/settings.local.json, so the sandbox stays
- * off while away
+ * nothing else would say so.
  */
 async function toastOverrides($: EngineInterface, path: string, root: string) {
   for (const { source, values } of await higherSandboxValues($, root)) {
@@ -234,7 +231,7 @@ async function higherSandboxValues($: EngineInterface, root: string): Promise<{ 
   return sources
 }
 
-/** The settings at `path`, `{}` for a missing file, or undefined for one that cannot be read or parsed and goes unchecked. */
+/** The settings at `path`, `{}` for a missing file, or undefined for one that cannot be read or parsed. */
 async function readIfReadable($: EngineInterface, path: string): Promise<LocalSettings | undefined> {
   try {
     const text = await readLocalSettingsText($, path)
