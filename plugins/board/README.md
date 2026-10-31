@@ -15,8 +15,9 @@ scroll away in the transcript. There are no settings.
 
 ## What Claude is told
 
-While a surface draws the pane, Claude's system prompt says to post a question whose answer changes its next step
-as a decision rather than asking it in a reply, to post anything it needs you to do as a task for you, to track its
+While a surface draws the pane, Claude's system prompt says to post each question whose answer changes its next
+step as its own decision rather than asking it in a reply or the built-in question form, leaving pages its
+instructions ask for where they are, to post anything it needs you to do as a task for you, to track its
 own multi-step work as a task with a checklist, to keep a one-line status, and to read the board after a compaction.
 With no surface, as in `claude -p`, nothing is added.
 
