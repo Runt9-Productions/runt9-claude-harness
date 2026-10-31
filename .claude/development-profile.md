@@ -82,8 +82,8 @@ a knowledge base note already answers a question, this file points there.
   leak scan, then a `public-leak` review through `claude -p` costing about $0.10 to $0.50. Any finding above Normal,
   or any open question, refuses the push. It reads commit messages too. What CI fails that is cheapest to catch first:
   a missing version rise, `ruff format`, and a note left unverified after its sources changed.
-- Duration: `CI` takes about 1.5 minutes; the label-triggered `Code review` takes 4 to 15 minutes (recent runs,
-  2026-10-28).
+- Duration: `CI` takes about 1.5 minutes (recent runs, 2026-10-28); a local code review took 8 and 16 minutes
+  (two runs, 2026-10-31).
 
 ## 7. Verification
 
@@ -104,21 +104,42 @@ pre-push gate trusts it, so a build never writes to it.
 ## 9. Review
 
 - Panel: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
-  `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run in CI.
-- Trigger: the `code-review-requested` label on a same-repository pull request runs `/lens-review <n> auto`, posts
-  a comment-type review on the head and removes the label; adding it again reruns. The workflow has no draft filter,
-  so a draft is reviewed. A trivial change the owner can check at a glance skips the label and opens ready.
+  `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run locally.
+- Test review: `.claude/test-review-profile.md` exists. Run `/test-review` in the pull request's worktree before the
+  code review, and commit and push the fixes wanted, so the panel reviews the tests as they will merge. Skipped when
+  the pull request changes no test, or its test changes are trivial enough for the owner to check at a glance.
+- Code review: a headless run in the pull request's worktree, checked out at its pushed head, started in the
+  background so the session can move on. `gh` in it needs `GH_TOKEN` (section 1).
+
+  ```
+  CODE_REVIEW_OUTPUT=<scratch dir> claude -p "/lens-review <n> auto" --plugin-dir plugins/lens-review \
+    --permission-mode auto --strict-mcp-config --no-session-persistence --output-format json > <run log>
+  ```
+
+  The run loads the head's own project settings, hooks and plugin code, and those run outside the auto-mode
+  classifier. So review only a branch of this repository, never a fork, and when the head adds or changes
+  `.claude/settings*.json`, `.mcp.json` or anything under `plugins/lens-review/hooks/`, the owner reads that change
+  before the run starts. Always `--permission-mode auto`, never `dontAsk` or a bypass mode: the tool calls the run
+  makes on pull request content go through the classifier, and `dontAsk` refuses any tool not allowed in advance.
+  `--strict-mcp-config` keeps the user's MCP servers out of a review that is posted publicly. Before posting, check
+  `jq '{is_error, permission_denials}' <run log>`: a blocked call is skipped and the report still looks whole. The
+  report and payload land in a run directory under the scratch directory. A draft is reviewed like any other pull
+  request. A trivial change the owner can check at a glance skips both reviews and opens ready.
+- Posting: the bot posts the result as one comment-type review from the payload the skill wrote. Run the second
+  command only when GitHub rejects the first, which it does for the whole review when one comment misses the diff. It
+  posts the report as the body alone, cut below GitHub's 65,536-character limit for a review body. No tooling posts
+  images; evidence is text.
+
+  ```
+  jq '.event = "COMMENT"' <run dir>/review-payload.json \
+    | gh api repos/Runt9-Productions/runt9-claude-harness/pulls/<n>/reviews --input -
+  gh api repos/Runt9-Productions/runt9-claude-harness/pulls/<n>/reviews -f event=COMMENT \
+    -f body="$(head -c 60000 <run dir>/review.md)"
+  ```
+
 - Findings: the merge rule is CI green and no open Critical or High. A Normal is optional and may be declined on its
   thread with a one-line reason (`.claude/code-review-profile.md`, "Severity calibration").
-- Test review: `.claude/test-review-profile.md` exists. The `test-review-requested` label runs the `test-review`
-  plugin in CI over the test files the head changes, posts a comment-type review with each test fix as a suggested
-  change, pushes nothing and removes the label. Add it first, and commit the fixes wanted before adding
-  `code-review-requested`, so the panel reviews the tests as they will merge. Skipped when the pull request changes
-  no test, or its test changes are trivial enough for the owner to check at a glance.
 - External reviewer: none.
-- Inline comments: one `gh api repos/Runt9-Productions/runt9-claude-harness/pulls/<n>/reviews --input <file>` with
-  `event: "COMMENT"`, `commit_id`, `body` and `comments[]` of `path`, `line`, `side: "RIGHT"` and `body`. GitHub
-  rejects the whole review when one comment misses the diff. No tooling posts images; evidence is text.
 - Reply text: check each with `scan.sh --text <file> . origin/main` from the installed harness before posting.
   Pull request bodies go through `review-text.sh`, as in section 1.
 
@@ -139,8 +160,8 @@ pre-push gate trusts it, so a build never writes to it.
   and `main` takes changes only by pull request with `gate` passing and the branch up to date.
 - With only the remote half present there is no standing grant: commit, push and open the pull request when the owner
   says so at the end of the task, or for the whole run where the owner has granted that.
-- Pull request: `gh pr create --draft --base main --label test-review-requested --body-file <file>`; add
-  `code-review-requested` once the test fixes wanted are committed (section 9). It leaves draft with `gh pr ready <n>`
+- Pull request: `gh pr create --draft --base main --body-file <file>`, then the test review and the code review
+  (section 9). It leaves draft with `gh pr ready <n>`
   once the review has run, its Critical and High findings are fixed and pushed, every thread is
   answered and the fixed ones resolved, and the reviewer guide is posted. The owner squash-merges.
 

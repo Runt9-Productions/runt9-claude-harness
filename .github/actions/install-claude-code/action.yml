@@ -1,12 +1,5 @@
 name: Install Claude Code
-description: >-
-  Installs the newest Claude Code release as `claude` on the PATH, and with `sandbox` the tools its Bash sandbox needs.
-
-inputs:
-  sandbox:
-    description: >-
-      "true" also installs bubblewrap and socat, for a run with CLAUDE_CODE_SUBPROCESS_ENV_SCRUB set.
-    default: "false"
+description: Installs the newest Claude Code release as `claude` on the PATH.
 
 runs:
   using: composite
@@ -25,16 +18,3 @@ runs:
         chmod +x "$RUNNER_TEMP/bin/claude"
         echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
         "$RUNNER_TEMP/bin/claude" --version
-
-    # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB runs Bash in Claude Code's sandbox, which needs bubblewrap, and socat for its
-    # network bridge; without socat no Bash command starts. Ubuntu 24.04's AppArmor stops bwrap creating the user
-    # namespace it runs in. The last line fails this step, not the review, if bwrap still cannot.
-    - name: Install the sandbox's tools
-      if: inputs.sandbox == 'true'
-      shell: bash
-      working-directory: ${{ runner.temp }}
-      run: |
-        sudo apt-get update -q
-        sudo apt-get install -y -q bubblewrap socat
-        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-        bwrap --ro-bind / / true

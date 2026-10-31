@@ -20,15 +20,14 @@ risen and they run an update, so a fix that skips the version rise never arrives
 | Range | `git diff <a>..<b>` |
 | Pull request | `gh pr diff <n>`, then `gh pr view <n> --json commits,body` for the commit messages and the description |
 
-- `gh` authenticates with `GH_TOKEN`. In CI that token can only read.
+- `gh` authenticates with `GH_TOKEN`.
 - Default branch: `main`.
 - No path is excluded from review. `package-lock.json` is relevant only to `guard-security` and `public-leak`;
   other reviewers may skip it.
 
 ## Output
 
-- Root: `$CODE_REVIEW_OUTPUT` when it is set, otherwise `.claude/output/code-review/`. CI sets it, because under
-  `--permission-mode dontAsk` every write inside `.claude/` is refused.
+- Root: `$CODE_REVIEW_OUTPUT` when it is set, otherwise `.claude/output/code-review/`.
 - Inline threshold: a diff under 300 lines goes into the reviewer prompts; at 300 or more, reviewers read it from disk.
 
 ## Panel
@@ -82,8 +81,6 @@ removes code is worth as much as one that adds it.
 - A marketplace entry holds only `name`, `source` and `description`; CI enforces that.
 - In a plugin's `settings.json`, every key other than `agent` and `subagentStatusLine` is dropped without a warning.
 - `CLAUDE_PLUGIN_DATA` is deleted when the plugin is uninstalled, so nothing that must outlive the plugin belongs there.
-- `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is all that keeps the Claude token out of the commands a CI review runs.
-  `test-review.yml` runs the PR's own tests and code, so without it the PR can read the token.
 - A guard whose error path allows the call it was meant to judge.
 - A comment that points readers at a gitignored path (`.claude/output/`, `.claude/settings.local.json`), which no
   other clone has.
@@ -117,7 +114,6 @@ A new plugin with a contract adds its rows here.
 | a `# vX` comment beside a pinned action | the SHA it annotates | Dependabot |
 | the "tuned on" version in `harness/leak-scan/README.md` | `version` in `install-betterleaks.sh` | hand |
 | each request under "Other callers" | the `request` text in `harness/githooks/pre-push`, `harness/leak-scan/review-text.sh` and `harness/leak-scan/review.sh` | hand |
-| `TEST_GLOBS` and `TEST_HELPERS` in `.github/scripts/test-review-payload.py` | the "Test kinds" table in `.claude/test-review-profile.md` | hand |
 
 ## Companions
 
@@ -157,8 +153,8 @@ something the ruling did not account for.
 - The invisible-character check flagging emoji variation selectors.
 - Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
   common mistakes only. (2026-10-25)
-- CI reviewing a PR with that PR's own `.claude/` and `CLAUDE.md` (2026-10-25), and with its own
-  `plugins/lens-review` and `plugins/test-review`, which follows from CI loading the plugins with `--plugin-dir`.
+- A pull request reviewed with its own `.claude/`, `CLAUDE.md` and `plugins/lens-review`, which follows from running
+  the review in its worktree with `--plugin-dir` (2026-10-25, reworded for the local run 2026-10-31).
 - `bootstrap.py harness` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
   (2026-10-27)
 
@@ -182,23 +178,21 @@ answer goes in the structured output.
 
 - **The report.** Write the complete report to `<review-dir>/review.md` and nowhere else. Subagent writes to files
   named `REPORT*`, `SUMMARY*`, `FINDINGS*` or `ANALYSIS*` are refused. A run that writes no report says why in its
-  final message; CI prints the first 4000 characters of that message.
-- **PR targets** also write `<review-dir>/review-payload.json`:
-  - `commit_id`: the 40-hex head SHA the diff was fetched at. If it is missing or malformed, CI uses the event's head.
+  final message.
+- **The run never posts.** It writes the files below; the session that started it posts them afterwards
+  (`.claude/development-profile.md`, section 9).
+- **PR targets** also write `<review-dir>/review-payload.json`, which is posted as written with `event: "COMMENT"`
+  added:
+  - `commit_id`: the 40-hex head SHA the diff was fetched at. Without it GitHub reviews the newest head.
   - `body`: the review summary. It keeps all three severity headings, and a finding placed inline appears there as a
     one-line pointer to its comment.
-  - `comments[]`: each with `path`, `line`, `side: "RIGHT"` and `body`, carrying one whole finding. `line` is the
-    new-side line number counted from the hunk header. CI drops every other field.
+  - `comments[]`: each with `path`, `line`, `side: "RIGHT"` and `body`, carrying one whole finding, and no other
+    field. `line` is the new-side line number counted from the hunk header.
 - **Body cap.** Keep `body` under 60,000 characters, below GitHub's 65,536-character limit for a review. When the full
   body would pass that, shorten every finding in it to one line with its location, and say that the full text is in
   the inline comments and in `review.md`.
-- **Fallback.** GitHub rejects the whole review when one comment does not land on the diff. CI then posts only
-  `review.md`, cut to 60,000 bytes, so `review.md` holds every finding in full, inline or not.
-- **CI flow.** Adding the `code-review-requested` label to a same-repo PR runs `/lens-review <n> auto`, with the
-  plugin loaded from the PR's own `plugins/lens-review`. The reviewing job never writes to GitHub. A separate job,
-  the only one holding write permission, posts the result as a COMMENT review on the head commit and removes the
-  label. Bots that push add the label; the owner adds it again to rerun. It comes before human review and never
-  blocks a merge.
+- **Fallback.** GitHub rejects the whole review when one comment does not land on the diff, and `review.md` is
+  then posted alone as the body, so it holds every finding in full, inline or not.
 
 ## Standing instructions
 
