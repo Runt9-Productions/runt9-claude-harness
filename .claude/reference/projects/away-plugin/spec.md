@@ -17,14 +17,14 @@ The per-file map for issue #67 and the issue text reconciled with the rulings in
 | | Present | Distracted | Away |
 |---|---|---|---|
 | Replies | normal | one or two lines; detail only when asked | a line at most, or none |
-| Questions | a board decision, with the context a reply would give (D5) | a board decision | a board decision with a recommended option, proceeded on when reversible |
+| Questions | a board decision, with the context a reply would give | a board decision | a board decision with a recommended option, proceeded on when reversible |
 | Stops for | anything | anything, said in the reply's first line | a risk to the machine's or a repository's security or integrity, a change taking hours to unwind, a hard stop the owner named |
 | A turn ending with work left | nothing | nothing | one continuation prompt |
 | A permission prompt | normal | normal | refused and posted as a board decision |
 | An auto mode denial | nothing | posted as a board decision | posted as a board decision |
 | Context past handoff's ceiling | handoff's button | handoff's button | handed off and compacted unattended |
 | Switching to present | nothing | nothing | a return report, if away since the last one |
-| The Bash sandbox | as the settings set it | as the settings set it (D6) | on |
+| The Bash sandbox | as the settings set it | as the settings set it | on |
 
 ## Behaviour
 
@@ -47,7 +47,7 @@ The per-file map for issue #67 and the issue text reconciled with the rulings in
 - Return report on switching to present after an away: a prompt to read the board and report, in order, what waits
   on the owner, what was done, and what stalled.
 
-## The sandbox toggle (D1)
+## The sandbox toggle
 
 - Switching to away writes `sandbox.enabled: true` into `<session root>/.claude/settings.local.json`, keeping every
   other key; a missing file counts as `{}`. A file that does not parse as a JSON object is left untouched and the
@@ -63,7 +63,7 @@ The per-file map for issue #67 and the issue text reconciled with the rulings in
   hold follows the session's root: at each main-loop `turn.step` (every model request, a turn's first included) while
   away, a root other than the one named moves the hold there, so a `/cd` or a worktree move, mid-turn included,
   neither leaves the old root sandboxed nor the new one unsandboxed.
-- README states, per permission mode, what the sandbox does not cover (D2): Edit and Write under `~/.claude` are
+- README states, per permission mode, what the sandbox does not cover: Edit and Write under `~/.claude` are
   protected paths, prompted in default and acceptEdits (refused while away), sent to the classifier in auto mode,
   denied in dontAsk.
 
@@ -84,7 +84,7 @@ The per-file map for issue #67 and the issue text reconciled with the rulings in
 
 ## Draft issue text
 
-Approved (D3). Three edits to the posted issue body:
+Approved with the spec. Three edits to the posted issue body:
 
 1. The "Per mode" bullet's questions clause becomes: "questions posted as a board decision (while present, with the
    context a reply would give), or posted with a recommended option and proceeded on when reversible".

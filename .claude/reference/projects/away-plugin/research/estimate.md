@@ -11,7 +11,7 @@ tags:
 
 **Moderate.** Production 600 to 720 lines of TypeScript plus 70 to 90 of README and config; tests 400 to 550 lines;
 10 to 11 files, all new except three one-to-three-line edits. Rests on: one hooks module (or one module plus a pure
-helper file), the mode table in [[Away Plugin Spec]] as the whole of the behaviour, and D2 answered "accept and document". The cost is mostly in tests that drive timers and turn events through the kit, and in
+helper file), the mode table in [[Away Plugin Spec]] as the whole of the behaviour, and the protected-path gap accepted and documented rather than guarded. The cost is mostly in tests that drive timers and turn events through the kit, and in
 measuring that turning the sandbox on takes effect live.
 
 ## Existing pieces
