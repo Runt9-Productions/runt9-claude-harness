@@ -19,9 +19,11 @@ sources:
 > sandbox and model-evaluated hooks, as far as the harness's settings fragments rely on them. The `#measured` lines
 > come from headless `claude -p` runs on 2.1.314 in scratch repositories with synthetic files, with the sandbox on and
 > its network closed so nothing could install, one to three runs per case (2026-10-29 to 2026-10-31); the earlier
-> ones were not re-run when this note was written. Not covered: macOS and Windows sandboxing, the Read tool's path
-> through auto mode (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build
-> run end to end in the sandbox.
+> ones were not re-run when this note was written. On 2026-10-31 the note was re-checked against the auto-mode
+> fragment's added `allow` entry (marking a pull request the session opened ready for review): no claim rests on which
+> entries that list holds, and every other claim was carried forward without a re-check. Not covered: macOS
+> and Windows sandboxing, the Read tool's path through auto mode (only the documentation's account), pushes over HTTPS
+> from inside the sandbox, and any JVM build run end to end in the sandbox.
 
 Read this before writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to
 stop a call.
