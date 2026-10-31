@@ -194,7 +194,7 @@ jobs:
       - name: Install the pinned tools
         run: npm ci
 
-      # The PR's own copy, since this job holds no secret: a change to the action runs here before it reaches a review.
+      # The PR's own copy, since this job holds no secret.
       - uses: $/.github/actions/install-claude-code
 
       - name: Every plugin validates strictly
