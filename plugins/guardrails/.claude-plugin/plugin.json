@@ -1,0 +1,18 @@
+{
+  "name": "guardrails",
+  "version": "0.1.0",
+  "description": "Asks a model whether a tool call that looks like a credential read or a software install breaks the owner's rules, given the owner's own messages",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Judge model",
+      "description": "The model that judges each candidate call",
+      "default": "haiku",
+      "options": ["haiku", "sonnet", "opus"]
+    }
+  }
+}

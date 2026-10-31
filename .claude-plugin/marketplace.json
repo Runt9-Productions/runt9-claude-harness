@@ -34,6 +34,11 @@
       "name": "delegation",
       "source": "./plugins/delegation",
       "description": "How a lead session spawns, briefs, answers and shuts down Agent Teams teammates, with engineer, web-researcher, code-researcher, verifier and triager agent templates"
+    },
+    {
+      "name": "guardrails",
+      "source": "./plugins/guardrails",
+      "description": "A mod that asks a model, given the user's own messages, whether a tool call that looks like a credential read or a software install breaks the user's rules"
     }
   ]
 }

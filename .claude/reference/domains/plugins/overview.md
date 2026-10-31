@@ -45,3 +45,4 @@ running something else, or a name that resolves to a different skill.
 - see_also [[Skill Loading]]
 - see_also [[Teammate Mailbox]]
 - see_also [[Built-in Worktrees]]
+- see_also [[Guardrails]]
