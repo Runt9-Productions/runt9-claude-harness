@@ -182,9 +182,9 @@ pre-push gate trusts it, so a build never writes to it.
   committer.
 - Messages and trailers: the trailer lines the harness supplies. A message states the change and its rule-level
   reason, with no decision ids and nothing from a private source; the pre-push review reads it.
-- Remote: `bot`, the HTTPS remote the bot pushes through. `origin` is SSH and the owner's. A branch whose
-  commits change `.github/workflows/`, including a merge of `main` that brings such a change in, is refused for the
-  bot's token, so the owner pushes it over SSH.
+- Remote: `bot`, the HTTPS remote the bot pushes through. `origin` is SSH and the owner's. A push that
+  adds a commit changing `.github/workflows/`, including a merge of `main` that brings such a change in, is refused
+  for the bot's token, so the owner makes that push over SSH. Later pushes that add no such commit go through `bot`.
 - Guards: no guard hook stops destructive git commands such as a force push or `git reset --hard`. `pre-push` refuses
   only refs outside `claude/` and commits not made by the bot. The remote rules hold: the bot pushes only `claude/**`,
   and `main` takes changes only by pull request with `gate` passing and the branch up to date.
