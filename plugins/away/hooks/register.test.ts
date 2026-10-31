@@ -30,6 +30,8 @@ type Away = {
   handoffs: PromptOrigin[]
   /** The file system $.fs reads and writes, by absolute path. */
   files: Map<string, string>
+  /** Each text $.fs.write wrote, oldest first. */
+  writes: string[]
   /** What $.session.root() answers. */
   root: string
 }
@@ -61,6 +63,7 @@ function engine(on: On, seed: Record<string, unknown> = {}): Away {
     board: {},
     handoffs: [],
     files: new Map(),
+    writes: [],
     root: ROOT,
   }
   on('session.root', () => ({ value: away.root }) as never)
@@ -74,6 +77,7 @@ function engine(on: On, seed: Record<string, unknown> = {}): Away {
   on('fs.write', ($, e) => {
     const { path, text } = e as { path: string; text: string }
     away.files.set(path, text)
+    away.writes.push(text)
     return { value: undefined } as never
   })
   on('agent.list', () => ({ value: away.agents }) as never)
@@ -692,13 +696,14 @@ test('a settings file broken while away keeps the earlier value, for /mode prese
   expect(away.store.has(HOLD_KEY)).toBe(false)
 })
 
-test('a conversation moved to a new session id while away moves its hold, and one resumed distracted gives it up', async ($, on) => {
+test('a conversation moved to a new session id while away moves its hold with no write in between, and one resumed distracted gives it up', async ($, on) => {
   const away = engine(on, { 'session:resumed-session': { mode: 'distracted', savedAt: 1 } })
   await setMode($, away, 'away')
   away.session.id = 'moved-session'
   await mainTurnStart($)
   expect(away.store.get(HOLD_KEY)).toEqual({ holders: ['moved-session'] })
-  expect(localSettings(away)).toEqual({ sandbox: { enabled: true } })
+  // One write, so the file never held the sandbox off while away.
+  expect(away.writes.map(text => JSON.parse(text) as unknown)).toEqual([{ sandbox: { enabled: true } }])
 
   away.session.id = 'resumed-session'
   await mainTurnStart($)

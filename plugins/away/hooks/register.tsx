@@ -213,9 +213,10 @@ async function bind($: EngineInterface) {
   await update($, mode, () => current)
   showStatus($, current)
   // The conversation, not its old id, is what holds the sandbox on now. A restart re-applies it, as the owner may
-  // have turned it off since.
-  if (previousId !== undefined) await releaseSandbox($, previousId)
+  // have turned it off since. The new id joins the holders before the old one leaves, so a root the old id held
+  // alone is never put back in between.
   if (current === 'away') await holdSandbox($, sessionId)
+  if (previousId !== undefined) await releaseSandbox($, previousId)
 }
 
 // State still holds the stored mode after a hot reload; any other difference is a session left that way, perhaps long ago.
