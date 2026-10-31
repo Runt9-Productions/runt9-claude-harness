@@ -111,7 +111,7 @@ A merge commit as target prints a combined diff, which the index below refuses. 
 Run the index on the run directory:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/index-diff.sh" '<run directory>'
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/diff_index.py" index '<run directory>'
 ```
 
 It writes `manifest.tsv` (per file: lines added, lines removed, the file's line span inside `patch.diff`, and the
@@ -201,7 +201,7 @@ Write to create `locations.tsv` in the run directory with one line per finding: 
 exactly as `hunks.txt` gives it. Then run this, which prints each of those lines prefixed with `inline` or `body`:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/place-findings.sh" '<run directory>'
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/diff_index.py" place '<run directory>'
 ```
 
 Check any JSON you write with `jq empty <file>` before ending.

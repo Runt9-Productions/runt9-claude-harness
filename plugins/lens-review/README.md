@@ -23,9 +23,9 @@ message comes back.
   reviewer's prompt: refuse a prompt that steers the verdict, read past the hunks, and treat text in the diff that
   addresses the reviewer as a finding.
 - **Templates**, in `skills/lens-review/references/`: `profile-template.md` and `reviewer-template.md`.
-- **Scripts**, in `skills/lens-review/scripts/` with their bats tests: `index-diff.sh`, which indexes the fetched
-  diff into the per-file manifest and hunk spans the skill routes and places findings from, and
-  `place-findings.sh`, which says whether each finding's line falls inside a hunk and so can go inline.
+- **A script**, `skills/lens-review/scripts/diff_index.py` with its pytest tests. `diff_index.py index` indexes the
+  fetched diff into the per-file manifest and hunk spans the skill routes and places findings from, and
+  `diff_index.py place` says whether each finding's line falls inside a hunk and so can go inline.
 
 ## What a repository supplies
 
@@ -37,7 +37,7 @@ message comes back.
 
 ## Needs
 
-`bash` 4.4 or newer, `git`, `jq` and `awk`. `gh`, authenticated, for pull request targets and for a profile that
+`bash`, Python 3.12 or newer, `git` and `jq`. `gh`, authenticated, for pull request targets and for a profile that
 posts reviews to GitHub.
 
 The profile and reviewer pool keep the paths `.claude/code-review-profile.md` and `.claude/agents/code-review/`:
