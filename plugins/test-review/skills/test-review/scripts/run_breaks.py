@@ -7,8 +7,9 @@ Run it from inside the repository under review. Each line of the break file is o
 `file` is a path from the repository root, as `git ls-files` prints it. `old` must occur exactly once in that file as
 it stands in the working tree; `expect` names the tests the break should turn red. The run command and the patterns
 that read a passing and a failing test line come from the fenced `toml` block under "## Batch runs" in the profile,
-so the script runs no command the profile does not name. The test paths given last replace the run command's
-"{tests}" item, and the command runs from the root of each copy.
+so the script runs no command the profile does not name. A kind's optional `subfail` pattern reads a line that turns
+an already named test red, for a runner that reports a test as passing and its failed subtests on later lines. The
+test paths given last replace the run command's "{tests}" item, and the command runs from the root of each copy.
 
 Every break runs in a fresh copy of the tracked and untracked, not ignored, files, plus the ignored paths the profile
 links. One more copy runs with no break, so a test that already fails is reported once and never read as caught. The
@@ -38,7 +39,8 @@ from pathlib import Path
 
 BREAK_KEYS = frozenset({"id", "file", "old", "new", "expect"})
 PROFILE_KEYS = frozenset({"link", "kinds"})
-KIND_KEYS = frozenset({"run", "pass", "fail"})
+REQUIRED_KIND_KEYS = frozenset({"run", "pass", "fail"})
+KIND_KEYS = REQUIRED_KIND_KEYS | {"subfail"}
 # Ids become log file names.
 ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 BASELINE = "baseline"
@@ -65,6 +67,7 @@ class Kind:
     run: tuple[str, ...]
     passing: re.Pattern[str]
     failing: re.Pattern[str]
+    subfailing: re.Pattern[str] | None
 
 
 @dataclass(frozen=True)
@@ -123,9 +126,11 @@ def load_profile(path: Path, kind_name: str) -> tuple[Kind, list[str]]:
 
 def parse_kind(name: str, entry: dict) -> Kind:
     where = f"kind {name!r}"
-    if set(entry) != KIND_KEYS:
-        wanted = ", ".join(sorted(KIND_KEYS))
-        raise Refused(f"{where} needs exactly the keys {wanted}; it has {', '.join(sorted(entry)) or 'none'}")
+    keys = set(entry)
+    if not REQUIRED_KIND_KEYS <= keys <= KIND_KEYS:
+        wanted = ", ".join(sorted(REQUIRED_KIND_KEYS))
+        found = ", ".join(sorted(keys)) or "none"
+        raise Refused(f"{where} needs the keys {wanted}, and may have subfail; it has {found}")
     run = entry["run"]
     if not isinstance(run, list) or TESTS_PLACEHOLDER not in run:
         raise Refused(f"{where}: run must be a list holding the item {TESTS_PLACEHOLDER!r}")
@@ -133,7 +138,8 @@ def parse_kind(name: str, entry: dict) -> Kind:
         raise Refused(f"{where}: every item of run must be a string")
     passing = name_pattern(where, entry, "pass")
     failing = name_pattern(where, entry, "fail")
-    return Kind(tuple(run), passing, failing)
+    subfailing = name_pattern(where, entry, "subfail") if "subfail" in entry else None
+    return Kind(tuple(run), passing, failing, subfailing)
 
 
 def name_pattern(where: str, entry: dict, key: str) -> re.Pattern[str]:
@@ -294,6 +300,11 @@ def read_results(kind: Kind, output: bytes) -> dict[str, Verdict]:
     results: dict[str, Verdict] = {}
     for line in output.decode(errors="replace").splitlines():
         line = ANSI_ESCAPE.sub("", line).rstrip()
+        subfailed = kind.subfailing.search(line) if kind.subfailing else None
+        if subfailed:
+            # Overwrites the test's own verdict rather than going through record, which would add a second copy.
+            results[subfailed.group("name").strip()] = Verdict.FAILED
+            continue
         for verdict, pattern in ((Verdict.PASSED, kind.passing), (Verdict.FAILED, kind.failing)):
             match = pattern.search(line)
             if match:

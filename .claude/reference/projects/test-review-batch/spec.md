@@ -25,7 +25,9 @@ run_breaks.py --profile <profile> --kind <kind> --breaks <file.jsonl> --out <dir
   empty file runs the baseline alone, which gives test counts.
 - **Profile:** the fenced `toml` block under `## Batch runs`. `link` lists globs of ignored paths symlinked into each
   copy; `[kinds.<kind>]` gives `run` (an argv list, with the item `{tests}` replaced by the test paths), and `pass` and
-  `fail` regexes, each with a `name` group, matched per output line after colour codes are stripped.
+  `fail` regexes, each with a `name` group, matched per output line after colour codes are stripped. An optional
+  `subfail` regex, also with a `name` group, reads a later line that turns a named test red, such as pytest's summary
+  line for a failed unittest subTest.
 - **Copies:** one temporary copy per break plus a baseline, from `git ls-files --cached --others --exclude-standard`
   as the files stand on disk, symlinks kept as links. No `.git` goes in, so a suite that needs one shows as a baseline
   error. Copies are removed at the end; the checkout is never written.

@@ -25,16 +25,18 @@ Production code is every file that is neither a test nor a helper listed above.
 
 <!-- Read by the plugin's run_breaks.py, which runs the reviewer's breaks. Per kind: the command it runs in each copy
 of the tree, where the item "{tests}" becomes the files the reviewer names, and the patterns that read one passing
-and one failing test line, each with a (?P<name>...) group. `link` lists ignored paths a suite needs, such as
-`node_modules`, linked into every copy. The script runs no command this block does not name. -->
+and one failing test line, each with a (?P<name>...) group. An optional `subfail` pattern reads a later line that
+turns a named test red, such as pytest's summary line for a failed unittest subTest. `link` lists ignored paths a
+suite needs, such as `node_modules`, linked into every copy. The script runs no command this block does not name. -->
 
 ```toml
 link = []
 
 [kinds.pytest]
 run = ["python", "-m", "pytest", "-v", "{tests}"]
-pass = '^(?P<name>\S+::\S+) PASSED'
-fail = '^(?P<name>\S+::\S+) FAILED'
+pass = '^(?P<name>\S+::.+?) PASSED'
+fail = '^(?P<name>\S+::.+?) FAILED'
+subfail = '^SUBFAILED(?:\[.*?\]|\(.*?\)) (?P<name>\S+::.+?)(?: - .*)?$'
 ```
 
 ## Checks on every scoped file

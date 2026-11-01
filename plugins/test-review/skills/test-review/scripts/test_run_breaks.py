@@ -19,8 +19,21 @@ TESTS = (
     "def test_add():\n    assert add(2, 3) == 5\n\n\n"
     "def test_sub():\n    assert sub(5, 3) == 2\n"
 )
+# A failed unittest subTest leaves its test's own line PASSED, and a parametrize id may hold spaces.
+CASES = (
+    "import unittest\n\nimport pytest\n\nfrom calc import add, sub\n\n\n"
+    "class CalcTest(unittest.TestCase):\n"
+    "    def test_add(self):\n        with self.subTest(left=2):\n            self.assertEqual(add(2, 3), 5)\n\n"
+    "    def test_sub(self):\n        with self.subTest('five less three'):\n"
+    "            self.assertEqual(sub(5, 3), 2)\n\n\n"
+    "@pytest.mark.parametrize('case', ['five less three'])\n"
+    "def test_sub_named(case):\n    assert sub(5, 3) == 2\n"
+)
 ADD = "test_calc.py::test_add"
 SUB = "test_calc.py::test_sub"
+SUBTEST_ADD = "test_cases.py::CalcTest::test_add"
+SUBTEST_SUB = "test_cases.py::CalcTest::test_sub"
+SPACED_SUB = "test_cases.py::test_sub_named[five less three]"
 # Ends a test whose script hangs, well before the 60-second sleep the timeout test starts would let it finish.
 SCRIPT_TIMEOUT_SECONDS = 30
 
@@ -31,8 +44,9 @@ def profile_text(links: tuple[str, ...] = (), pytest_options: tuple[str, ...] = 
         "# Test review profile\n\n## Batch runs\n\n```toml\n"
         f"link = {json.dumps(list(links))}\n\n"
         f"[kinds.pytest]\nrun = {run}\n"
-        "pass = '^(?P<name>\\S+::\\S+) PASSED'\n"
-        "fail = '^(?P<name>\\S+::\\S+) FAILED'\n"
+        "pass = '^(?P<name>\\S+::.+?) PASSED'\n"
+        "fail = '^(?P<name>\\S+::.+?) FAILED'\n"
+        "subfail = '^SUBFAILED(?:\\[.*?\\]|\\(.*?\\)) (?P<name>\\S+::.+?)(?: - .*)?$'\n"
         "```\n\n## Suite policy\n"
     )
 
@@ -101,6 +115,27 @@ def test_an_already_failing_untracked_test_is_reported_once_and_never_read_as_ca
 
     assert result.returncode == 0, result.stdout
     assert "baseline: 2 passed, 1 failed\n  already red: test_extra.py::test_broken\n" in result.stdout
+
+
+def test_a_break_caught_only_by_a_subtest_or_a_spaced_parametrize_id_reads_as_caught(repo: Path):
+    (repo / "test_cases.py").write_text(CASES)
+
+    breaks = [
+        {"id": "E1", "file": "calc.py", "old": "a + b", "new": "a - b", "expect": [ADD, SUBTEST_ADD]},
+        {"id": "E2", "file": "calc.py", "old": "a - b", "new": "a + b", "expect": [SUB, SUBTEST_SUB, SPACED_SUB]},
+    ]
+    result = run_breaks(repo, breaks, ("test_calc.py", "test_cases.py"))
+
+    assert result.returncode == 0, result.stdout
+    table = (repo.parent / "out" / "results.tsv").read_text().splitlines()
+    assert table == [
+        "test\tbaseline\tE1\tE2",
+        f"{ADD}\tpass\tfail\tpass",
+        f"{SUB}\tpass\tpass\tfail",
+        f"{SUBTEST_ADD}\tpass\tfail\tpass",
+        f"{SUBTEST_SUB}\tpass\tpass\tfail",
+        f"{SPACED_SUB}\tpass\tpass\tfail",
+    ]
 
 
 def test_an_old_string_that_does_not_occur_once_is_refused_before_anything_runs(repo: Path):
