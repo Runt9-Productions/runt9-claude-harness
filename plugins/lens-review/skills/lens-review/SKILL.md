@@ -1,66 +1,38 @@
 ---
 name: lens-review
-description: Runs the repository's own reviewer panel over one change (the working tree, a commit, a range or a pull request), merges what the reviewers find into a single graded report, and delivers it as the repo's review profile directs. Use for "/lens-review", "review my changes", "review this diff", "review PR 12", "run the panel", "look over this branch before I merge", or any request to check a change for defects before it ships.
-argument-hint: "[<sha> | <ref> | <a>..<b> | <pr number>] [<id>,<id>... | default | auto] [-- <open question>]"
+description: Reviews one change (the working tree, a commit, a range or a pull request) through the repository's lenses in a single reviewer pass, and delivers one graded report as the repo's review profile directs. Use for "/lens-review", "review my changes", "review this diff", "review PR 12", or any request to check a change for defects before it ships.
+argument-hint: "[<sha> | <ref> | <a>..<b> | <pr number>] [auto | default | <id>,<id>...]"
 context: fork
-allowed-tools: Bash, Read, Write, Agent
+agent: lens-review
+allowed-tools: Bash, Read, Write
 ---
 
 # /lens-review
 
 Arguments: `$ARGUMENTS`
 
-You coordinate a panel of reviewer agents over one diff and turn their output into one report. You do not review the
-code yourself, and you never edit it. The reviewers and the profile are the repository's own; this skill carries only
-how a panel runs.
+You are reviewing one change. Nobody who wrote it is in this conversation, and nothing here tells you what to
+conclude.
 
-## Why this runs in a fork
-
-Whoever calls this skill usually wrote the change. If findings were weighed and merged in that session, the author's
-own reasoning would shape which ones survive. So the skill runs in a forked context, and three things follow:
-
-- You cannot ask the caller anything. When you need an answer to continue, end with the question; the caller answers
-  by invoking the skill again.
-- Only your final message leaves the fork. Put everything the caller needs in it.
-- In an interactive session that message goes to the lead session, even when a teammate invoked the skill.
-
-## 1. Read the profile and the brief
+## 1. Read the profile and the brief, and parse the arguments
 
 Read `.claude/code-review-profile.md` in full. If it does not exist, stop and say so, pointing at "Setting a
-repository up" below: every later step depends on it.
+repository up" in `${CLAUDE_PLUGIN_ROOT}/README.md`.
 
-Read the reviewer brief, `${CLAUDE_PLUGIN_ROOT}/skills/lens-review/references/reviewer-brief.md`. Every dispatch
-prompt carries it (step 6), so a reviewer's own file need not point at it. If it cannot be read, stop and say so:
-reviewers dispatched without it run without its checks.
-
-## 2. Parse the arguments
+Read the reviewer brief, `${CLAUDE_PLUGIN_ROOT}/skills/lens-review/references/reviewer-brief.md`, and follow it. If it
+cannot be read, stop and say so.
 
 Every argument is optional.
 
 - **Target**, at most one token. None means the working tree. A token containing `..` is a range. A token of digits
   only is a pull request number. Anything else is a commit, given as a SHA or a ref.
-- **Panel**. `default`, `auto`, or reviewer ids separated by commas. `default` and `auto` are panel words, never
-  targets, even when they come first.
-- **Deep pass**. Text after `--` is one open question from an earlier run. Run only the profile's deep-pass reviewer,
-  scoped to that question (step 6).
+- **Lenses**: `auto`, `default`, or lens ids separated by commas. None means `auto`. `auto` and `default` are lens
+  words, never targets, even when they come first.
 
-List the pool. Every `.md` under `.claude/agents/code-review/`, at any depth, is a reviewer, and its id is its
-frontmatter `name`:
-
-```bash
-find .claude/agents/code-review -name '*.md' -print0 | while IFS= read -r -d '' file; do
-    printf '%s\t%s\t%s\n' "$(sed -n '2,/^---$/s/^name: //p' "$file")" \
-        "$(sed -n '2,/^---$/s/^model: //p' "$file")" "$file"
-done
-```
-
-Stop, with the reason, when an id given does not match one in the pool (list the valid ids), or when the panel is
-`default` and the profile names no always-on reviewers.
-
-## 3. Fetch the diff once
+## 2. Fetch the diff once
 
 Fetch it with the profile's commands, into a new directory for this run, and never read it into your own context
-except to inline it in step 6. Fill in the first four values and run:
+except to review it. Fill in the first four values and run:
 
 ```bash
 set -euo pipefail
@@ -106,7 +78,7 @@ request has no `head-sha`, it kept moving; leave `commit_id` out of the payload.
 A merge commit as target prints a combined diff, which the index below cannot read. Fetch it as the range
 `<sha>^1..<sha>` instead and say so in the report.
 
-## 4. Index the diff without reading it
+## 3. Index the diff without reading it
 
 Run this on the run directory. It writes `manifest.tsv` (per file: lines added, lines removed, the file's line span
 inside `patch.diff`, and the path) and `hunks.txt` (per file: the new-side line spans its hunks cover, comma
@@ -157,42 +129,33 @@ wc -l < patch.diff
 
 If it fails, stop and report the error; a review placed from a wrong index puts comments on the wrong lines.
 
-## 5. Choose the panel
+## 4. Choose your lenses
 
-Match the manifest's paths, and the kind of code they hold, against the profile's routing table.
+Your lens directory is `.claude/agents/lens-review/reference/`. List its lenses, each id with its one-line summary:
 
-- **Deep pass** (`--` given): the profile's deep-pass reviewer alone, dispatched without a proposal.
-- **No panel argument and no `--`**: dispatch nothing. End with a proposal: one or two sentences on what the diff
-  touches; each reviewer you would pick, with one reason and its frontmatter model; each reviewer you would leave
-  out, with why; and the exact command that runs your pick. Any size of panel is fine.
-- **`default`**: the profile's always-on reviewers. Still run the routing match, and list in the report every row that
-  matched but was not run.
-- **`auto`**: the always-on reviewers plus every routing match, dispatched without asking. The report says why each
-  reviewer ran and why each one in the pool did not.
-- **An id list**: exactly those reviewers.
+```bash
+for file in .claude/agents/lens-review/reference/*.md; do
+    [[ -e $file ]] || { echo "no lenses"; exit 3; }
+    id=${file##*/}
+    printf '%s\t%s\n' "${id%.md}" "$(sed -n '2,$ { /[^[:space:]]/ { p; q; } }' "$file")"
+done
+```
 
-## 6. Dispatch
+- **`auto`**: apply every lens the profile's "Lenses" section lists as default, and every lens whose routing row
+  matches the diff's paths or the kind of code they hold; those rows are binding. Apply any other lens your judgment
+  says this change needs.
+- **`default`**: exactly the profile's default lenses. The report also names each routing row that matched and so
+  did not run.
+- **An id list**: exactly those lenses.
 
-Send every reviewer in one message, as parallel Agent calls with `subagent_type` set to its id and
-`run_in_background: false`. A reviewer left in the background would report after the fork has ended. Do not pass
-`model`; each reviewer's frontmatter sets it.
+The report says which lenses you applied, which you left out and why.
 
-Each prompt holds these parts and nothing else:
+Stop, with the reason, when the directory holds no lens, when an id given is not one listed (name the valid ids), or
+when the lenses are `default` and the profile names none.
 
-1. The reviewer brief from step 1, copied word for word.
-2. The task: review this diff.
-3. Where the diff is: `$dir/patch.diff`, plus `$dir/pr.json` for a pull request. When the patch is under the
-   profile's inline threshold, put the diff itself in the prompt instead.
-4. The severity rubric below.
-5. The response format below.
-6. The profile's "Standing instructions" section, copied word for word.
-7. The contents of `manifest.tsv`.
+## 5. Review
 
-Leave out any word on depth, focus, priorities or what you expect to be found. Each reviewer's own file sets those,
-and the reviewer brief tells them to refuse a prompt that steers.
-
-For a deep pass, send only the profile's deep-pass reviewer, with the parts above plus the open question quoted as
-the earlier report gave it and the files it involves.
+Review the diff with the lenses you chose, as your instructions describe, reading the files around each hunk.
 
 **Severity rubric.**
 - Critical (Must Fix): merging it ships something broken, unsafe or private.
@@ -208,25 +171,11 @@ Use the profile's "Severity calibration" for what each level looks like here.
 - Coverage: each file read whole, each read in part with the line ranges, and each skipped. When the diff was on
   disk, give the line ranges of `patch.diff` read.
 
-## 7. Synthesize
+The report has a Critical, a High and a Normal heading, each present even when empty, then the open questions, then
+which lenses you applied and left out, then coverage: each changed file read whole, read in part (with ranges) or
+skipped.
 
-This is a single pass. No reviewer checks another's work, and you do not send findings back out.
-
-1. **Coverage.** Compare the reviewers' coverage with the manifest. Name every changed file no reviewer read, and,
-   when the diff was on disk, every file whose span in `patch.diff` no reviewer read in full.
-2. **Open questions.** Settle one only from another reviewer's output, and cite it. Every other question goes in the
-   report with the command that sends it to the deep-pass reviewer: `/lens-review <target> -- <question>`.
-3. **Wrong findings.** Drop any finding that is plainly wrong on its own evidence, and list each dropped one with the
-   reason.
-4. **Duplicates.** Merge findings that describe the same defect into one, crediting every reviewer that raised it.
-5. **Grades.** Grade the combined set again with the rubric and the profile's calibration. When reviewers disagree,
-   the deep-pass reviewer's grade weighs most. For each finding whose final severity differs from a reviewer's, add
-   one line saying what changed and why.
-
-The report has a Critical, a High and a Normal heading, each present even when empty. It names every reviewer that
-ran, and says what the panel did not cover; never write it as if a small panel saw everything.
-
-## 8. Deliver
+## 6. Deliver
 
 Follow the profile's "Delivery" section.
 
@@ -257,12 +206,3 @@ Check any JSON you write with `jq empty <file>` before ending.
   severity, and every path written.
 - When it names none, end with the report itself.
 - When delivery fails and the profile gives no fallback for it, end with the report and the error.
-
-## Setting a repository up
-
-A repository supplies the profile and the pool; this plugin supplies the rest. Templates for both are in
-`${CLAUDE_PLUGIN_ROOT}/skills/lens-review/references/`:
-
-- `profile-template.md`, for `.claude/code-review-profile.md`.
-- `reviewer-template.md`, for each reviewer under `.claude/agents/code-review/`. They are project agents, so the
-  bare id in `subagent_type` spawns them.
