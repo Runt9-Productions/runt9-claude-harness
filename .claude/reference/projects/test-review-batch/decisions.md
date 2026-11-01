@@ -1,30 +1,36 @@
 ---
-title: Test Review Batch Breaks Decisions
+title: Test Review Breaks Decisions
 type: note
 permalink: projects/test-review-batch/decisions
 tags: [test-review, cost]
 ---
 
-# Test Review Batch Breaks Decisions
+# Test Review Breaks Decisions
 
 Rulings for #55. The scope comment on the issue holds the first eight in full.
 
 ## Decisions
 
-- [decision] Standard-library Python 3.12 script in `plugins/test-review/skills/test-review/scripts/`, pytest tests beside it (owner, #55 scope)
-- [decision] Break file is JSON Lines with an `id`, the production `file`, an exact `old` string and its `new` replacement; an `old` matching zero or several times is refused before anything runs (owner, #55 scope)
-- [decision] Each break runs in its own copy of the working tree as it stands (tracked plus untracked not ignored), with ignored directories the profile names linked rather than copied (owner, #55 scope)
-- [decision] Each batch also runs once unbroken, so a failing or flaky test is not read as caught (owner, #55 scope)
-- [decision] The profile names each kind's run command and its pass and fail line patterns, and the script runs no other command (owner, #55 scope)
-- [decision] The full result table goes to a file; parallel runs up to half the CPUs by default, with `--jobs` (owner, #55 scope)
-- [decision] `test-reviewer.md` writes breaks as a batch and runs them through the script; the edit, run and restore steps on the checkout go, and the prediction is still written before the run (owner, #55 scope)
+- [decision] Standard-library Python 3.12 script in `plugins/test-review/skills/test-review/scripts/`, pytest tests beside it #superseded (owner, #55 scope; replaced by breaks made and restored in place, 2026-11-01)
+- [decision] Break file is JSON Lines with an `id`, the production `file`, an exact `old` string and its `new` replacement; an `old` matching zero or several times is refused before anything runs #superseded (owner, #55 scope; replaced by breaks made and restored in place, 2026-11-01)
+- [decision] Each break runs in its own copy of the working tree as it stands (tracked plus untracked not ignored), with ignored directories the profile names linked rather than copied #superseded (owner, #55 scope; replaced by breaks made and restored in place, 2026-11-01)
+- [decision] Each batch also runs once unbroken, so a failing or flaky test is not read as caught #superseded (owner, #55 scope; replaced by breaks made and restored in place, 2026-11-01)
+- [decision] The profile names each kind's run command and its pass and fail line patterns, and the script runs no other command #superseded (owner, #55 scope; replaced by breaks made and restored in place, 2026-11-01)
+- [decision] The full result table goes to a file; parallel runs up to half the CPUs by default, with `--jobs` #superseded (owner, #55 scope; replaced by breaks made and restored in place, 2026-11-01)
+- [decision] `test-reviewer.md` writes breaks as a batch and runs them through the script; the edit, run and restore steps on the checkout go, and the prediction is still written before the run #superseded (owner, #55 scope; replaced by breaks drawn from the rules and made in place, 2026-11-01)
 - [decision] Measure one review of a fixed suite at a fixed commit, headless with `--output-format json`, before and after (owner, #55 scope)
 - [decision] The suite measured is `harness/leak-scan/test_review_text.bats` at main 0e218d8 (owner, 2026-10-31)
-- [decision] Each break carries its prediction as an `expect` list of the tests it should turn red, and stdout prints only the breaks whose result differs from the prediction, plus any that errored (owner, 2026-10-31; replaces stdout listing every test that differs from the baseline)
-- [decision] The agent definition tells the reviewer to put independent tool calls in one turn and to rerun the same batch file after its fixes (owner, 2026-10-31)
+- [decision] Each break carries its prediction as an `expect` list of the tests it should turn red, and stdout prints only the breaks whose result differs from the prediction, plus any that errored #superseded (owner, 2026-10-31; replaced by breaks made and restored in place, 2026-11-01)
+- [decision] The agent definition tells the reviewer to put independent tool calls in one turn and to rerun the same batch file after its fixes #superseded (owner, 2026-10-31; replaced by the measured agent definition, which reruns the breaks after its changes, 2026-11-01)
 - [decision] Cutting the reviewer's fixed starting load is a separate issue, #86 (owner, 2026-10-31)
 - [decision] This project is written in the knowledge base rather than left on the issue comment (owner, 2026-10-31)
-- [decision] The per-kind run command, patterns and linked paths live in a fenced TOML block under a "Batch runs" section of the profile rather than as table columns, since a regex's `|` breaks a Markdown table (owner, 2026-10-31; replaces the table columns in the earlier profile ruling)
+- [decision] The per-kind run command, patterns and linked paths live in a fenced TOML block under a "Batch runs" section of the profile rather than as table columns, since a regex's `|` breaks a Markdown table #superseded (owner, 2026-10-31; replaces the table columns in the earlier profile ruling; replaced by dropping the section with the script, 2026-11-01)
+- [decision] The reviewer lists each rule the spec or documented contract states and makes one break per rule, the change a plausible wrong reading of it would make, since that matched the best gain measured at the lowest cost (owner, 2026-11-01)
+- [decision] Breaks are made and restored in place and the in-copy script, its tests and its profile section are removed, since over six suites the script gave the same gain at no lower cost (owner, 2026-11-01)
+- [decision] The skill forks straight into the reviewer with `context: fork` and `agent: test-review:test-reviewer`, since a coordinator turn was a quarter or more of a run's cost (owner, 2026-11-01)
+- [decision] The reviewer runs on Opus at medium effort, since against high it cost about 45% less and took half the time for about one fewer mutant caught (owner, 2026-11-01)
+- [decision] The reviewer does not run on Sonnet, since it added three times the test cases for the same gain (owner, 2026-11-01)
+- [decision] The engineer agent, in this repository and in the delegation plugin's template, gains three lines on writing tests from the spec, as measured on the engineer definition (owner, 2026-11-01)
 
 ## Open Questions
 

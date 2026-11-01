@@ -1,28 +1,28 @@
 ---
-title: Test Review Batch Breaks Checklist
+title: Test Review Breaks Checklist
 type: note
 permalink: projects/test-review-batch/checklist
 tags: [test-review, cost]
 ---
 
-# Test Review Batch Breaks Checklist
+# Test Review Breaks Checklist
 
 ## Status
 
-- **Live item:** 04 the after measurement
-- **How far along:** script, tests and the agent, skill and profile changes are in; the before measurement is taken
+- **Live item:** 04 the pull request's reviews
+- **How far along:** the final reviewer and the engineer's testing lines are in; test-review 0.2.0, delegation 0.1.2
 - **Blocked on:** nothing
-- **Last moved:** 2026-10-31
+- **Last moved:** 2026-11-01
 
 ## Build Order
 
 01, 02, 03, 04
 
-The script exists before the agent is told to use it, and the after measurement needs both.
+The variants are measured before one ships, and the reviews read what ships.
 
 ## Checklist
 
 - [x] 01 Project notes
-- [x] 02 `run_breaks.py` and its pytest tests
-- [x] 03 Agent definition, skill, profile template and this repository's profile use the script; version 0.2.0
-- [ ] 04 After measurement recorded on the pull request
+- [x] 02 Reviewer variants measured on mutant-graded suites
+- [x] 03 Final reviewer in the plugin, the in-copy break script removed, engineer testing lines in both engineer files
+- [ ] 04 Test review, lens review and reviewer guide on the pull request

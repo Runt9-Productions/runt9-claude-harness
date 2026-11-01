@@ -3,25 +3,23 @@ name: test-review
 description: Judges whether existing tests earn their place (each name claims only what it asserts, the scenario can really happen, a wrong implementation would fail it, no other test already catches the same defect), proves each verdict by breaking the code under test, fixes the tests and reports what changed. Use for "/test-review", "review my tests", "are these tests any good", "are these tests meaningful", "do we have too many tests", "are any of these redundant".
 argument-hint: "[<test file or directory>...]"
 context: fork
+agent: test-review:test-reviewer
 background: false
-allowed-tools: Bash, Read, Agent
+allowed-tools: Bash, Read, Edit, Write
 ---
 
 # /test-review
 
 Arguments: `$ARGUMENTS`
 
-This complements a code review, which looks for defects in production code; this skill takes production code as
-given and asks whether the tests over it are worth having.
-
-It runs in a forked context because the caller usually wrote the tests, and a verdict reached in the author's session
-inherits the author's view of them. Only your final message leaves the fork, so put the whole result in it. The fork
-runs in the foreground (`background: false`) because the reviewer edits the tests in the working tree.
+You are reviewing the tests in scope below. Nobody who wrote them is in this conversation. Take production code as
+given and judge whether the tests over it are worth having. This runs in the foreground because you break production
+code on purpose, and nothing else may read or build the tree until you have put it back.
 
 ## 1. Read the profile
 
-Read `.claude/test-review-profile.md`. If it does not exist, or has no "Batch runs" section, stop and say so,
-pointing at the template, `${CLAUDE_PLUGIN_ROOT}/skills/test-review/references/profile-template.md`.
+Read `.claude/test-review-profile.md`. If it does not exist, stop and say so, pointing at the template,
+`${CLAUDE_PLUGIN_ROOT}/skills/test-review/references/profile-template.md`.
 
 ## 2. Find the scope
 
@@ -47,37 +45,29 @@ base=$(git merge-base HEAD "$branch")
 
 An empty scope ends the run with that message.
 
-## 3. Match references
+## 3. Read the references
 
-Map each scoped file to a reference file through the profile's reference table, and confirm each reference exists
-with `test -f`. Do not read them; that is the reviewer's job, and reading them here would put their contents in your
-judgment instead of its.
-
-A scoped file that matches no reference is still reviewed, and the report lists it as a gap. If no file matches any
+Map each scoped file to a reference file through the profile's reference table and read each one that exists. A
+scoped file that matches no reference is still reviewed, and the report lists it as a gap. If no file matches any
 reference, the patterns are more likely wrong than the files; check them against the profile before going on.
 
-## 4. Spawn the reviewer
+## 4. Check the tree
 
-Spawn one reviewer with `subagent_type: "test-review:test-reviewer"`, `run_in_background: false`, and without
-`model`. A plugin agent answers only to its namespaced name. Split the scope across more than one reviewer only when
-the production code behind it is too much for one to read whole.
+List production files with uncommitted changes:
 
-The prompt holds only:
+```bash
+git status --porcelain -uall
+```
 
-- the scoped files;
-- the reference files they map to, and the profile's path;
-- for each test kind in scope, the run command and how to read its result, from the profile;
-- the batch command, with the kind filled in:
-  `python3 ${CLAUDE_PLUGIN_ROOT}/skills/test-review/scripts/run_breaks.py --kind '<kind>' --breaks <file> --out <dir> <tests>`,
-  where `<file>` and `<dir>` lie outside the repository and `<tests>` is what the kind's run command takes, as
-  paths from the repository root; `--help` gives the rest;
-- the rule: fix the tests, report production defects without fixing them, and leave production code exactly as it was
-  found.
+Any entry that is neither a test file nor one of the profile's helpers is production and dirty. Copy each one aside
+before your first break: restoring a dirty file from git would destroy uncommitted work.
 
-Add nothing about what you expect it to find.
+## 5. Review
 
-## 5. Report
+Review the scoped tests as your instructions describe, using each test kind's run command and result format from the
+profile.
 
-Relay the reviewer's report whole, in the shape its Report section gives it; leave nothing out, a clean result's
-evidence included. Add the one thing only you know, the scoped files that matched no reference. Then run
-`git status --short` yourself and end with its output, so the report shows the tree as the reviewer left it.
+## 6. Report
+
+End with the report your instructions describe, then the scoped files that matched no reference, then the output of
+`git status --short`.
