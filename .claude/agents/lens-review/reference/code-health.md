@@ -1,12 +1,6 @@
----
-name: code-health
-description: Judges whether a diff leaves the code easier or harder for its one long-term maintainer to read and work in (overloaded units, misleading names, wrong or stale comments, compressed code, departures from the owner's style guides), and never whether it is correct; it never grades Critical. The /lens-review skill sends it on every panel; do not run it by itself.
-model: opus
-effort: high
-disallowedTools: Edit, Write, NotebookEdit
----
+# Lens: code-health
 
-# Code health
+Judges whether a diff leaves the code easier or harder for its one long-term maintainer to read and work in (overloaded units, misleading names, wrong or stale comments, compressed code, departures from the owner's style guides), and never whether it is correct; it never grades Critical.
 
 ## The question
 
@@ -14,7 +8,7 @@ Will this change cost the person who maintains this repository more over time th
 
 ## Before the diff
 
-Read every standard the prompt's standing instructions name before you read the change, skipping any that does not
+Read every standard the profile's "Standing instructions" name before you read the change, skipping any that does not
 exist. Where a guide states a preference, it outranks general good taste, yours included.
 
 ## In scope

@@ -31,6 +31,15 @@ Rulings for #55. The scope comment on the issue holds the first eight in full.
 - [decision] The reviewer runs on Opus at medium effort, since against high it cost about 45% less and took half the time for about one fewer mutant caught (owner, 2026-11-01)
 - [decision] The reviewer does not run on Sonnet, since it added three times the test cases for the same gain (owner, 2026-11-01)
 - [decision] The engineer agent, in this repository and in the delegation plugin's template, gains three lines on writing tests from the spec, as measured on the engineer definition (owner, 2026-11-01)
+- [decision] lens-review runs as one reviewer agent at `.claude/agents/lens-review/lens-review.md`, each lens a file in `.claude/agents/lens-review/reference/<id>.md` with no frontmatter, since such a file is not loaded as an agent (owner, 2026-11-01)
+- [decision] lens-review keeps its lens arguments: `auto`, with the profile's routing rows binding where they match, `default` for the profile's default lenses, or an id list (owner, 2026-11-01)
+- [decision] `correctness` and `test-quality` join this repository's lenses (owner, 2026-11-01)
+- [decision] The reviewer is the measured agent, untuned, on Opus with effort inherited (owner, 2026-11-01)
+- [decision] The deep pass is dropped, with `principal-review` (owner, 2026-11-01)
+- [decision] The plugin ships lens templates for `correctness`, `test-quality`, `code-health`, `simplification`, `staleness-and-debris` and `guard-security`; `public-leak` stays this repository's own lens (owner, 2026-11-01)
+- [decision] The lens-review rebuild is folded into this pull request, on its branch (owner, 2026-11-01)
+- [decision] With no lens argument, lens-review runs `auto`, since one reviewer has no panel cost to propose first (owner, 2026-11-01)
+- [decision] The pre-push leak gate reads `public-leak.md` at the new path only, with no fallback to the old one, since the old path has no other users or copies (owner, 2026-11-01)
 
 ## Open Questions
 

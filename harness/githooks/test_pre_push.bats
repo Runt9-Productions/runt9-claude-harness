@@ -66,8 +66,9 @@ EOF
     git init -q -b main "$repo"
     git -C "$repo" config user.name test
     git -C "$repo" config user.email test@example.com
-    mkdir -p "$repo/.claude/agents/code-review" "$repo/.claude/agents/references"
-    cp "$source_root/.claude/agents/code-review/public-leak.md" "$repo/.claude/agents/code-review/"
+    mkdir -p "$repo/.claude/agents/lens-review/reference" "$repo/.claude/agents/references"
+    cp "$source_root/.claude/agents/lens-review/lens-review.md" "$repo/.claude/agents/lens-review/"
+    cp "$source_root/.claude/agents/lens-review/reference/public-leak.md" "$repo/.claude/agents/lens-review/reference/"
     cp "$source_root/plugins/lens-review/skills/lens-review/references/reviewer-brief.md" \
         "$repo/.claude/agents/references/"
     commit base
@@ -270,7 +271,19 @@ leak="write to someone@acme-corp"".com"
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 0 ]
-    [[ $output == *"has no .claude/agents/code-review/public-leak.md"* ]]
+    [[ $output == *"has no .claude/agents/lens-review/reference/public-leak.md"* ]]
+}
+
+@test "default branch without the lens-review agent: refused" {
+    git -C "$repo" switch -q main
+    git -C "$repo" rm -q .claude/agents/lens-review/lens-review.md
+    commit "drop the agent"
+    git -C "$repo" push -q "$remote" main
+    git -C "$repo" switch -q claude/change
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"has no .claude/agents/lens-review/lens-review.md"* ]]
 }
 
 @test "default branch without a reviewer brief: refused" {

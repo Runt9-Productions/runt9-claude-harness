@@ -24,6 +24,19 @@ The settled design for #55. The rulings behind it are in [[Test Review Breaks De
 - **Engineer.** Three lines in the engineer's "While working" section: tests check the spec, the fewest tests that
   show the code does what the spec asks, and a test exists for confidence, not for a count.
 
+## Lens review
+
+- **One reviewer.** The `lens-review` skill forks into the repository's `lens-review` agent with `context: fork` and
+  `agent: lens-review`. The agent lists the lens files with their one-line summaries, applies `auto`, `default` or
+  the ids given, reads each lens it picked whole, and writes the graded report. No deep pass, no Agent tool.
+- **Lenses.** Each is `.claude/agents/lens-review/reference/<id>.md`: a title, a one-line summary, then the lens. This
+  repository has nine: `correctness`, `test-quality`, `code-health`, `simplification`, `staleness-and-debris`,
+  `public-leak`, `guard-security`, `mod-contract` and `claude-code-expert`.
+- **Profile.** "Lenses" names the default lenses and the routing rows `auto` treats as binding.
+- **Leak gate.** `harness/leak-scan/review.sh` runs the `public-leak` lens file whole as the agent's prompt, with its
+  summary line as the description, the model `lens-review.md` names and high effort, all read from the default
+  branch.
+
 ## Per-file map
 
 - `plugins/test-review/skills/test-review/SKILL.md`: forks into the agent and carries the steps.
@@ -34,6 +47,13 @@ The settled design for #55. The rulings behind it are in [[Test Review Breaks De
   section for the script.
 - `plugins/test-review/README.md`, `.claude-plugin/plugin.json`: what ships; version 0.2.0.
 - `.claude/agents/engineer.md` and `plugins/delegation/templates/engineer.md`: the testing lines; delegation 0.1.2.
+- `plugins/lens-review/`: the skill, agent template, six lens templates, profile template, reviewer brief and README;
+  version 0.2.0.
+- `.claude/agents/lens-review/`: the agent and nine lenses; `.claude/agents/code-review/` removed.
+- `.claude/code-review-profile.md`, `.claude/development-profile.md` section 9 and `CLAUDE.md`: the lens layout.
+- `harness/leak-scan/review.sh`, its bats tests and `harness/githooks/README.md`: the gate on the new path; harness
+  0.1.18.
+- `plugins/develop/`: step 7 runs the code review with no panel argument; version 0.1.4.
 
 ## Relations
 

@@ -3,17 +3,16 @@ title: Teammate Lifecycle
 type: note
 permalink: agent-teams/lifecycle
 tags: [agent-teams, teammates, forked-skills, delegation]
-verified: 2026-10-31
+verified: 2026-11-01
 coverage: partial
 measured_on: "Claude Code 2.1.312"
 sources:
   - plugins/delegation/skills/delegation/SKILL.md
-  - plugins/lens-review/skills/lens-review/SKILL.md
 ---
 
 # Teammate Lifecycle
 
-> **Scope.** What a lead receives from an Agent Teams teammate, where a forked skill a teammate invokes reports, whether a finished background command wakes a teammate, how a teammate is stopped, and what an agent without `Write` can still write. The `-p` lines are carried from headless runs on 2.1.312 (2026-10-28) and the interactive lines from a re-run in an interactive lead session with Agent Teams on (2026-10-29, version not recorded beside it); neither was re-measured when this note was written. The delegation and lens-review skill lines cited were read. Not covered: the interactive idle notification's content, a lead in `-p` with nothing of its own still running, teammates in a terminal pane of their own, and teammate compaction.
+> **Scope.** What a lead receives from an Agent Teams teammate, where a forked skill a teammate invokes reports, whether a finished background command wakes a teammate, how a teammate is stopped, and what an agent without `Write` can still write. The `-p` lines are carried from headless runs on 2.1.312 (2026-10-28) and the interactive lines from a re-run in an interactive lead session with Agent Teams on (2026-10-29, version not recorded beside it); neither was re-measured when this note was written. The delegation skill lines cited were read, and re-read on 2026-11-01, when the lens-review skill was checked and found to say nothing about where its report goes. Not covered: the interactive idle notification's content, a lead in `-p` with nothing of its own still running, teammates in a terminal pane of their own, and teammate compaction.
 
 Read this before writing a rule about how teammates report, wait or stop, or before testing one headless. `-p` and
 interactive sessions differ on three of these behaviours, so a headless run does not answer for an interactive lead.
@@ -26,7 +25,7 @@ interactive sessions differ on three of these behaviours, so a headless run does
 - [fact] Interactive, the lead's idle notification carries the teammate's final turn text in its `result` field, so a teammate that also sends the same report with `SendMessage` lands it twice #measured (interactive, 2026-10-30)
 - [fact] A teammate's `Skill` call on a `context: fork` skill returns only "launched (forked execution, running in the background)"; the fork's result reaches the lead as a task notification and never the teammate #measured (interactive)
 - [trap] In `-p` the same call returns the fork's result to the teammate's own `Skill` call, and the lead model gets no notification for the fork, though the stream-json still emits its task events #measured (`-p`)
-- [fact] The delegation skill tells the lead to pass a forked skill's result on to the teammate that needs it (`SKILL.md:114`), and lens-review says its report goes to the lead even when a teammate invoked it (`SKILL.md:25`); both rest on the interactive result.
+- [fact] The delegation skill tells the lead to pass a forked skill's result on to the teammate that needs it (`SKILL.md:114`), which rests on the interactive result.
 - [trap] A background command finishing does not wake a teammate that ended its turn: it ran again only when the lead messaged it, 65 s after the command finished #silent-failure #measured (interactive)
 - [fact] In `-p`, with the lead kept alive, the same completion restarted the teammate under its own task id and it read the output #measured (`-p`)
 - [fact] The delegation skill has teammates run builds in the foreground for that reason (`SKILL.md:98`).

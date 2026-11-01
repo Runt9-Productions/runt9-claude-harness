@@ -15,6 +15,11 @@ variants on suites graded by the mutants they catch, and ships the one that kept
 drawn from the spec's rules and made in place, a skill that forks straight into the reviewer, and medium effort. The
 engineer agent gains the testing lines measured beside it. It ends when that version is reviewed and merged.
 
+The pull request also carries a rebuilt `lens-review`, measured the same way on review benchmarks: the skill forks
+straight into one reviewer agent, which picks its lenses, reads each lens file it picked and writes the graded report
+itself, with no coordinator and no panel of agents. In a repository the agent is
+`.claude/agents/lens-review/lens-review.md` and each lens a frontmatter-less file in `reference/` beside it.
+
 Designs ruled out:
 
 - **A bundled script running every break in its own copy of the tree.** Built and measured: the same gain as breaking
@@ -24,10 +29,14 @@ Designs ruled out:
 - **A coordinator turn that spawns the reviewer.** It was a quarter or more of a medium-effort run's cost.
 - **A Sonnet reviewer.** Cheaper for the same gain, but it added three times the test cases.
 - **Cutting the reviewer's fixed starting load** (system prompt, tools, loaded instructions). A separate issue, #86.
+- **A lens-review panel of one agent per lens, with a deep pass.** Replaced by the single reviewer holding every lens.
 
 ## Where it stands
 
-- [status] Built and staged on the pull request; the test review, lens review and reviewer guide are next
+- [status] test-review is built; the lens-review plugin is committed and this repository's lens layout and leak gate
+  are staged; one `/lens-review` run of the built plugin, then the test review, lens review and reviewer guide are next
+- [trap] The pre-push gate reads `public-leak.md` at the new lens path on the default branch, so `bootstrap.py
+  harness` runs only after this pull request merges: an installed harness 0.1.18 refuses every push until then
 
 ## Documents
 

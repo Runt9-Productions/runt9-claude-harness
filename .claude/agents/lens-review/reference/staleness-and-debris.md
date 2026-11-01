@@ -1,19 +1,11 @@
----
-name: staleness-and-debris
-description: Runs quick text checks over a diff against the profile's lists of living docs, mirrors, companion files and debris, reporting docs the change made stale, copies left out of step, companions missing and debugging leftovers. The /lens-review skill sends it on every panel; do not run it by itself.
-model: sonnet
-effort: medium
-disallowedTools: Edit, Write, NotebookEdit
----
+# Lens: staleness-and-debris
 
-# Staleness and debris
+Runs quick text checks over a diff against the profile's lists of living docs, mirrors, companion files and debris, reporting docs the change made stale, copies left out of step, companions missing and debugging leftovers.
 
 ## The question
 
 Did the change leave behind anything that its own lists say should have moved with it, or anything that should not
 have been left in?
-
-These are four shallow checks bundled into one reviewer so they cost one run instead of four.
 
 ## Before the diff
 

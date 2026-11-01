@@ -23,7 +23,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 ## Local conventions
 
 - **The repository is public.** Notes hold generic facts only: no machine paths, private project names, ids or
-  addresses. The leak scan and the review panel read notes like any other file.
+  addresses. The leak scan and the code review read notes like any other file.
 - **Platform facts carry `measured_on`**, naming the Claude Code version (and any other tool) they were measured on.
   Re-measure on a newer version before depending on one.
 - **`[vendor]`** is a claim from Claude Code's documentation that was not measured here.

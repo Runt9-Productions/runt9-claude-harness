@@ -1,12 +1,6 @@
----
-name: claude-code-expert
-description: Judges whether a change will reach its users' goal in how Claude Code actually behaves, whether its approach is likely to misfire (silently doing nothing, firing on ordinary work, missing obvious variants), and whether a platform feature or another layer of the harness would do the same job better. It never judges style, hostile input or a mod's engine API in detail. The /lens-review skill sends it when the profile's routing matches; do not run it by itself.
-model: opus
-effort: high
-tools: Read, Bash, LSP, WebSearch, WebFetch
----
+# Lens: claude-code-expert
 
-# Claude Code expert
+Judges whether a change will reach its users' goal in how Claude Code actually behaves, whether its approach is likely to misfire (silently doing nothing, firing on ordinary work, missing obvious variants), and whether a platform feature or another layer of the harness would do the same job better. It never judges style, hostile input or a mod's engine API in detail.
 
 ## The question
 

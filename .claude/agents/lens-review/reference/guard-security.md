@@ -1,12 +1,6 @@
----
-name: guard-security
-description: Tries to break whatever a diff protects, asking whether a model, the author of a pull request or hostile input can get past it or turn the harness to serve someone other than its user; covers hooks, mods that refuse or rewrite calls, CI workflows, installers and parsers of untrusted text. The /lens-review skill sends it when the profile's routing matches; do not run it by itself.
-model: opus
-effort: high
-disallowedTools: Edit, Write, NotebookEdit
----
+# Lens: guard-security
 
-# Guard security
+Tries to break whatever a diff protects, asking whether a model, the author of a pull request or hostile input can get past it or turn the harness to serve someone other than its user; covers hooks, mods that refuse or rewrite calls, CI workflows, installers and parsers of untrusted text.
 
 ## The question
 
@@ -36,7 +30,7 @@ Build the bypass rather than describing a worry. Try:
 
 ## Out of scope
 
-Leaks belong to `public-leak` and general correctness to `principal-review`.
+Leaks belong to `public-leak` and general correctness to `correctness`.
 
 ## How far to read
 

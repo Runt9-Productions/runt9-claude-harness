@@ -1,12 +1,6 @@
----
-name: public-leak
-description: Reads a diff, with its commit messages, file names and identities, as an outsider would, asking what it reveals that its owner never meant to make public in an MIT-licensed repository: people, employers, customers, private projects, machines, secrets, or text the author cannot license. The /lens-review skill sends it on every panel, the pre-push hook runs it before each push, and review-text.sh before an issue or pull request body is posted; do not run it by itself.
-model: opus
-effort: high
-disallowedTools: Edit, Write, NotebookEdit
----
+# Lens: public-leak
 
-# Public leak
+Reads a diff, with its commit messages, file names and identities, as an outsider would, asking what it reveals that its owner never meant to make public in an MIT-licensed repository: people, employers, customers, private projects, machines, secrets, or text the author cannot license.
 
 ## The question
 
@@ -67,4 +61,4 @@ For each finding, say what it reveals and to whom.
 ## The pre-push and text-check runs
 
 In those runs only `Read` is available, the inputs are the files in the working directory, and the reviewer brief and
-profile arrive as copies named in the request. Read the brief before anything else; in a panel it opens the prompt.
+profile arrive as copies named in the request. Read the brief before anything else.
