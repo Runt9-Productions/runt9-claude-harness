@@ -13,8 +13,9 @@ nothing from an employer, a private project or a specific machine goes in, in co
   `fragments/` (always-on `CLAUDE.md` rules a user imports from `~/.claude/harness/current/fragments/`, so far
   `delegation.md`, `working-agreement.md`, `voice.md`, `reasoning.md` and `security.md`), `claude-md-template.md`
   (the template a missing `~/.claude/CLAUDE.md` starts from), `settings/` (fragments `bootstrap.py` merges into
-  `~/.claude/settings.json`) and `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and
-  `comment-style` skills). Its version is in `harness/harness.json`.
+  `~/.claude/settings.json`), `statusline/` (the status line script the `statusline` settings fragment runs) and
+  `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and `comment-style` skills). Its
+  version is in `harness/harness.json`.
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
   `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the
   repositories named, adds the import line of each fragment picked to a marked block in `~/.claude/CLAUDE.md`, merges
