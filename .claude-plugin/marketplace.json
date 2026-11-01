@@ -44,6 +44,11 @@
       "name": "board",
       "source": "./plugins/board",
       "description": "A pane of decisions and tasks waiting on the owner, the agents' own tasks and what each agent is doing, kept on screen until answered"
+    },
+    {
+      "name": "away",
+      "source": "./plugins/away",
+      "description": "/mode present | distracted | away: tells Claude how present you are, and keeps it working while you are away"
     }
   ]
 }

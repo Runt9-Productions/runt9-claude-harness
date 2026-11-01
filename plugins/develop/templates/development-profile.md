@@ -30,8 +30,8 @@ them. Whether this file is tracked in git is your repository's choice.
   because a plugin cannot set worktree options.
 - What renaming the worktree's branch changes about cleaning it up.
 - What the worktree shares with the main checkout, and whether writes through it work.
-- Where the working directory is in the main checkout (default `.claude/output/<ticket>/`, which must be
-  git-excluded).
+- Where the working directory is within a checkout, the ticket's worktree once one exists (default
+  `.claude/output/<ticket>/`, which must be git-excluded).
 - Whether building needs a fresh session started in the worktree, and its start command.
 
 ## 4. Spec location

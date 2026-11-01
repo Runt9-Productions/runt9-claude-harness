@@ -1,0 +1,10 @@
+{
+  "name": "away",
+  "version": "0.1.0",
+  "description": "/mode present | distracted | away: tells Claude how present you are, and keeps it working while you are away",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "types": "./types/index.d.ts",
+  "dependencies": ["board", "handoff"]
+}

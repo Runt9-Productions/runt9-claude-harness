@@ -18,6 +18,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, or anything under `.github/workflows/` |
 | [Harness Migration](projects/harness-migration/overview.md) | resuming the harness migration |
 | [Test Review Batch Breaks](projects/test-review-batch/overview.md) | resuming #55, test-review's batched breaks |
+| [Away Plugin](projects/away-plugin/overview.md) | building or changing the `away` plugin (issue #67) |
 
 ## Local conventions
 

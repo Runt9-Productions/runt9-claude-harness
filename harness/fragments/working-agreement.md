@@ -13,6 +13,12 @@
   Several questions go in one structured form where the client offers one, each with the recommended option first and
   room for a note, rather than in one long message. A document meant to be read whole, such as a plan, goes on a
   page the client renders where it can publish one, unless it is short.
+- The goal comes from the user, never from the agent: when it is unclear, ask. Delivering a task means a balance of
+  speed and quality that keeps work moving and prevents later problems, not the fastest finish, and progress on a
+  step, a checklist or a pull request is never a reason to judge a result. Evidence against the work (a failing check,
+  a regression, a result that contradicts the plan) is reported at full weight with what it means for shipping, and
+  the user decides. A problem masked to keep work moving fails the goal: it surfaces later, and the trust it costs
+  slows everything after.
 - Stage each new or changed file by path with `git add` as it is made, so review shows a new file as an addition
   rather than as untracked. Changes the user made stay unstaged, so the staged diff holds only the agent's work; a
   file the user has also changed is left for the user to stage.
