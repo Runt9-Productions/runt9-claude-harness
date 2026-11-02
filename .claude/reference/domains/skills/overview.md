@@ -41,3 +41,4 @@ other.
 
 - see_also [[Plugin Platform]]
 - see_also [[Teammate Lifecycle]]
+- see_also [[Comparing Harness Variants]]

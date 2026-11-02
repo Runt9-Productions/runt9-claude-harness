@@ -15,6 +15,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Teammate Lifecycle](domains/agent-teams/lifecycle.md) | writing a rule about how teammates report, wait or stop, or testing one headless |
 | [Built-in Worktrees](domains/worktrees/overview.md) | relying on a worktree's contents or base, or on a language server answer inside one |
 | [Guardrails](domains/guardrails/overview.md) | writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to stop a call |
+| [Comparing Harness Variants](domains/experiments/overview.md) | running two or more versions of a prompt, skill or reviewer against each other, or reading such a comparison's results |
 | [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, or anything under `.github/workflows/` |
 | [Harness Migration](projects/harness-migration/overview.md) | resuming the harness migration |
 | [Test Review Breaks](projects/test-review-batch/overview.md) | resuming #55, the cost of test-review's breaks |
