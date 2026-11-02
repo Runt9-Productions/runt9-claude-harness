@@ -122,22 +122,22 @@ pre-push gate trusts it, so a build never writes to it.
 
 ## 9. Review
 
-- Panel: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
-  `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run locally.
+- Code review tool: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
+  `.claude/code-review-profile.md` and the agent and lenses in `.claude/agents/lens-review/`, run locally.
 - When: the test review and the code review each run once per pull request, when it is first pushed: the test review,
   then the code review over the head that carries its fixes. A later push, after a fix round or the owner's review
   round, gets CI only; say what changed and the owner decides whether it gets another review, since a review costs far
-  more than a CI run and a fix round rarely needs a whole panel. A trivial pull request, such as one config line or a
+  more than a CI run and a fix round rarely needs a whole review. A trivial pull request, such as one config line or a
   one-line doc fix, gets neither review and opens ready.
 - Test review: `.claude/test-review-profile.md` exists. Run `/test-review` in the pull request's worktree before the
-  code review, and commit and push the fixes wanted, so the panel reviews the tests as they will merge. Skipped when
+  code review, and commit and push the fixes wanted, so the code review reads the tests as they will merge. Skipped when
   the pull request changes no test, or its test changes are trivial enough for the owner to check at a glance.
 - Code review: a headless run in the pull request's worktree, checked out at its pushed head, started in the
   background so the session can move on. `gh` in it needs `GH_TOKEN` (section 1).
 
   ```
   CODE_REVIEW_OUTPUT=<scratch dir> claude -p "/lens-review <n> auto" --plugin-dir plugins/lens-review \
-    --permission-mode auto --strict-mcp-config --no-session-persistence --output-format json > <run log>
+    --permission-mode auto --strict-mcp-config --output-format json > <run log>
   ```
 
   The run loads the head's own project settings, hooks and plugin code, and those run outside the auto-mode
@@ -153,7 +153,7 @@ pre-push gate trusts it, so a build never writes to it.
   command only when GitHub rejects the first, which it does for the whole review when one comment misses the diff. It
   posts the report as the body alone, cut below GitHub's 65,536-character limit for a review body. No tooling posts
   images; evidence is text. Before either, run what would be posted through `review-text.sh` (section 1): the payload's
-  text (`jq -r '.body, .comments[].body'`) and `review.md` in one file. The reviewers load the user's own `CLAUDE.md`
+  text (`jq -r '.body, .comments[].body'`) and `review.md` in one file. The reviewer loads the user's own `CLAUDE.md`
   and memory, so a finding can quote them; on a hit, edit both files and check again.
 
   ```

@@ -1,12 +1,6 @@
----
-name: mod-contract
-description: Checks a diff to a TypeScript mod (a plugin whose hooks/hooks.json lists modules) against what the real Claude Code engine does and what sibling plugins expect of it, which CI's stubbed kit tests cannot show. The /lens-review skill sends it when the profile's routing matches; do not run it by itself.
-model: opus
-effort: high
-disallowedTools: Edit, Write, NotebookEdit
----
+# Lens: mod-contract
 
-# Mod contract
+Checks a diff to a TypeScript mod (a plugin whose hooks/hooks.json lists modules) against what the real Claude Code engine does and what sibling plugins expect of it, which CI's stubbed kit tests cannot show.
 
 ## The question
 

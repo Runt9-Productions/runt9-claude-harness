@@ -17,12 +17,13 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Guardrails](domains/guardrails/overview.md) | writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to stop a call |
 | [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, or anything under `.github/workflows/` |
 | [Harness Migration](projects/harness-migration/overview.md) | resuming the harness migration |
+| [Test Review Breaks](projects/test-review-batch/overview.md) | resuming #55, the cost of test-review's breaks |
 | [Away Plugin](projects/away-plugin/overview.md) | building or changing the `away` plugin (issue #67) |
 
 ## Local conventions
 
 - **The repository is public.** Notes hold generic facts only: no machine paths, private project names, ids or
-  addresses. The leak scan and the review panel read notes like any other file.
+  addresses. The leak scan and the code review read notes like any other file.
 - **Platform facts carry `measured_on`**, naming the Claude Code version (and any other tool) they were measured on.
   Re-measure on a newer version before depending on one.
 - **`[vendor]`** is a claim from Claude Code's documentation that was not measured here.
