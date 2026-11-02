@@ -36,7 +36,7 @@ The per-file map for issue #37, with the rulings in [[Plugin Templates Decisions
 | `test_bootstrap.py` | The tests below. |
 | `README.md` | The `plugin:<name>` row: the templates come from this clone's HEAD, land as `.example`, and are never overwritten. |
 | `CLAUDE.md` | "Machine-local layers": `bootstrap.py` copies a plugin's `local.example/` files as `.example` templates. |
-
+| `plugins/develop/README.md`, `plugins/delegation/README.md` | Task 01b. The local files section: `bootstrap.py plugin:<name>` writes each `local.example/` file there as `.example` unless that path exists, and only a copy saved without `.example` takes effect. |
 ## Tests
 
 At the component's boundary, through `sandbox.run`, each committing its own synthetic `plugins/example-one/local.example/`:
