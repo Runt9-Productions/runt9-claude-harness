@@ -1,6 +1,6 @@
 {
   "name": "lens-review",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Reviews a diff through a repository's own lenses in one reviewer agent, writes one graded report and delivers it where the repository's profile says",
   "author": {
     "name": "Runt9 Productions"
