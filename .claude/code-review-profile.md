@@ -1,7 +1,7 @@
 # Code review profile
 
-Facts about this repository that `/lens-review` and its panel need. The skill reads every section; each reviewer
-reads the sections its own file names.
+Facts about this repository that `/lens-review` needs. The reviewer reads every section; each lens names the sections
+it judges against.
 
 ## What ships, and why a defect is expensive
 
@@ -23,28 +23,28 @@ risen and they run an update, so a fix that skips the version rise never arrives
 - `gh` authenticates with `GH_TOKEN`.
 - Default branch: `main`.
 - No path is excluded from review. `package-lock.json` is relevant only to `guard-security` and `public-leak`;
-  other reviewers may skip it.
+  other lenses may skip it.
 
 ## Output
 
 - Root: `$CODE_REVIEW_OUTPUT` when it is set, otherwise `.claude/output/code-review/`.
-- Inline threshold: a diff under 300 lines goes into the reviewer prompts; at 300 or more, reviewers read it from disk.
 
-## Panel
+## Lenses
 
-Always-on: `principal-review`, `code-health`, `simplification`, `staleness-and-debris`, `public-leak`. This is the
-`default` panel and the starting point of `auto`. `public-leak` is among them because every merged line becomes
-public, and `simplification` because every review otherwise only adds code.
+Default: `correctness`, `code-health`, `simplification`, `staleness-and-debris`, `public-leak`. These are the lenses
+`default` applies. `auto` does not read this list: it applies every lens whose routing row matches, then any other the
+reviewer judges the change needs. `public-leak` is a default and matches every change because every merged line
+becomes public, and `simplification` is a default because every review otherwise only adds code.
 
-Routing, added when the diff matches:
+Routing, binding under `auto` when the diff matches:
 
-| Reviewer | Matches |
+| Lens | Matches |
 |---|---|
+| `public-leak` | any change |
+| `test-quality` | any test file added or changed |
 | `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `harness/`; `package.json`; `package-lock.json`; `requirements-dev.txt`; `ruff.toml`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
 | `mod-contract` | `plugins/*/hooks/*.ts`; any `*.tsx`; anything under `plugins/*/types/`; a change to `dependencies` or `types` in a `plugin.json` |
 | `claude-code-expert` | anything under `plugins/` or `harness/` other than tests; `.claude/agents/`; `CLAUDE.md`; `bootstrap.py`; any settings, hook, skill, agent or rule file, or prose an agent reads as instructions |
-
-Deep pass: `principal-review`. An open question the panel could not settle goes to it, scoped to that question.
 
 ## Severity calibration
 
@@ -136,6 +136,9 @@ A new plugin with a contract adds its rows here.
 
 ## Test-quality traps
 
+The test references for each kind of test here are in `.claude/agents/references/`: `test-review-pytest.md`,
+`test-review-shell.md` and `test-review-mod-kit.md`.
+
 - A test that copies a stand-in for another plugin instead of loading it. The copy keeps passing after the real
   plugin changes.
 - A mod kit stub whose default answer would also satisfy the test if the change under test were removed.
@@ -172,9 +175,10 @@ something the ruling did not account for.
 
 ## Other callers
 
-Both run `public-leak` alone through `harness/leak-scan/review.sh`, with only `Read`, in a directory holding the inputs
-and copies of the reviewer brief, this profile and `CLAUDE.md` from the default branch, named `reviewer-brief.md`,
-`code-review-profile.md` and `CLAUDE.md`.
+Both run the `public-leak` lens alone through `harness/leak-scan/review.sh`, as an agent whose instructions are the
+whole lens file, with only `Read`, in a directory holding the inputs and copies of the lens, the reviewer brief, this
+profile and `CLAUDE.md` from the default branch, named `public-leak.md`, `reviewer-brief.md`, `code-review-profile.md`
+and `CLAUDE.md`. The agent's model is the one `.claude/agents/lens-review/lens-review.md` names on that branch.
 
 - **The pre-push leak gate** (`harness/githooks/pre-push`) asks for a review of what a push would publish. Its inputs
   are `commits.patch`, `identities.txt`, `file-names.txt`, `binary-files.txt`, `tags.txt` and `ref-names.txt`, and it
