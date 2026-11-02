@@ -9,11 +9,11 @@ tags: [migration, harness]
 
 ## Status
 
-- **Live item:** 10: no-progress-reminder (#94), the status line (#93) and the preferences and remote-shell settings
-  fragments (#96) are open as drafts; the mod engine notes (#97) and the GitHub App identity component (#75) are not
-  started
+- **Live item:** 10: no-progress-reminder (#94), the status line (#93) and the preferences and remote-shell
+  settings fragments (#96) are merged; the GitHub App identity component (#75) and the mod engine notes (#97) are
+  not started
 - **How far along:** 01 to 09 merged; 07 without its judge mod, which is tabled
-- **Blocked on:** the three drafts wait for the review plugins' tuning before their reviews
+- **Blocked on:** nothing; 11 waits on #75
 - **Last moved:** 2026-11-01
 
 ## Build Order
