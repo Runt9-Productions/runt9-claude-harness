@@ -46,10 +46,21 @@ def add_marketplace() -> None:
     claude("plugin", "marketplace", "add", MARKETPLACE_SOURCE)
 
 
+def template_source(name: str) -> str:
+    return f"plugins/{name}/{TEMPLATE_DIR}/"
+
+
+def check_plugin(name: str, run: Run) -> None:
+    check_plugin_setup()
+    # Called only for the Stop tree_files raises on a link or submodule, so the run refuses before anything installs.
+    # copy_templates lists the files again after the install.
+    tree_files("HEAD", template_source(name))
+
+
 def copy_templates(name: str, run: Run) -> None:
     """Writes each file in the plugin's local.example/ in HEAD to `LOCAL_DIR`/<name>/<path>.example, keeping any such
     path that already exists. No skill reads that name, so nothing takes effect until the user saves a filled copy."""
-    source = f"plugins/{name}/{TEMPLATE_DIR}/"
+    source = template_source(name)
     for file in tree_files("HEAD", source):
         relative = PurePosixPath(file.path).relative_to(source)
         destination = LOCAL_DIR / name / f"{relative}{TEMPLATE_SUFFIX}"
@@ -88,7 +99,7 @@ def plugin_components() -> list[Component]:
                 name=f"plugin:{name}",
                 summary=plugin.get("description", ""),
                 install=functools.partial(install_plugin, name, marketplace_name),
-                check=lambda run: check_plugin_setup(),
+                check=functools.partial(check_plugin, name),
             )
         )
     return components

@@ -720,16 +720,18 @@ def test_plugin_template_keeps_what_exists_and_writes_through_a_linked_local(san
     assert TEMPLATES_HEADER not in rerun.stdout
 
 
-def test_symlink_in_plugin_templates_stops_the_plugin_with_none_written(sandbox: Sandbox) -> None:
-    sandbox.write("plugins/example-one/local.example/example-rules.md", b"example rules template\n")
-    (sandbox.clone / "plugins/example-one/local.example/example-link").symlink_to("example-rules.md")
+def test_symlink_in_plugin_templates_stops_the_run_before_anything_installs(sandbox: Sandbox) -> None:
+    # The regular file sorts before the link, so a copy that refuses only on reaching the link has written it.
+    sandbox.write("plugins/example-two/local.example/example-a-rules.md", b"example rules template\n")
+    (sandbox.clone / "plugins/example-two/local.example/example-link").symlink_to("example-a-rules.md")
     sandbox.commit("Add an example template symlink")
 
-    result = sandbox.run("plugin:example-one")
+    result = sandbox.run("plugin:example-one", "plugin:example-two")
 
     assert result.returncode == 1
-    assert "plugins/example-one/local.example/example-link in HEAD is not a regular file (mode 120000)" in result.stderr
+    assert "plugins/example-two/local.example/example-link in HEAD is not a regular file (mode 120000)" in result.stderr
     assert not (sandbox.home / ".claude/local").exists()
+    assert sandbox.claude_calls() == []
 
 
 def test_failing_claude_command_stops_the_run_before_its_templates(sandbox: Sandbox) -> None:
