@@ -15,13 +15,15 @@ The settled design for #55. The rulings behind it are in [[Test Review Breaks De
   so its body is the reviewer's prompt: read the profile, find the scope, read the references, copy dirty production
   files into a directory outside the working tree, review, report.
 - **Breaks from the rules.** The reviewer lists each rule the spec or documented contract of the production code
-  states and makes one break per rule, the smallest change a plausible wrong reading of it would make. It applies
-  a batch of breaks no single test could catch more than one of, runs the tests that exercise the broken code with the
-  profile's run command, and restores before the next batch: from git for a clean file,
-  from its copy for a dirty one, checked with `git status` and `git diff`. Breaks and tests run in the foreground,
-  since the review ends with the reviewer's turn and a command still running in the background is cut off with its
-  break left in the code. A break no test catches marks a rule the tests miss, and the reviewer fixes or adds a test
-  until one does. It runs the breaks again after its changes.
+  states and makes one break per rule, the smallest change a plausible wrong reading of it would make. It runs the
+  whole suite unbroken first, then applies breaks in batches no single test could catch more than one of, runs only
+  the tests that exercise the broken code with the profile's run command, and restores before the next batch: from
+  git for a clean file, from its copy for a dirty one, checked with `git status` and `git diff`. A break that stays
+  green in such a run is rerun alone against the whole suite before its rule counts as unchecked; then the reviewer
+  fixes or adds a test until one catches it. Breaks and tests run in the foreground, since the review ends with the
+  reviewer's turn and a command still running in the background is cut off with its break left in the code. It
+  runs the breaks again after its changes and the whole suite once at the end, and puts independent tool calls in
+  one turn.
 - **Effort.** The agent sets `model: opus` and `effort: medium`.
 - **Profile.** No section beyond the default branch, test kinds, checks, reference files and suite policy.
 - **Engineer.** Three lines in the engineer's "While working" section: tests check the spec, the fewest tests that
@@ -46,12 +48,12 @@ The settled design for #55. The rulings behind it are in [[Test Review Breaks De
 ## Per-file map
 
 - `plugins/test-review/skills/test-review/SKILL.md`: forks into the agent and carries the steps.
-- `plugins/test-review/agents/test-reviewer.md`: the four criteria, breaks from the rules run in the foreground,
-  in-place restore, the report; medium effort.
+- `plugins/test-review/agents/test-reviewer.md`: the four criteria, breaks from the rules batched and narrowed in the
+  foreground, in-place restore, the report; medium effort.
 - `plugins/test-review/skills/test-review/scripts/`: removed.
 - `plugins/test-review/skills/test-review/references/profile-template.md` and `.claude/test-review-profile.md`: no
   section for the script.
-- `plugins/test-review/README.md`, `.claude-plugin/plugin.json`: what ships; version 0.2.0.
+- `plugins/test-review/README.md`, `.claude-plugin/plugin.json`: what ships; version 0.2.1.
 - `.claude/agents/engineer.md` and `plugins/delegation/templates/engineer.md`: the testing lines; delegation 0.1.2.
 - `plugins/lens-review/`: the skill, agent template, six lens templates, profile template, reviewer brief and README;
   version 0.2.0.

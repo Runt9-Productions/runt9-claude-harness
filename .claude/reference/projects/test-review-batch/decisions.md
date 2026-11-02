@@ -26,8 +26,7 @@ Rulings for #55. The scope comment on the issue holds the first eight in full.
 - [decision] This project is written in the knowledge base rather than left on the issue comment (owner, 2026-10-31)
 - [decision] The per-kind run command, patterns and linked paths live in a fenced TOML block under a "Batch runs" section of the profile rather than as table columns, since a regex's `|` breaks a Markdown table #superseded (owner, 2026-10-31; replaces the table columns in the earlier profile ruling; replaced by dropping the section with the script, 2026-11-01)
 - [decision] The reviewer lists each rule the spec or documented contract states and makes one break per rule, the change a plausible wrong reading of it would make, since that matched the best gain measured at the lowest cost (owner, 2026-11-01)
-- [decision] Breaks are made and restored in place and the in-copy script, its tests and its profile section are removed, since over six suites the script gave the same gain at no lower cost; the batching prose stays (owner, 2026-11-01)
-- [decision] The reviewer batches in place the breaks no single test could catch more than one of, runs only the tests that exercise the broken code with the whole suite once at the end, and keeps the rule to put independent tool calls in one turn (owner, 2026-11-02): a slow test otherwise reruns for every break, and the first rebuild dropped the prose with the script by mistake.
+- [decision] Breaks are made and restored in place and the in-copy script, its tests and its profile section are removed, since over six suites the script gave the same gain at no lower cost (owner, 2026-11-01)
 - [decision] The skill forks straight into the reviewer with `context: fork` and `agent: test-review:test-reviewer`, since a coordinator turn was a quarter or more of a run's cost (owner, 2026-11-01)
 - [decision] The reviewer runs on Opus at medium effort, since against high it cost about 45% less and took half the time for about one fewer mutant caught (owner, 2026-11-01)
 - [decision] The reviewer does not run on Sonnet, since it added three times the test cases for the same gain (owner, 2026-11-01)
@@ -43,6 +42,7 @@ Rulings for #55. The scope comment on the issue holds the first eight in full.
 - [decision] The pre-push leak gate reads `public-leak.md` at the new path only, with no fallback to the old one, since the old path has no other users or copies (owner, 2026-11-01)
 - [decision] The `correctness` lens owns behaviour and the approach alike, judged by whether the change delivers what its spec, issue or documented contract states; what a user might expect where nothing states it is not a defect, since a departure from what is stated ships something unintended (owner, 2026-11-01)
 - [decision] `auto` ignores the profile's default lenses: it applies every lens whose routing row matches the change plus any the reviewer judges it needs, and this repository's `public-leak` row matches every change, since every merged line is public (owner, 2026-11-01)
+- [decision] The reviewer batches in place the breaks no single test could catch more than one of and runs only the tests that exercise the broken code, with the whole suite run unbroken before and after and a break that stays green rerun alone against the whole suite, and it puts independent tool calls in one turn (owner, 2026-11-02): a slow test otherwise reruns for every break.
 
 ## Open Questions
 

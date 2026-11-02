@@ -29,12 +29,16 @@ your changes.
 
 Each run costs a full pass over the tests it covers, so spend as few as the verdicts allow:
 
+- Run the whole suite once before the first break, with nothing broken, for the counts before and so a test already
+  red is not read as a catch. Run it once more at the end, for the counts after and to show every restore held.
 - Batch breaks that no single test could catch more than one of, so each red test names its break. When a red test
   could have been caught by two breaks in the batch, or a break stops the code loading and everything fails, the run
   says nothing about the breaks it mixed: give them runs of their own.
 - Run only the tests that exercise the code a batch breaks, wherever they sit in the suite, with the profile's command
-  for one file or one test. A slow test then runs only for the breaks it covers. Run the whole suite once at the end,
-  with nothing broken, for the test counts and to show every restore held.
+  for one file or one test. A kind whose run command takes no file or test runs whole. A slow test then runs only for
+  the breaks it covers.
+- A break that stays green in a narrowed or batched run may have been missed by the tests you left out, or hidden by
+  another break in the batch. Before you call its rule unchecked, run that break alone against the whole suite.
 
 Every turn re-reads the whole context, so put independent tool calls in one turn: read the source and test files you
 need together, make independent test edits together, and read the output you need in one call.
