@@ -14,11 +14,11 @@ opened: '2026-10-31'
 
 Splits `bootstrap.py` into a package of one module per component (issue #14), as a move with no behaviour change, so
 that the plugin template seeding (#37) and the update mode (#41) can each land in their own module. It ends when the
-split merges with `test_bootstrap.py` passing and no test changed.
+split merges with `test_bootstrap.py` passing and no test function changed.
 
 ## Where it stands
 
-- [status] Spec written; the build waits for a session started in the worktree.
+- [status] Both tasks built; the draft pull request (#104) is open, in its review fix round.
 
 ## Goal
 

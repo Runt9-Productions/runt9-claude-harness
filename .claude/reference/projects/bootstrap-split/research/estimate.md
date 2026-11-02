@@ -28,8 +28,8 @@ added, 141 removed). This one moves four times as much code but adds no behaviou
 
 ## Not verified
 
-- That ruff's import sorting treats `bootstrap` as first-party without config (its default `src` is the project root,
-  so expected). If not, a `ruff.toml` change adds a file and needs the owner's review.
+- None left. ruff's import sorting treats `bootstrap` as first-party with `ruff.toml` unchanged: `ruff check` with
+  CI's flags passes on the built branch.
 
 ## Relations
 

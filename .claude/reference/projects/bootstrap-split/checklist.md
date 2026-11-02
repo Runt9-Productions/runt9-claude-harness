@@ -10,7 +10,7 @@ tags:
 
 ## Status
 
-- **Live item:** verify, then the draft pull request
+- **Live item:** the review's fix round on the draft pull request (#104)
 - **How far along:** 01 and 02 committed
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-01
