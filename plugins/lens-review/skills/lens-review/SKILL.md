@@ -32,48 +32,52 @@ Every argument is optional.
 ## 2. Fetch the diff once
 
 Fetch it with the profile's commands, into a new directory for this run, and never read it into your own context
-except to review it. Fill in the first four values and run:
+except to review it. Fill in the first five values and run:
 
 ```bash
 set -euo pipefail
 label='worktree'                # worktree, the SHA or ref, the range, or pr-<n>
 pr=''                           # the number, for a pull request target
-fetch() { git diff HEAD; }      # the profile's command, for any other target
+commit=''                       # the SHA or ref, for a commit target; the right side, for a range
+fetch() { git diff HEAD; }      # the profile's command, for any target but a pull request
 root="<output root>"            # the profile's "Output" root; a variable it names stays a shell expansion
 mkdir -p "$root"
 dir=$(mktemp -d "$root/$(printf '%s' "$label" | tr -c 'A-Za-z0-9._-' '_')-$(date -u +%Y%m%dT%H%M%SZ)-XXXX")
 if [[ -n $pr ]]; then
-    # The payload names the head the diff came from, so fetch again if a push lands in between.
+    # The diff and the files read beside it must come from one head, so fetch again if a push lands in between.
     for _ in 1 2 3; do
         before=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
         gh pr diff "$pr" > "$dir/patch.diff"
         after=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
         if [[ $before == "$after" ]]; then
-            printf '%s\n' "$after" > "$dir/head-sha"
+            commit=$after
             break
         fi
     done
-    # Reviewers read files on disk, so a checkout of another commit puts their line numbers on the wrong text. In a
-    # merge checkout the PR head is HEAD^2.
-    if [[ -s $dir/head-sha ]]; then
-        head=$(< "$dir/head-sha")
-        if [[ $(git rev-parse HEAD) != "$head" && $(git rev-parse -q --verify 'HEAD^2' || true) != "$head" ]]; then
-            echo "the checkout is not the PR head $head"
-            exit 4
-        fi
-    fi
+    [[ -n $commit ]] || { echo "the pull request's head kept moving"; exit 4; }
     gh pr view "$pr" --json commits,body > "$dir/pr.json"
+    # The URL is the repository gh resolved the pull request against, whatever the local remotes are named.
+    if ! git cat-file -e "$commit^{commit}" 2> /dev/null; then
+        git fetch --quiet --no-tags "$(gh repo view --json url --jq .url)" "refs/pull/$pr/head"
+    fi
 else
     fetch > "$dir/patch.diff"
 fi
 [[ -s $dir/patch.diff ]] || { echo "empty diff"; exit 3; }
+if [[ -n $commit ]]; then
+    # The checkout may hold another commit, whose files would put the review's line numbers on the wrong text.
+    git rev-parse --verify "$commit^{commit}" > "$dir/head-sha"
+    mkdir "$dir/tree"
+    git archive "$(< "$dir/head-sha")" | tar -x -C "$dir/tree"
+fi
 echo "$dir"
 ```
 
-An empty diff ends the run with that message, and so does a checkout that is not the PR's head: check out the head, or
-its merge, and run again.
-Every later block runs in a new shell, so give each the path this one printed as its run directory. When a pull
-request has no `head-sha`, it kept moving; leave `commit_id` out of the payload.
+An empty diff ends the run with that message, and so does a pull request whose head moved on each of three fetches:
+run again.
+Every later block runs in a new shell, so give each the path this one printed as its run directory. For every target
+but the working tree, the run directory also holds `head-sha`, the commit the diff ends at, and `tree/`, that commit's
+files.
 
 A merge commit as target prints a combined diff, which the index below refuses. Fetch it as the range
 `<sha>^1..<sha>` instead and say so in the report.
@@ -120,6 +124,12 @@ when the lenses are `default` and the profile names none.
 
 Review the diff with the lenses you chose, as your instructions describe, reading the files around each hunk.
 
+For every target but the working tree, read those files in the run directory's `tree/`, never in the checkout, which
+may hold another commit. Reach history through the commit in `head-sha`: `git show <sha>:<path>`,
+`git grep <pattern> <sha>`, `git log <sha>`. A path the target's `.gitattributes` marks `export-ignore` is missing from
+`tree/`, and one marked `export-subst` is rewritten there; read either with `git show <sha>:<path>`. The profile and
+the lenses stay the checkout's, so a change under review cannot rewrite its own review.
+
 **Severity rubric.**
 - Critical (Must Fix): merging it ships something broken, unsafe or private.
 - High (Should Fix): a real defect or cost that should be fixed before merge, unless the owner (whoever rules on
@@ -128,7 +138,8 @@ Review the diff with the lenses you chose, as your instructions describe, readin
 Use the profile's "Severity calibration" for what each level looks like here.
 
 **Response format.**
-- Findings, each with: severity; location as `path:line`, using the new-side line number; the claim; what goes
+- Findings, each with: severity; location as `path:line`, using the path the diff names rather than its copy in
+  `tree/`, and the new-side line number; the claim; what goes
   wrong because of it; and the evidence, meaning the lines opened and what they show.
 - Open questions: what is unknown, why it matters, and what would settle it.
 - Coverage: each file read whole, each read in part with the line ranges, and each skipped. When the diff was on
