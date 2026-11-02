@@ -7,7 +7,9 @@
       "Bash(slogin *)",
       "Bash(autossh *)",
       "Bash(sshpass *)",
-      "Bash(ssh-copy-id *)"
+      "Bash(ssh-copy-id *)",
+      "Bash(mosh *)",
+      "Bash(rsync *:*)"
     ]
   }
 }

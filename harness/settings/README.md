@@ -9,10 +9,10 @@ your own settings, not here.
 | `guardrails-stores` | `permissions.deny` rules for `Read` of common credential stores, private keys and keystores. |
 | `guardrails-automode` | Auto-mode `environment`, `allow` and `soft_deny` rules; each rule's label names what it covers. |
 | `guardrails-sandbox` | A sandbox configuration, shipped with `enabled: false`. |
-| `guardrails-remote` | `permissions.deny` rules for `ssh`, `scp`, `sftp`, `slogin`, `autossh`, `sshpass` and `ssh-copy-id`. A deny rule outranks the auto-mode rule that allows a host the user named, so remove these by hand before a task that needs one. |
-| `preferences` | Agent teams on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, which the `delegation` and `teammate-delivery` plugins need) and fork mode off (`CLAUDE_CODE_FORK_SUBAGENT=0`, so Claude can wait for a subagent); automatic compaction off, for the `handoff` plugin to compact instead; transcripts kept 365 days; thinking summaries shown; no reply after a `!` command; Remote Control not connected at startup. |
+| `guardrails-remote` | `permissions.deny` rules for `ssh`, `scp`, `sftp`, `slogin`, `autossh`, `sshpass`, `ssh-copy-id`, `mosh` and `rsync` to a remote host, which refuse them in every permission mode. |
+| `preferences` | Agent teams on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, which the `delegation` and `teammate-delivery` plugins need) and fork mode off (`CLAUDE_CODE_FORK_SUBAGENT=0`, so Claude can wait for a subagent); the system prompt's steer towards Bash over other tools off (`CLAUDE_CODE_THRIFTY_SONIC=0`, so tools such as LSP get used; undocumented, so a release can rename or drop it); automatic and idle compaction off, so a session compacts only through the `handoff` plugin's button, `/handoff` or `/compact`, which makes `handoff` worth installing first; transcripts kept 365 days; thinking summaries shown; no reply after a `!` command; Remote Control not connected at startup. |
 
-The three name credential stores in the form each layer reads, so their lists differ: `Read` deny rules take globs
+`guardrails-stores`, `guardrails-sandbox` and `guardrails-automode` name credential stores in the form each layer reads, so their lists differ: `Read` deny rules take globs
 anywhere on disk, the sandbox takes paths, and the auto-mode classifier reads prose. The
 sandbox list leaves out `~/.claude/.credentials.json`, which a nested `claude` reads to log in.
 
