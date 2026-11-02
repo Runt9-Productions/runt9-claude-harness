@@ -38,8 +38,8 @@ The skill fetches a pull request itself with `gh`.
 
 <!-- Skill. Every id is the file name, without `.md`, of a lens in `.claude/agents/lens-review/reference/`. -->
 
-Default: `correctness`, `<id>`. These are the `default` lenses and the floor of `auto`: `auto` applies these whatever
-the diff touches, then every lens whose routing row matches, then any other the reviewer judges the change needs.
+Default: `correctness`, `<id>`. These are the lenses `default` applies. `auto` does not read this list: it applies
+every lens whose routing row matches, then any other the reviewer judges the change needs.
 
 Routing, binding under `auto` when the diff matches:
 

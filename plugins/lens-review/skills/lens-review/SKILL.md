@@ -142,9 +142,9 @@ for file in .claude/agents/lens-review/reference/*.md; do
 done
 ```
 
-- **`auto`**: apply every lens the profile's "Lenses" section lists as default, and every lens whose routing row
-  matches the diff's paths or the kind of code they hold; those rows are binding. Apply any other lens your judgment
-  says this change needs.
+- **`auto`**: choose from what the change touches alone; the profile's default lenses play no part. Apply every lens
+  whose routing row in the profile's "Lenses" section matches the diff's paths or the kind of code they hold; those
+  rows are binding. Apply any other lens your judgment says this change needs.
 - **`default`**: exactly the profile's default lenses. The report also names each routing row that matched and so
   did not run.
 - **An id list**: exactly those lenses.

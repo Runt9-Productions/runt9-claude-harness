@@ -31,15 +31,16 @@ risen and they run an update, so a fix that skips the version rise never arrives
 
 ## Lenses
 
-Default: `correctness`, `code-health`, `simplification`, `staleness-and-debris`, `public-leak`. These are the `default`
-lenses and the floor of `auto`: `auto` applies these whatever the diff touches, then every lens whose routing row
-matches, then any other the reviewer judges the change needs. `public-leak` is among them because every merged line
-becomes public, and `simplification` because every review otherwise only adds code.
+Default: `correctness`, `code-health`, `simplification`, `staleness-and-debris`, `public-leak`. These are the lenses
+`default` applies. `auto` does not read this list: it applies every lens whose routing row matches, then any other the
+reviewer judges the change needs. `public-leak` is a default and matches every change because every merged line
+becomes public, and `simplification` is a default because every review otherwise only adds code.
 
 Routing, binding under `auto` when the diff matches:
 
 | Lens | Matches |
 |---|---|
+| `public-leak` | any change |
 | `test-quality` | any test file added or changed |
 | `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `harness/`; `package.json`; `package-lock.json`; `requirements-dev.txt`; `ruff.toml`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
 | `mod-contract` | `plugins/*/hooks/*.ts`; any `*.tsx`; anything under `plugins/*/types/`; a change to `dependencies` or `types` in a `plugin.json` |

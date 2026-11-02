@@ -40,6 +40,8 @@ Rulings for #55. The scope comment on the issue holds the first eight in full.
 - [decision] The lens-review rebuild is folded into this pull request, on its branch (owner, 2026-11-01)
 - [decision] With no lens argument, lens-review runs `auto`, since one reviewer has no panel cost to propose first (owner, 2026-11-01)
 - [decision] The pre-push leak gate reads `public-leak.md` at the new path only, with no fallback to the old one, since the old path has no other users or copies (owner, 2026-11-01)
+- [decision] The `correctness` lens owns behaviour and the approach alike, judged by whether the change delivers what its spec, issue or documented contract states; what a user might expect where nothing states it is not a defect, since a departure from what is stated ships something unintended (owner, 2026-11-01)
+- [decision] `auto` ignores the profile's default lenses: it applies every lens whose routing row matches the change plus any the reviewer judges it needs, and this repository's `public-leak` row matches every change, since every merged line is public (owner, 2026-11-01)
 
 ## Open Questions
 

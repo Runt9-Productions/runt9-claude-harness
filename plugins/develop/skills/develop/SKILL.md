@@ -186,8 +186,8 @@ opt out, run `/test-review` first.
 
 Then run the code review section 9 names on the pull request, the way it says: invoked locally, or through a CI
 trigger such as a label. Where it names none, the code review is the `lens-review` skill; if that is not installed,
-stop and name the `lens-review` plugin. Invoked without a lens argument, `lens-review` runs `auto`: the profile's
-default lenses, every lens whose routing row matches, and any other the reviewer judges the change needs.
+stop and name the `lens-review` plugin. Invoked without a lens argument, `lens-review` runs `auto`: every lens whose
+routing row matches the change, and any other the reviewer judges it needs, with no default lenses added.
 
 Author notes wait until this step is done, because reviewers anchor on them. A review that runs after step 10 is
 told those notes are not established fact. The review runs in a fork and returns its report as text: save it in the

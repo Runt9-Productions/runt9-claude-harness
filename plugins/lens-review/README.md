@@ -12,9 +12,9 @@ report itself.
 /lens-review abc1234 code-health  review one commit with the lenses named
 ```
 
-`auto`, the default, applies the profile's default lenses and every lens whose routing row matches the diff, then any
-other the reviewer judges the change needs. `default` applies only the default lenses, and a comma-separated id list
-exactly those lenses.
+`auto`, the default, chooses from what the change touches alone: every lens whose routing row matches the diff, then
+any other the reviewer judges the change needs, whether or not it is a default lens. `default` applies only the
+profile's default lenses, and a comma-separated id list exactly those lenses.
 
 The skill runs in a forked context, inside the repository's `lens-review` agent, so the session that wrote the change
 does not weigh the findings, and only the final message comes back.
