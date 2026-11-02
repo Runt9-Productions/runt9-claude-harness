@@ -23,7 +23,7 @@ while (( $# )); do
     esac
     shift
 done
-awk -v state="$state" -v head="$head" '$1 == state && (head == "" || $2 == head) { print $3 }' "$PRS"
+awk -v state="$state" -v head="$head" '(state == "all" || $1 == state) && (head == "" || $2 == head) { print $3 }' "$PRS"
 EOF
     chmod +x "$BATS_TEST_TMPDIR/bin/gh"
 
@@ -127,6 +127,16 @@ snapshot() {
     [ -f "$trees/dirty/notes.txt" ]
 }
 
+@test "keeps a merged branch whose worktree is locked" {
+    git -C "$repo" worktree lock "$trees/merged-tree"
+    cd "$repo"
+    run "$script"
+    [ "$status" -eq 0 ]
+    [[ $output == *"kept merged-tree: worktree $trees/merged-tree is locked"* ]]
+    [ -n "$(branch_tip merged-tree)" ]
+    [ -d "$trees/merged-tree" ]
+}
+
 @test "keeps merged branches checked out in the main worktree and in the worktree it runs from" {
     git -C "$repo" switch -q merged-plain
     cd "$trees/merged-tree"
@@ -152,6 +162,8 @@ snapshot() {
 }
 
 @test "--dry-run changes nothing and prints the lines a real run prints" {
+    # A worktree whose directory is gone, so a real run's `git worktree prune` has something to change.
+    rm -rf "$trees/followed-up"
     cd "$repo"
     before=$(snapshot)
     run "$script" --dry-run
@@ -162,4 +174,25 @@ snapshot() {
     [ "$status" -eq 0 ]
     [ "$output" = "$dry_output" ]
     [ "$(snapshot)" != "$before" ]
+}
+
+@test "refuses an argument other than --dry-run and changes nothing" {
+    cd "$repo"
+    before=$(snapshot)
+    run "$script" --dry
+    [ "$status" -eq 2 ]
+    [ "$output" = "usage: prune-merged.sh [--dry-run]" ]
+    [ "$(snapshot)" = "$before" ]
+}
+
+@test "stops with exit 2 and changes nothing when gh fails" {
+    # gh exits 4 when it has no login.
+    printf '#!/usr/bin/env bash\necho "To get started with GitHub CLI, please run:  gh auth login" >&2\nexit 4\n' \
+        > "$BATS_TEST_TMPDIR/bin/gh"
+    cd "$repo"
+    before=$(snapshot)
+    run "$script"
+    [ "$status" -eq 2 ]
+    [[ $output == *"prune-merged: failed at line"* ]]
+    [ "$(snapshot)" = "$before" ]
 }
