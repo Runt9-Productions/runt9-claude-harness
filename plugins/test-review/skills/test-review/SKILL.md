@@ -4,7 +4,6 @@ description: Judges whether existing tests earn their place (each name claims on
 argument-hint: "[<test file or directory>...]"
 context: fork
 agent: test-review:test-reviewer
-background: false
 allowed-tools: Bash, Read, Edit, Write
 ---
 
@@ -13,8 +12,7 @@ allowed-tools: Bash, Read, Edit, Write
 Arguments: `$ARGUMENTS`
 
 You are reviewing the tests in scope below. Nobody who wrote them is in this conversation. Take production code as
-given and judge whether the tests over it are worth having. This runs in the foreground because you break production
-code on purpose, and nothing else may read or build the tree until you have put it back.
+given and judge whether the tests over it are worth having.
 
 ## 1. Read the profile
 
