@@ -32,8 +32,8 @@ The settled design for #55. The rulings behind it are in [[Test Review Breaks De
   `agent: lens-review`. The agent lists the lens files with their one-line summaries, applies `auto`, `default` or
   the ids given, reads each lens it picked whole, and writes the graded report. No deep pass, no Agent tool.
 - **Diff index.** The skill indexes the fetched diff from a run directory under the output root with the plugin's
-  `diff_index.py`, which runs `git apply --numstat` from the top of the work tree holding the run directory, since
-  below it `git apply` drops every path outside the current directory.
+  `diff_index.py`, which runs `git apply --numstat` in the run directory under a `GIT_CEILING_DIRECTORIES` ceiling,
+  since inside a checkout `git apply` drops every path outside the current directory.
 - **Lenses.** Each is `.claude/agents/lens-review/reference/<id>.md`: a title, a one-line summary, then the lens. This
   repository has nine: `correctness`, `test-quality`, `code-health`, `simplification`, `staleness-and-debris`,
   `public-leak`, `guard-security`, `mod-contract` and `claude-code-expert`.

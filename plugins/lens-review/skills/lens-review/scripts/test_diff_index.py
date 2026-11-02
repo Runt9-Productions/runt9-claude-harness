@@ -11,8 +11,6 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parent / "diff_index.py"
-# The test's own git calls get this too: a machine's diff or commit settings would otherwise reach them.
-GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 IDENTITY = ["-c", "user.name=Example", "-c", "user.email=example@example.com"]
 # The patch lists dir/inner.txt on lines 1 to 15, with its first line changed and a line added after its last, in two
 # hunks far enough apart that git keeps them separate; then top.txt on lines 16 to 24, with one line changed.
@@ -20,11 +18,27 @@ EXPECTED_MANIFEST = "2\t1\t1-15\tdir/inner.txt\n1\t1\t16-24\ttop.txt\n"
 EXPECTED_HUNKS = "1-4,10-13\tdir/inner.txt\n1-3\ttop.txt\n"
 HUNKS = "3-5,10-12\tsrc/with space.txt\n-\tgone.txt\n"
 
+# Every subprocess, the test's own git calls included, gets this environment, which isolated_environment builds from
+# nothing for each test so that no setting or path from the machine running it changes a result.
+environment: dict[str, str] = {}
+
+
+@pytest.fixture(autouse=True)
+def isolated_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    isolated = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(home),
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    monkeypatch.setattr(sys.modules[__name__], "environment", isolated)
+
 
 def git(directory: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
-    env = {**os.environ, **GIT_ISOLATION}
     command = ["git", "-C", str(directory), *IDENTITY, *args]
-    return subprocess.run(command, env=env, capture_output=True, check=check)
+    return subprocess.run(command, env=environment, capture_output=True, check=check)
 
 
 def commit(repo: Path, message: str) -> None:
@@ -33,9 +47,8 @@ def commit(repo: Path, message: str) -> None:
 
 
 def run_script(command: str, run_dir: Path) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, **GIT_ISOLATION}
     arguments = [sys.executable, str(SCRIPT), command, str(run_dir)]
-    return subprocess.run(arguments, cwd=run_dir.parent, env=env, capture_output=True, text=True, check=False)
+    return subprocess.run(arguments, cwd=run_dir.parent, env=environment, capture_output=True, text=True, check=False)
 
 
 def diff_into(repo: Path, run_dir: Path) -> None:
@@ -95,15 +108,45 @@ def test_a_path_with_a_space_and_non_ascii_characters_is_indexed_as_the_raw_path
     assert (run_dir / "hunks.txt").read_text() == "1-1\tdir/with space ü.txt\n"
 
 
+# The odd path sorts after top.txt, so the patch lists a file that indexes cleanly before the one refused.
 @pytest.mark.parametrize("character", ["\t", "\n"], ids=["tab", "newline"])
-def test_a_path_holding_a_tab_or_a_newline_is_refused(repo: Path, tmp_path: Path, character: str) -> None:
-    (repo / "dir" / f"odd{character}name.txt").write_text("new\n")
+def test_a_path_holding_a_tab_or_a_newline_is_refused_with_nothing_written_for_the_files_before_it(
+    repo: Path, tmp_path: Path, character: str
+) -> None:
+    edit_both_files(repo)
+    (repo / f"zz{character}name.txt").write_text("new\n")
     run_dir = tmp_path / "run"
     diff_into(repo, run_dir)
     result = run_script("index", run_dir)
     assert result.returncode == 1
     assert "index: a path holds a tab or newline" in result.stderr
     assert not (run_dir / "manifest.tsv").exists()
+    assert not (run_dir / "hunks.txt").exists()
+
+
+# git counts no lines in a binary file and writes `-` for both, which the manifest passes on unchanged.
+def test_a_binary_file_is_indexed_with_its_counts_as_git_gives_them(repo: Path, tmp_path: Path) -> None:
+    (repo / "data.bin").write_bytes(b"\x00\x01\x02\x03")
+    run_dir = tmp_path / "run"
+    diff_into(repo, run_dir)
+    result = run_script("index", run_dir)
+    assert result.returncode == 0, result.stderr
+    assert (run_dir / "manifest.tsv").read_text() == "-\t-\t1-4\tdata.bin\n"
+    assert (run_dir / "hunks.txt").read_text() == "-\tdata.bin\n"
+
+
+def test_an_apply_whitespace_error_setting_does_not_refuse_a_patch_adding_trailing_whitespace(
+    repo: Path, tmp_path: Path
+) -> None:
+    (repo / "top.txt").write_text("one \ntwo\nthree\n")
+    run_dir = tmp_path / "run"
+    diff_into(repo, run_dir)
+    config = tmp_path / "gitconfig"
+    config.write_text("[apply]\n\twhitespace = error\n")
+    environment["GIT_CONFIG_GLOBAL"] = str(config)
+    result = run_script("index", run_dir)
+    assert result.returncode == 0, result.stderr
+    assert (run_dir / "manifest.tsv").read_text() == "1\t1\t1-9\ttop.txt\n"
 
 
 def test_a_file_deleted_whole_has_no_new_side_span(repo: Path, tmp_path: Path) -> None:

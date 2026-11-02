@@ -62,15 +62,20 @@ def split_terminated(text: str, terminator: str) -> list[str]:
 
 
 def numstat_records(run_dir: Path) -> list[str]:
-    # Run below the top of a work tree, git apply drops every patched path outside the current directory, so it runs
-    # from the top of the work tree holding the run directory, when there is one.
-    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=run_dir, capture_output=True, check=False)
-    apply_dir = Path(os.fsdecode(top.stdout.rstrip(b"\n"))) if top.returncode == 0 else run_dir
     # git apply reads a patch without applying it and prints each file's raw path, NUL-terminated, so quoting and the
-    # tab git adds after a path with a space never reach the parsing below. Its records come in patch order.
+    # tab git adds after a path with a space never reach the parsing below. Its records come in patch order. Inside a
+    # work tree it drops every path outside the current directory, so the ceiling keeps it from finding one above the
+    # run directory. --whitespace=nowarn keeps an apply.whitespace=error setting from refusing a patch that adds
+    # trailing whitespace.
+    environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(run_dir.resolve().parent)}
     with (run_dir / "patch.diff").open("rb") as patch:
         numstat = subprocess.run(
-            ["git", "apply", "--numstat", "-z"], cwd=apply_dir, stdin=patch, stdout=subprocess.PIPE, check=False
+            ["git", "apply", "--numstat", "-z", "--whitespace=nowarn"],
+            cwd=run_dir,
+            env=environment,
+            stdin=patch,
+            stdout=subprocess.PIPE,
+            check=False,
         )
     if numstat.returncode != 0:
         raise RefusalError("git apply could not read patch.diff")
