@@ -191,9 +191,9 @@ pre-push gate trusts it, so a build never writes to it.
 - With only the remote half present there is no standing grant: commit, push and open the pull request when the owner
   says so at the end of the task, or for the whole run where the owner has granted that.
 - Pull request: `gh pr create --draft --base main --body-file <file>`, then the test review and the code review
-  (section 9; a trivial pull request skips both and the draft). It leaves draft with `gh pr ready <n>` once the
-  review has run, its Critical and High findings are fixed and pushed, every thread is answered and resolved as the
-  develop skill's step 8 says, and the reviewer guide is posted. The owner squash-merges.
+  (section 9; a trivial pull request skips both and the draft). The lead runs `gh pr ready <n>` itself, with no owner
+  prompt, once the review has run, its Critical and High findings are fixed and pushed, every thread is answered and
+  resolved as the develop skill's step 8 says, and the reviewer guide is posted. Only the squash-merge is the owner's.
 
 ## 11. Hand-off
 
