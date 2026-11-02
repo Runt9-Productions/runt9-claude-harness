@@ -28,7 +28,7 @@ nothing from an employer, a private project or a specific machine goes in, in co
   in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`. `.github/actions/`: the composite
   actions CI uses.
-- `.claude/`: the profiles, reviewer pool and test references that the `lens-review` and `test-review` plugins read
+- `.claude/`: the profiles, review lenses and test references that the `lens-review` and `test-review` plugins read
   to review this repo. Both reviews run locally, as section 9 of `.claude/development-profile.md` describes.
 - `.claude/reference/`: this repo's knowledge base, in the reference-kb plugin's format. Read the note covering an
   area before its code or platform behaviour; a question it does not answer is still open.
