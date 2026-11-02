@@ -24,6 +24,14 @@ never-clobber rule; this one is smaller, with no prompt and no diff, since it ne
 - A test that commits files under `plugins/` in the sandbox's clone: the fixture's marketplace names `example-one`
   but commits no plugin directory, so the test adds one.
 
+## Actual
+
+Against 734b1d1: production 74 added and 13 removed in four files (`bootstrap/plugins.py`, `bootstrap/harness.py`,
+`bootstrap/core.py`, `bootstrap.py`); tests 76 added and 5 removed in `test_bootstrap.py`, four tests new or changed;
+docs 15 added and 4 removed in four files, the two plugin READMEs included. The estimate missed the refusal in the
+component's check, which code review asked for, the test review's added cases, and the plugin READMEs, added to the
+scope during the build.
+
 ## Relations
 
 - part_of [[Plugin Templates]]

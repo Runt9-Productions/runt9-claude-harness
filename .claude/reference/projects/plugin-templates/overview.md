@@ -18,7 +18,7 @@ reads and has a starting copy to fill in. It ends when that merges with tests at
 
 ## Where it stands
 
-- [status] Tasks 01 and 01b committed and verified; the pull request and its reviews come next.
+- [status] PR #106 built, reviewed and fixed, with the reviewer guide posted; it waits on the owner's review.
 
 ## Goal
 

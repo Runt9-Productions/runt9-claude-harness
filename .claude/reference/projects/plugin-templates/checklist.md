@@ -10,8 +10,8 @@ tags:
 
 ## Status
 
-- **Live item:** push and draft pull request (develop step 6)
-- **How far along:** 01 and 01b committed, verified; steps 6 to 12 remain
+- **Live item:** owner review of PR #106 (develop step 12)
+- **How far along:** built, verified, reviewed and fixed; the reviewer guide is posted and the draft waits on the owner
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-01
 
