@@ -49,6 +49,11 @@
       "name": "away",
       "source": "./plugins/away",
       "description": "/mode present | distracted | away: tells Claude how present you are, and keeps it working while you are away"
+    },
+    {
+      "name": "no-progress-reminder",
+      "source": "./plugins/no-progress-reminder",
+      "description": "Leaves Claude Code's mid-turn \"say what you're doing, then continue\" reminder out of every request"
     }
   ]
 }

@@ -11,6 +11,7 @@ your own settings, not here.
 | `guardrails-sandbox` | A sandbox configuration, shipped with `enabled: false`. |
 | `guardrails-remote` | `permissions.deny` rules for `ssh`, `scp`, `sftp`, `slogin`, `autossh`, `sshpass`, `ssh-copy-id`, `mosh` and `rsync` to a remote host, which refuse them in every permission mode. |
 | `preferences` | Agent teams on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, which the `delegation` and `teammate-delivery` plugins need) and fork mode off (`CLAUDE_CODE_FORK_SUBAGENT=0`, so Claude can wait for a subagent); the system prompt's steer towards Bash over other tools off (`CLAUDE_CODE_THRIFTY_SONIC=0`, so tools such as LSP get used; undocumented, so a release can rename or drop it); automatic and idle compaction off, so a session compacts only through the `handoff` plugin's button, `/handoff` or `/compact`, which makes `handoff` worth installing first; transcripts kept 365 days; thinking summaries shown; no reply after a `!` command; Remote Control not connected at startup. |
+| `statusline` | `statusLine`, running `harness/statusline/statusline.py`: model, effort, branch and session name, then meters for context and the 5-hour and 7-day rate limits. A status line you already set is kept; take yours out first to use this one. |
 
 `guardrails-stores`, `guardrails-sandbox` and `guardrails-automode` name credential stores in the form each layer reads, so their lists differ: `Read` deny rules take globs
 anywhere on disk, the sandbox takes paths, and the auto-mode classifier reads prose. The

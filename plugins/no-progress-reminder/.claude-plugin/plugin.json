@@ -1,0 +1,8 @@
+{
+  "name": "no-progress-reminder",
+  "version": "0.1.0",
+  "description": "Leaves Claude Code's mid-turn \"say what you're doing, then continue\" reminder out of every request",
+  "author": {
+    "name": "Runt9 Productions"
+  }
+}
