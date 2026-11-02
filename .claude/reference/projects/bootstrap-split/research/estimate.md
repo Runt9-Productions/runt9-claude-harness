@@ -26,6 +26,13 @@ added, 141 removed). This one moves four times as much code but adds no behaviou
 - `functools.cache` on a function reached through two module paths would run twice; each lives in one module, so
   it holds as long as nothing re-exports them.
 
+## Actual
+
+Against `main`, as built in #104: production 12 files (`bootstrap.py` and 11 new modules), 645 added and 575
+removed, a net rise of 70; tests 1 file, 9 added and 2 removed; docs outside this project 4 files, 21 added and 12
+removed. The estimate missed the review's `-P` test of the `sys.path` line and the development profile's
+agent-reload rule, both added during the run.
+
 ## Not verified
 
 - None left. ruff's import sorting treats `bootstrap` as first-party with `ruff.toml` unchanged: `ruff check` with
