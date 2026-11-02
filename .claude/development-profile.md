@@ -63,6 +63,9 @@ a knowledge base note already answers a question, this file points there.
   templates adopted into `.claude/agents/` with this repository's values. Doc writer: `reference-kb:kb-writer` for
   knowledge base notes; the implementer keeps the other living docs (the table in `.claude/code-review-profile.md`)
   in step with the code. Comment sweep: `develop:comment-sweeper`.
+- Agent definitions load when a session starts. After a merge or checkout that changes `.claude/agents/`, a spawn
+  waits until the session reports the updated agent types: a teammate spawned before then runs the old definition,
+  with no sign of it.
 - Ramp-up: not measured.
 - Every brief adds:
   - the "Writing here" rules in `CLAUDE.md`;

@@ -42,9 +42,9 @@ Routing, binding under `auto` when the diff matches:
 |---|---|
 | `public-leak` | any change |
 | `test-quality` | any test file added or changed |
-| `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `harness/`; `package.json`; `package-lock.json`; `requirements-dev.txt`; `ruff.toml`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
+| `guard-security` | anything under `.github/`; any `hooks/` directory; `bootstrap.py`; anything under `bootstrap/`; anything under `harness/`; `package.json`; `package-lock.json`; `requirements-dev.txt`; `ruff.toml`; code anywhere that refuses, rewrites or parses tool calls, shell commands, paths or pull request content |
 | `mod-contract` | `plugins/*/hooks/*.ts`; any `*.tsx`; anything under `plugins/*/types/`; a change to `dependencies` or `types` in a `plugin.json` |
-| `claude-code-expert` | anything under `plugins/` or `harness/` other than tests; `.claude/agents/`; `CLAUDE.md`; `bootstrap.py`; any settings, hook, skill, agent or rule file, or prose an agent reads as instructions |
+| `claude-code-expert` | anything under `plugins/` or `harness/` other than tests; `.claude/agents/`; `CLAUDE.md`; `bootstrap.py`; anything under `bootstrap/`; any settings, hook, skill, agent or rule file, or prose an agent reads as instructions |
 
 ## Severity calibration
 
@@ -130,7 +130,8 @@ A new plugin with a contract adds its rows here.
 - A new plugin brings a marketplace entry, a README, `author`, `version` and tests at its boundaries.
 - A change to what a plugin ships brings a `version` rise, and so does every contract partner it touches.
 - A change to what `harness/` ships brings a rise in `harness/harness.json`. A new part there that must be wired into
-  `~/.claude` or a repository also brings a component in `HARNESS_COMPONENTS` in `bootstrap.py`, or it arrives unused.
+  `~/.claude` or a repository also brings a component in `HARNESS_COMPONENTS` in `bootstrap/registry.py`, or it
+  arrives unused.
 - A new contract brings a row under "Plugin contracts" and, where one plugin cannot work without the other loaded, a
   `dependencies` entry.
 

@@ -3,14 +3,14 @@ title: Guardrails
 type: note
 permalink: guardrails/overview
 tags: [guardrails, auto-mode, sandbox, permissions, hooks, credentials, installs]
-verified: 2026-10-31
+verified: 2026-11-02
 coverage: partial
 measured_on: "Claude Code 2.1.314 and 2.1.316, Linux bubblewrap 0.9.0"
 sources:
   - "harness/settings/guardrails-automode.json"
   - "harness/settings/guardrails-sandbox.json"
   - "harness/settings/guardrails-stores.json"
-  - "bootstrap.py"
+  - "bootstrap/settings.py"
 ---
 
 # Guardrails
@@ -26,7 +26,8 @@ sources:
 > subdirectories, one or two sessions per case, with no sandbox key in user or project settings. On 2026-10-31 the note
 > was re-checked against the auto-mode fragment's added `allow` entry (marking a pull request the session opened ready
 > for review): no claim rests on which entries that list holds, and every other claim was carried forward without a
-> re-check. Not covered: macOS
+> re-check. On 2026-11-02 the settings-merge trap was re-checked against `merge_settings` in
+> `bootstrap/settings.py`, and every other claim was carried forward without a re-check. Not covered: macOS
 > and Windows sandboxing, the Read tool's path through auto mode (only the documentation's account), pushes over HTTPS
 > from inside the sandbox, and any JVM build run end to end in the sandbox.
 
@@ -60,8 +61,9 @@ stop a call.
   (`claude auto-mode defaults`). #measured
 - [fact] `claude auto-mode critique` prints at most about 4,000 characters, and it proposes wording without checking
   it against the documented order; run it on a few rules at a time and measure what it suggests. #measured
-- [trap] `bootstrap.py` merges list entries by exact text and never removes one, so a reworded rule leaves its older
-  text in the user's settings, where it still applies. #silent-failure
+- [trap] `bootstrap.py` (`merge_settings` in `bootstrap/settings.py`) merges list entries by exact text and never
+  removes one, so a reworded rule leaves its older text in the user's settings, where it still applies.
+  #silent-failure
 
 ### Permission deny rules
 

@@ -10,10 +10,10 @@ tags:
 
 ## Status
 
-- **Live item:** 01
-- **How far along:** spec written, nothing built
+- **Live item:** verify, then the draft pull request
+- **How far along:** 01 and 02 committed
 - **Blocked on:** nothing
-- **Last moved:** 2026-10-31
+- **Last moved:** 2026-11-01
 
 ## Build Order
 
@@ -23,10 +23,11 @@ tags:
 
 ## Checklist
 
-- [ ] 01 Move the code into the `bootstrap/` package, with the test fixture copying the package into its synthetic
+- [x] 01 Move the code into the `bootstrap/` package, with the test fixture copying the package into its synthetic
   clone
-- [ ] 02 Bring the layout in `CLAUDE.md`, the routing and companions in `.claude/code-review-profile.md` and the
-  `sources` of [[Guardrails]] up to date with the package
+- [x] 02 Bring the layout in `CLAUDE.md`, the routing and companions in `.claude/code-review-profile.md` and the
+  `sources` of [[Guardrails]] up to date with the package, and add the agent-reload rule to section 5 of
+  `.claude/development-profile.md`
 
 ## Relations
 
