@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Runs the public-leak agent over text about to be published and fails unless every finding is rated Normal.
+# Runs the public-leak lens as an agent over text about to be published and fails unless every finding is rated Normal.
 #
 #   review.sh [--cache <dir>] <bundle-dir> <git-dir> <trusted-commit> <request> <input>...
 #
 # Each input is copied into <bundle-dir>, an empty directory the caller made, under its own name; an empty input is
-# left out. The agent's definition, the lens-review plugin's reviewer brief, the review profile and CLAUDE.md come from
-# <trusted-commit> in <git-dir>, never the working tree, so the change under review cannot rewrite its own review; the
-# profile and CLAUDE.md may be absent. <request> tells the agent what the inputs are. With --cache, a pass is
-# recorded in <dir> under a hash of the bundle and of every file in the installed githooks/ and leak-scan/, and the
-# same review is not run twice; it needs githooks/ beside leak-scan/.
+# left out. The lens, the lens-review agent that names its model, the lens-review plugin's reviewer brief, the review
+# profile and CLAUDE.md come from <trusted-commit> in <git-dir>, never the working tree, so the change under review
+# cannot rewrite its own review; the profile and CLAUDE.md may be absent. <request> tells the agent what the inputs
+# are. With --cache, a pass is recorded in <dir> under a hash of the bundle, the model and every file in the installed
+# githooks/ and leak-scan/, and the same review is not run twice; it needs githooks/ beside leak-scan/.
 #
 # Exit 0 passed, 1 a finding not rated Normal or an open question, 2 the review did not run. Treat 2 as a failure.
 set -Eeuo pipefail
@@ -67,27 +67,42 @@ done
 
 # A repository that carries the lens-review plugin has the brief inside it; any other keeps its own copy beside its
 # agent definitions.
-for path in .claude/agents/code-review/public-leak.md \
+for path in .claude/agents/lens-review/reference/public-leak.md \
     plugins/lens-review/skills/lens-review/references/reviewer-brief.md .claude/agents/references/reviewer-brief.md \
     .claude/code-review-profile.md CLAUDE.md; do
     if git --git-dir="$git_dir" cat-file -e "$trusted:$path" 2> /dev/null; then
         git --git-dir="$git_dir" cat-file blob "$trusted:$path" > "$bundle/${path##*/}"
     fi
 done
-agent_file=$bundle/public-leak.md
-if [[ ! -f $agent_file ]]; then
-    echo "leak-review: $trusted has no .claude/agents/code-review/public-leak.md" >&2
+lens=$bundle/public-leak.md
+if [[ ! -f $lens ]]; then
+    echo "leak-review: $trusted has no .claude/agents/lens-review/reference/public-leak.md" >&2
     exit 2
 fi
 if [[ ! -f $bundle/reviewer-brief.md ]]; then
     echo "leak-review: $trusted has no reviewer brief, in plugins/lens-review or .claude/agents/references" >&2
     exit 2
 fi
+# Outside the bundle, since only its model is used and the review has no need to read it.
+agent_file=$scratch/lens-review.md
+if ! git --git-dir="$git_dir" cat-file blob "$trusted:.claude/agents/lens-review/lens-review.md" > "$agent_file" \
+    2> /dev/null; then
+    echo "leak-review: $trusted has no .claude/agents/lens-review/lens-review.md" >&2
+    exit 2
+fi
+if [[ $(head -n 1 "$agent_file") != --- ]]; then
+    echo "leak-review: lens-review.md in $trusted does not start with frontmatter" >&2
+    exit 2
+fi
+# The value of `model: value` between the agent file's opening `---` and the next one. It reads one line and keeps any
+# quotes, so lens-review.md must give `model` as a single unquoted line.
+model=$(sed -n '2,/^---$/s/^model: //p' "$agent_file")
 
-# A pass holds only for this content under this gate, so changing any installed file invalidates every pass.
+# A pass holds only for this content under this gate and model, so changing any installed file invalidates every pass.
 if [[ -n $cache ]]; then
     key=$( { (cd "${here%/*}" && find githooks leak-scan -type f -print0 | sort -z | xargs -0 sha256sum)
-             (cd "$bundle" && sha256sum -- *); } | sha256sum | cut -d' ' -f1)
+             (cd "$bundle" && sha256sum -- *)
+             printf '%s\n' "$model"; } | sha256sum | cut -d' ' -f1)
     mkdir -p "$cache"
     if [[ -f $cache/$key ]]; then
         echo "leak-review: this text already passed" >&2
@@ -118,18 +133,8 @@ code-review-profile.md and CLAUDE.md, all here. Read every input file to its las
 is long, and give each one's name and the last line number you read of it in read. Report every finding and open \
 question in the structured output."
 
-if [[ $(head -n 1 "$agent_file") != --- ]]; then
-    echo "leak-review: public-leak.md in $trusted does not start with frontmatter" >&2
-    exit 2
-fi
-# frontmatter_field <key>: the value of `key: value` between the agent file's opening `---` and the next one. It reads
-# one line and keeps any quotes, so public-leak.md must give `description`, `model` and `effort` as single unquoted lines.
-frontmatter_field() {
-    sed -n "2,/^---\$/s/^$1: //p" "$agent_file"
-}
-model=$(frontmatter_field model)
-effort=$(frontmatter_field effort)
-jq -n --arg description "$(frontmatter_field description)" --arg prompt "$(sed '1,/^---$/d' "$agent_file")" \
+# A lens has no frontmatter: the whole file is the prompt, and the first non-empty line after its title is its summary.
+jq -n --arg description "$(sed -n '2,$ { /[^[:space:]]/ { p; q; } }' "$lens")" --arg prompt "$(< "$lens")" \
     '{"public-leak": {description: $description, prompt: $prompt}}' > "$scratch/agents.json"
 
 # The review gets only these variables, so nothing the caller sets can alter it: not ANTHROPIC_BASE_URL, NODE_OPTIONS
@@ -149,7 +154,7 @@ done
 status=0
 (cd "$bundle" && env -i "${review_env[@]}" timeout 900 claude -p --restricted --agent public-leak \
     --agents "$scratch/agents.json" --setting-sources project --strict-mcp-config --tools Read \
-    --model "${model:-opus}" --effort "${effort:-high}" --no-session-persistence --output-format json --json-schema "$schema" \
+    --model "${model:-opus}" --effort high --no-session-persistence --output-format json --json-schema "$schema" \
     "$request" < /dev/null > "$scratch/result.json" 2> "$scratch/claude.stderr") || status=$?
 if (( status != 0 )) || ! jq -e '.structured_output | objects' "$scratch/result.json" > /dev/null; then
     echo "leak-review: did not run (claude exited $status)" >&2

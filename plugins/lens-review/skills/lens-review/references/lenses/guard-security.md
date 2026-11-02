@@ -1,24 +1,16 @@
----
-name: guard-security
-description: Tries to break whatever a diff protects, asking whether a model, the author of a pull request or hostile input can get past it or turn the harness to serve someone other than its user; covers hooks, mods that refuse or rewrite calls, CI workflows, installers and parsers of untrusted text. The /lens-review skill sends it when the profile's routing matches; do not run it by itself.
-model: opus
-effort: high
-disallowedTools: Edit, Write, NotebookEdit
----
+# Lens: guard-security
 
-# Guard security
+Tries to break whatever a diff protects, asking whether a model, the author of a pull request or hostile input can get past it or turn the code to serve someone other than its user; covers hooks, code that refuses or rewrites tool calls, CI workflows, installers and parsers of untrusted text.
 
 ## The question
 
-Can a model, someone opening a pull request, or crafted input get past what this change guards, or make the harness
-act for anyone other than the user who installed it?
+Can a model, someone opening a pull request, or crafted input get past what this change guards, or make the code act
+for anyone other than the user who runs it?
 
 ## Before the diff
 
 Read "What ships, and why a defect is expensive", "Fragile spots CI does not catch" and "Rulings that are not
-findings" in `.claude/code-review-profile.md`. The fragile spots include guards whose error path lets a call through.
-The rulings exclude deliberate attacks by an agent running as the same OS user: judge against honest changes and
-common mistakes.
+findings" in `.claude/code-review-profile.md`. Judge against the threats the rulings leave in scope.
 
 ## In scope
 
@@ -31,12 +23,12 @@ Build the bypass rather than describing a worry. Try:
 - **Error paths.** A timeout, a parse failure, a missing tool or an unexpected shape that lets the call through.
 - **Outside content.** Text from a pull request, a commit, a file or a tool result that reaches a prompt or a shell.
 - **CI.** Triggers, permissions and secrets in workflows: who can start a job, what it can write, what it runs from
-  the PR. zizmor already audits workflows, so report only what it would miss.
+  the PR. Where the repository's CI already audits workflows, report only what that audit would miss.
 - **Supply chain.** Unpinned actions or packages, install scripts, and what a lockfile change pulls in.
 
 ## Out of scope
 
-Leaks belong to `public-leak` and general correctness to `principal-review`.
+General correctness belongs to `correctness`.
 
 ## How far to read
 

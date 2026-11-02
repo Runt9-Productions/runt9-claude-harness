@@ -30,8 +30,8 @@ them. Whether this file is tracked in git is your repository's choice.
   because a plugin cannot set worktree options.
 - What renaming the worktree's branch changes about cleaning it up.
 - What the worktree shares with the main checkout, and whether writes through it work.
-- Where the working directory is in the main checkout (default `.claude/output/<ticket>/`, which must be
-  git-excluded).
+- Where the working directory is within a checkout, the ticket's worktree once one exists (default
+  `.claude/output/<ticket>/`, which must be git-excluded).
 - Whether building needs a fresh session started in the worktree, and its start command.
 
 ## 4. Spec location
@@ -70,9 +70,9 @@ them. Whether this file is tracked in git is your repository's choice.
 
 ## 9. Review
 
-- The panel review: the `lens-review` skill (the default) and whether its profile exists, or the repository's own.
-- How the panel review is triggered: invoked locally with a panel, or a CI trigger such as a label. If the trigger
-  skips draft pull requests, section 10's draft rule must allow for it.
+- The code review: the `lens-review` skill (the default) and whether its profile exists, or the repository's own.
+- How the code review is triggered: invoked locally, or a CI trigger such as a label. If the trigger skips draft pull
+  requests, section 10's draft rule must allow for it.
 - Whether a test-review profile exists, and whether to skip test review.
 - The external reviewer, if any, and who requests it.
 - Tooling for posting inline review comments and images.

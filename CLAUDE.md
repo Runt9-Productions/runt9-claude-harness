@@ -27,7 +27,7 @@ nothing from an employer, a private project or a specific machine goes in, in co
   in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.
 - `.github/scripts/`: the scripts CI runs, with their bats tests in `tests/`. `.github/actions/`: the composite
   actions CI uses.
-- `.claude/`: the profiles, reviewer pool and test references that the `lens-review` and `test-review` plugins read
+- `.claude/`: the profiles, review lenses and test references that the `lens-review` and `test-review` plugins read
   to review this repo. Both reviews run locally, as section 9 of `.claude/development-profile.md` describes.
 - `.claude/reference/`: this repo's knowledge base, in the reference-kb plugin's format. Read the note covering an
   area before its code or platform behaviour; a question it does not answer is still open.
@@ -95,7 +95,9 @@ dependency, `npm update`), and only on npm 11.10 or newer. `npm ci` installs the
 ## Writing here
 
 - Comments state the mechanism, never the incident that motivated it.
-- Docs and skills give the rule and a one-line reason, not the story behind it.
+- Docs, skills, knowledge base notes and decision records give the rule and a one-line reason, not the story behind
+  it.
 - Tests are few, at the boundaries, with obviously synthetic fixtures.
-- Nothing is copied in from another project. Write from what the file has to achieve.
+- Nothing comes in from another project, neither its text nor a description of it: no "ported from", and no size,
+  feature or bug of the source. Write from what the file has to achieve.
 - Changes to `.github/`, this file and tool configs need the owner's review.

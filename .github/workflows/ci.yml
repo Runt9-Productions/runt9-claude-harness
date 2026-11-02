@@ -225,7 +225,12 @@ jobs:
             jq -e '.modules' "$hooks" > /dev/null || continue
             dir="${hooks%/hooks/hooks.json}"
             echo "::group::$dir"
-            CLAUDE_CODE_PLUGIN_DIR_WATCH=1 timeout 120 claude -p --plugin-dir "$dir" x > /dev/null 2>&1 || true
+            # A plugin named in `dependencies` gets its types laid only when it loads on this run too.
+            plugin_dirs=(--plugin-dir "$dir")
+            for dependency in $(jq -r '.dependencies[]?' "$dir/.claude-plugin/plugin.json"); do
+              plugin_dirs+=(--plugin-dir "plugins/$dependency")
+            done
+            CLAUDE_CODE_PLUGIN_DIR_WATCH=1 timeout 120 claude -p "${plugin_dirs[@]}" x > /dev/null 2>&1 || true
             if [[ -f $dir/tsconfig.json && -d $dir/.claude-plugin/types ]]; then
               npx --no-install tsc -p "$dir" || status=1
               npx --no-install oxlint -c .oxlintrc.json "$dir" || status=1

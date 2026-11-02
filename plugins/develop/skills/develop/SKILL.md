@@ -31,10 +31,11 @@ step number, start there; see "Starting mid-process".
 
   Without a knowledge base, section 4 names the location and its format.
 - **Working directory**: per-ticket scratch that section 3 names, defaulting to `.claude/output/<ticket>/` when that
-  path is git-excluded. It always lies in the main checkout, never in a worktree, and once a worktree exists it is
-  named by its absolute path, in briefs, the handoff and resume lines alike: removing a worktree deletes everything
-  inside it. It holds task results, saved review reports, evidence, the three lists below and the handoff. Anything
-  a later step relies on goes here, because it must outlive the teammate that produced it.
+  path is git-excluded. It lies in the checkout the session works in, the ticket's worktree once one exists, and is
+  named by its absolute path in briefs, the handoff and resume lines. It is transient: removing the worktree deletes
+  it, so anything that must outlive the worktree goes in the spec location instead. It holds task results, saved
+  review reports, evidence, the three lists below and the handoff. Anything a later step relies on goes here, because
+  it must outlive the teammate that produced it.
 - **Decision tools**: the tools the "Decision tools" section at the end names for four kinds of output: decisions,
   owner tasks, task progress and the status line. Where it names none for a kind, decisions are asked in chat, owner
   tasks go in the final report, and progress is kept in the spec location's checklist.
@@ -118,14 +119,17 @@ present.
   location is tracked in git, the session in the worktree copies each file steps 1 and 2 added or changed there from
   the main checkout to the same path, commits them as the branch's first commit, then takes them out of the main
   checkout (deleting added files, restoring changed ones), where they would otherwise block the merge that later
-  brings the branch back. Until then, and wherever the spec is untracked, it reads the spec from the main checkout.
+  brings the branch back. A session confined to its worktree cannot take them out, so it files that as an owner
+  task. Until then, and wherever the spec is untracked, it reads the spec from the main checkout.
 - **Task progress.** The session that does the build posts the task-progress items: one per spec task, then steps 5
   to 12. When section 3 requires a fresh build session in the worktree, write the handoff and end here, giving the
   owner the start command and the line that resumes at step 4, which names the handoff by its absolute path. A
   session's language server stays rooted where the session started, so from anywhere else it answers wrongly about
   the branch and raises no error.
 - **Handoff.** Write `handoff.md` in the working directory, because decision-tool state may not carry across
-  sessions and this file is the bridge. Every path in it is absolute. It holds:
+  sessions and this file is the bridge. When a fresh build session follows, no worktree exists yet, so it is written
+  in the main checkout's working directory and the build session copies it into its own and keeps only the copy up
+  to date. Every path in it is absolute. It holds:
   - the ticket, the repository, the main checkout, the worktree path, the branch and the base commit;
   - the working directory;
   - the spec paths in the main checkout, and the first task;
@@ -138,8 +142,9 @@ Exit: every decision answered and step 4 unblocked.
 
 ### 4. Develop, one task at a time
 
-The build session opens by reading the handoff, making one trial write into the working directory to prove it has
-access, posting the task-progress items, and making section 1's "work started" ticket update.
+The build session opens by reading the handoff, copying it into the worktree's working directory when it was written
+in the main checkout, making one trial write there to prove it has access, posting the task-progress items, and
+making section 1's "work started" ticket update.
 
 For each task, spawn the implementer section 5 names. A `delegation` template is not an agent until it is copied
 into `.claude/agents/` and filled in, so with no adopted implementer named, stop and point at that plugin's
@@ -174,16 +179,15 @@ separate issue.
 Run section 6's pre-push step. Check how far the branch lags its base, and merge the base in if section 2 asks for
 that. Push, then open a draft pull request against the base with its body read from a file, and start the CI watch.
 
-### 7. Test review, then panel review
+### 7. Test review, then code review
 
 If the repository has `.claude/test-review-profile.md`, the `test-review` skill is installed and section 9 does not
 opt out, run `/test-review` first.
 
-Then run the panel review section 9 names on the pull request, the way it says: invoked locally with a panel, or
-through a CI trigger such as a label. Where it names none, the panel is the `lens-review` skill; if that is not
-installed, stop and name the `lens-review` plugin. Invoked without a panel, `lens-review` stops after proposing one,
-on purpose. Invoke it again with that proposal plus any additions, and give a reason for each proposed reviewer left
-out.
+Then run the code review section 9 names on the pull request, the way it says: invoked locally, or through a CI
+trigger such as a label. Where it names none, the code review is the `lens-review` skill; if that is not installed,
+stop and name the `lens-review` plugin. Invoked without a lens argument, `lens-review` runs `auto`: every lens whose
+routing row matches the change, and any other the reviewer judges it needs, with no default lenses added.
 
 Author notes wait until this step is done, because reviewers anchor on them. A review that runs after step 10 is
 told those notes are not established fact. The review runs in a fork and returns its report as text: save it in the
@@ -209,7 +213,7 @@ from the current code.
 ### 9. External review
 
 Only when section 9 names an external reviewer: file an owner task to request the review, wait for it, and treat
-its findings as in step 8. A clean panel is no reason to skip it, because outside reviewers find what the panel does
+its findings as in step 8. A clean code review is no reason to skip it, because outside reviewers find what it does
 not.
 
 ### 10. Reviewer guide

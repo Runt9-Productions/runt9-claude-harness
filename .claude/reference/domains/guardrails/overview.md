@@ -5,7 +5,7 @@ permalink: guardrails/overview
 tags: [guardrails, auto-mode, sandbox, permissions, hooks, credentials, installs]
 verified: 2026-10-31
 coverage: partial
-measured_on: "Claude Code 2.1.314, Linux bubblewrap 0.9.0"
+measured_on: "Claude Code 2.1.314 and 2.1.316, Linux bubblewrap 0.9.0"
 sources:
   - "harness/settings/guardrails-automode.json"
   - "harness/settings/guardrails-sandbox.json"
@@ -19,9 +19,14 @@ sources:
 > sandbox and model-evaluated hooks, as far as the harness's settings fragments rely on them. The `#measured` lines
 > come from headless `claude -p` runs on 2.1.314 in scratch repositories with synthetic files, with the sandbox on and
 > its network closed so nothing could install, one to three runs per case (2026-10-29 to 2026-10-31); the earlier
-> ones were not re-run when this note was written. On 2026-10-31 the note was re-checked against the auto-mode
-> fragment's added `allow` entry (marking a pull request the session opened ready for review): no claim rests on which
-> entries that list holds, and every other claim was carried forward without a re-check. Not covered: macOS
+> ones were not re-run when this note was written. The line on `sandbox.enabled` in the local settings was measured on
+> 2.1.316, with the file changed from outside the session between commands, and how soon a change applies below 5 s
+> was not measured. The three lines after it, on which local file applies outside a repository-root start and on
+> `autoAllowBashIfSandboxed`, were measured on 2.1.316 in `claude -p` sessions in scratch repositories, worktrees and
+> subdirectories, one or two sessions per case, with no sandbox key in user or project settings. On 2026-10-31 the note
+> was re-checked against the auto-mode fragment's added `allow` entry (marking a pull request the session opened ready
+> for review): no claim rests on which entries that list holds, and every other claim was carried forward without a
+> re-check. Not covered: macOS
 > and Windows sandboxing, the Read tool's path through auto mode (only the documentation's account), pushes over HTTPS
 > from inside the sandbox, and any JVM build run end to end in the sandbox.
 
@@ -83,6 +88,22 @@ stop a call.
   any shell step that writes harness state fails with `Read-only file system`. The Edit and Write tools are not
   sandboxed. #measured
 - [fact] Turning `sandbox.enabled` off in a settings file took effect in the running session. #measured
+- [fact] `sandbox.enabled` in `.claude/settings.local.json` takes effect in a running session both ways. With the
+  rest of the sandbox config and `enabled: false` in the project's `.claude/settings.json`, a Bash command started 5 s
+  after the local file gained `enabled: true` ran sandboxed, and one started after the key was removed or set to
+  `false` ran unsandboxed, 2 of 2 runs. The local key overrode only that key: the rest of the config still applied.
+  #measured
+- [fact] A session started in a linked worktree or a repository subdirectory applies `sandbox.enabled` from both
+  local files: the starting directory's `.claude/settings.local.json`, read at start and also when created
+  mid-session, and the repository root's (the main checkout's, for a worktree). Each turned the sandbox on
+  mid-session; only the main checkout's file was also measured turning it off again. #measured
+- [trap] The repository root's local file wins over the starting directory's on a key both set: with the root file
+  holding `enabled: false`, `enabled: true` written in a worktree's or subdirectory's file left commands
+  unsandboxed. Only that direction was measured. In a worktree the root file is the main checkout's, shared with
+  every session started there. #measured #silent-failure
+- [trap] With the sandbox on and `autoAllowBashIfSandboxed` absent, a command that matches no allow rule runs
+  sandboxed without approval; `autoAllowBashIfSandboxed: false` makes it need approval (denied under `-p`). So turning
+  the sandbox on with the key unset also stops Bash from prompting. #measured
 - [trap] The per-user temp directory (`$TMPDIR`, `/tmp/claude-<uid>`) is writable as a whole, which takes in every
   other session's scratchpad. The rest of `/tmp` is read-only. #measured
 - [trap] The working directory's `.git/hooks` and `.git/config` are mounted read-only, but a directory added with

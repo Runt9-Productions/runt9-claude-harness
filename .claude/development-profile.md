@@ -8,8 +8,9 @@ a knowledge base note already answers a question, this file points there.
 - GitHub issues on `Runt9-Productions/runt9-claude-harness`. Every change, fix or feature, is an issue in the shape
   of `.github/ISSUE_TEMPLATE/change.md`; `CLAUDE.md`, "Issues and pull request text", has the rules for writing one.
 - A review finding deferred from its pull request becomes an issue labelled `from-review`.
-- Step 3's setup: label `bug` or `enhancement`, plus exactly one of `area:harness`, `area:ci`, `area:plugins` and
-  `area:review`. There are no assignment, planning or estimate fields; the estimate lives in the spec only.
+- Step 3's setup: label `bug` or `enhancement`, plus exactly one of `area:harness`, `area:ci`, `area:plugins`,
+  `area:review` and `area:kb`. There are no assignment, planning or estimate fields; the estimate lives in the spec
+  only.
 - Work started: no update.
 - Automation: none of this repository's own. GitHub closes an issue when a pull request whose body names it with a
   closing keyword (`Closes #<n>`) merges into `main`.
@@ -38,9 +39,11 @@ a knowledge base note already answers a question, this file points there.
 - Renaming the branch: what it changes about the built-in worktree's cleanup has not been measured here.
 - Shared with the main checkout: the git config, so `core.hooksPath` and the `claude.*` keys the hooks read apply in
   every worktree, and commits made in one are visible to all. Writes through it work.
-- Working directory: `.claude/output/<ticket>/` in the main checkout, ignored by the tracked `.gitignore`. It is
-  scratch: working documents that must last go in the spec location. No comment or doc may point at it, because no
-  other clone has it.
+- A `claude --worktree` session is confined to its worktree: it can read the main checkout but neither write files
+  nor run git there (2026-10-31).
+- Working directory: `.claude/output/<ticket>/` in the checkout the session works in, the ticket's worktree once one
+  exists, ignored by the tracked `.gitignore`. It is scratch and goes when the worktree does: working documents that
+  must last go in the spec location. No comment or doc may point at it, because no other clone has it.
 - Fresh session: yes, started with `claude --worktree <name>`, because a session's language server stays rooted where
   the session started.
 
@@ -119,22 +122,22 @@ pre-push gate trusts it, so a build never writes to it.
 
 ## 9. Review
 
-- Panel: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
-  `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run locally.
+- Code review tool: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
+  `.claude/code-review-profile.md` and the agent and lenses in `.claude/agents/lens-review/`, run locally.
 - When: the test review and the code review each run once per pull request, when it is first pushed: the test review,
   then the code review over the head that carries its fixes. A later push, after a fix round or the owner's review
   round, gets CI only; say what changed and the owner decides whether it gets another review, since a review costs far
-  more than a CI run and a fix round rarely needs a whole panel. A trivial pull request, such as one config line or a
+  more than a CI run and a fix round rarely needs a whole review. A trivial pull request, such as one config line or a
   one-line doc fix, gets neither review and opens ready.
 - Test review: `.claude/test-review-profile.md` exists. Run `/test-review` in the pull request's worktree before the
-  code review, and commit and push the fixes wanted, so the panel reviews the tests as they will merge. Skipped when
+  code review, and commit and push the fixes wanted, so the code review reads the tests as they will merge. Skipped when
   the pull request changes no test, or its test changes are trivial enough for the owner to check at a glance.
 - Code review: a headless run in the pull request's worktree, checked out at its pushed head, started in the
   background so the session can move on. `gh` in it needs `GH_TOKEN` (section 1).
 
   ```
   CODE_REVIEW_OUTPUT=<scratch dir> claude -p "/lens-review <n> auto" --plugin-dir plugins/lens-review \
-    --permission-mode auto --strict-mcp-config --no-session-persistence --output-format json > <run log>
+    --permission-mode auto --strict-mcp-config --output-format json > <run log>
   ```
 
   The run loads the head's own project settings, hooks and plugin code, and those run outside the auto-mode
@@ -150,7 +153,7 @@ pre-push gate trusts it, so a build never writes to it.
   command only when GitHub rejects the first, which it does for the whole review when one comment misses the diff. It
   posts the report as the body alone, cut below GitHub's 65,536-character limit for a review body. No tooling posts
   images; evidence is text. Before either, run what would be posted through `review-text.sh` (section 1): the payload's
-  text (`jq -r '.body, .comments[].body'`) and `review.md` in one file. The reviewers load the user's own `CLAUDE.md`
+  text (`jq -r '.body, .comments[].body'`) and `review.md` in one file. The reviewer loads the user's own `CLAUDE.md`
   and memory, so a finding can quote them; on a hit, edit both files and check again.
 
   ```
@@ -180,9 +183,9 @@ pre-push gate trusts it, so a build never writes to it.
   committer.
 - Messages and trailers: the trailer lines the harness supplies. A message states the change and its rule-level
   reason, with no decision ids and nothing from a private source; the pre-push review reads it.
-- Remote: `bot`, the HTTPS remote the bot pushes through. `origin` is SSH and the owner's. A branch whose
-  commits change `.github/workflows/`, including a merge of `main` that brings such a change in, is refused for the
-  bot's token, so the owner pushes it over SSH.
+- Remote: `bot`, the HTTPS remote the bot pushes through. `origin` is SSH and the owner's. A push that
+  adds a commit changing `.github/workflows/`, including a merge of `main` that brings such a change in, is refused
+  for the bot's token, so the owner makes that push over SSH. Later pushes that add no such commit go through `bot`.
 - Guards: no guard hook stops destructive git commands such as a force push or `git reset --hard`. `pre-push` refuses
   only refs outside `claude/` and commits not made by the bot. The remote rules hold: the bot pushes only `claude/**`,
   and `main` takes changes only by pull request with `gate` passing and the branch up to date.

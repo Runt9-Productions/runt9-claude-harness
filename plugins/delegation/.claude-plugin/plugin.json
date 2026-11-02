@@ -1,6 +1,6 @@
 {
   "name": "delegation",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "How a lead session spawns, briefs, answers and shuts down Agent Teams teammates, with engineer, web-researcher, code-researcher, verifier and triager agent templates",
   "author": {
     "name": "Runt9 Productions"
