@@ -20,7 +20,7 @@ risen and they run an update, so a fix that skips the version rise never arrives
 | Range | `git diff <a>..<b>` |
 | Pull request | `gh pr diff <n>`, then `gh pr view <n> --json commits,body` for the commit messages and the description |
 
-- `gh` authenticates with `GH_TOKEN`.
+- `gh` authenticates with `GH_TOKEN`, set in the shell that runs each `gh` call, since every block runs in a new one.
 - Default branch: `main`.
 - No path is excluded from review. `package-lock.json` is relevant only to `guard-security` and `public-leak`;
   other lenses may skip it.
@@ -166,8 +166,9 @@ something the ruling did not account for.
 - The invisible-character check flagging emoji variation selectors.
 - Deliberate attacks by an agent running as the same OS user. The guards here are judged against honest changes and
   common mistakes only. (2026-10-25)
-- A pull request reviewed with its own `.claude/`, `CLAUDE.md` and `plugins/lens-review`, which follows from running
-  the review in its worktree with `--plugin-dir` (2026-10-25, reworded for the local run 2026-10-31).
+- A pull request that changes `plugins/lens-review` reviewed with its own `.claude/`, `CLAUDE.md` and
+  `plugins/lens-review`, which follows from running its review in a session started in its checkout with
+  `--plugin-dir` (2026-10-25, reworded 2026-10-31 and 2026-11-01).
 - `bootstrap.py harness` installing a HEAD that is not on `origin/main` with a warning rather than refusing.
   (2026-10-27)
 - A change naming the `board`, `handoff` or `away` plugin before it is in this repository: all three are this

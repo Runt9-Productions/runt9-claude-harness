@@ -20,8 +20,10 @@ The skill runs in a forked context, inside the repository's `lens-review` agent,
 does not weigh the findings, and only the final message comes back.
 
 The checkout can be on any branch. For a commit, a range or a pull request, the skill unpacks the files of the commit
-the diff ends at into the run's directory, fetching a pull request's head when the repository lacks it, and the
-reviewer reads them there. The profile and the lenses always come from the checkout.
+the diff ends at into the run's directory, fetching a pull request's head with `gh`'s login when the repository lacks
+it, and the reviewer reads them there. Symlinks and the files Claude Code would load as instructions or skills are
+left out of that copy, and the reviewer reads them through git. The profile and the lenses always come from the
+checkout.
 
 ## What it ships
 
@@ -52,8 +54,8 @@ Adding or changing a lens touches only its file and, where it should run by defa
 
 ## Needs
 
-`bash`, Python 3.12 or newer, `git`, `jq`, `sed` and `tar`. `gh`, authenticated, for pull request targets and for a
-profile that posts reviews to GitHub.
+`bash`, Python 3.12 or newer, `find`, `git`, `jq`, `sed` and `tar`. `gh`, authenticated, for pull request targets and
+for a profile that posts reviews to GitHub.
 
 The profile keeps the path `.claude/code-review-profile.md`: it names the activity, not the plugin.
 

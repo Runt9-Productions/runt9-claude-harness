@@ -38,7 +38,7 @@ except to review it. Fill in the first five values and run:
 set -euo pipefail
 label='worktree'                # worktree, the SHA or ref, the range, or pr-<n>
 pr=''                           # the number, for a pull request target
-commit=''                       # the SHA or ref, for a commit target; the right side, for a range
+commit=''                       # the SHA or ref, for a commit target; a range's right side, or HEAD when it is empty
 fetch() { git diff HEAD; }      # the profile's command, for any target but a pull request
 root="<output root>"            # the profile's "Output" root; a variable it names stays a shell expansion
 mkdir -p "$root"
@@ -56,9 +56,11 @@ if [[ -n $pr ]]; then
     done
     [[ -n $commit ]] || { echo "the pull request's head kept moving"; exit 4; }
     gh pr view "$pr" --json commits,body > "$dir/pr.json"
-    # The URL is the repository gh resolved the pull request against, whatever the local remotes are named.
+    # The URL is the repository gh resolved the pull request against, whatever the local remotes are named, and gh's
+    # login is the fetch's only credential, so it works where git itself authenticates only over SSH.
     if ! git cat-file -e "$commit^{commit}" 2> /dev/null; then
-        git fetch --quiet --no-tags "$(gh repo view --json url --jq .url)" "refs/pull/$pr/head"
+        git -c credential.helper= -c credential.helper='!gh auth git-credential' \
+            fetch --quiet --no-tags "$(gh repo view --json url --jq .url)" "refs/pull/$pr/head"
     fi
 else
     fetch > "$dir/patch.diff"
@@ -69,6 +71,11 @@ if [[ -n $commit ]]; then
     git rev-parse --verify "$commit^{commit}" > "$dir/head-sha"
     mkdir "$dir/tree"
     git archive "$(< "$dir/head-sha")" | tar -x -C "$dir/tree"
+    # Claude Code loads the instruction files and skills of a directory it reads in, and reading a symlink follows it
+    # out of the tree, so none of them stays.
+    find "$dir/tree" \( -type l -o -iname CLAUDE.md -o -iname CLAUDE.local.md -o -iname AGENTS.md \
+        -o -ipath '*/.claude/rules' -o -ipath '*/.claude/skills' -o -ipath '*/.claude/commands' \) \
+        -prune -exec rm -rf {} +
 fi
 echo "$dir"
 ```
@@ -126,9 +133,12 @@ Review the diff with the lenses you chose, as your instructions describe, readin
 
 For every target but the working tree, read those files in the run directory's `tree/`, never in the checkout, which
 may hold another commit. Reach history through the commit in `head-sha`: `git show <sha>:<path>`,
-`git grep <pattern> <sha>`, `git log <sha>`. A path the target's `.gitattributes` marks `export-ignore` is missing from
-`tree/`, and one marked `export-subst` is rewritten there; read either with `git show <sha>:<path>`. The profile and
-the lenses stay the checkout's, so a change under review cannot rewrite its own review.
+`git grep <pattern> <sha>`, `git log <sha>`. Some paths are missing from `tree/`: every symlink, any path the target's
+`.gitattributes` marks `export-ignore`, and the files Claude Code would load as instructions or skills (`CLAUDE.md`,
+`CLAUDE.local.md`, `AGENTS.md`, `.claude/rules/`, `.claude/skills/` and `.claude/commands/`, at any depth). A path
+marked `export-subst` is rewritten there. Read any of these with `git show <sha>:<path>`, which prints a symlink's
+target rather than following it. The profile and the lenses stay the checkout's, so a change under review cannot
+rewrite its own review.
 
 **Severity rubric.**
 - Critical (Must Fix): merging it ships something broken, unsafe or private.
@@ -143,7 +153,8 @@ Use the profile's "Severity calibration" for what each level looks like here.
   wrong because of it; and the evidence, meaning the lines opened and what they show.
 - Open questions: what is unknown, why it matters, and what would settle it.
 - Coverage: each file read whole, each read in part with the line ranges, and each skipped. When the diff was on
-  disk, give the line ranges of `patch.diff` read.
+  disk, give the line ranges of `patch.diff` read. Name every tool call that was refused or blocked and what it would
+  have read, or say there was none.
 
 The report has a Critical, a High and a Normal heading, each present even when empty, then the open questions, then
 which lenses you applied and left out, then coverage: each changed file read whole, read in part (with ranges) or
