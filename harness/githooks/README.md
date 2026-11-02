@@ -37,9 +37,9 @@ refs reach that no branch or tag on the remote already has, the annotated tags i
 
 1. `../leak-scan/scan.sh` checks added lines, commit messages, author and committer identities, tags, file names and
    ref names for shapes and secrets.
-2. If the scan passes, the `public-leak` agent reviews exactly what the scan read (`scan.sh --export`) through
-   `claude -p`. Any finding not rated Normal refuses the push, and so does any open question, or a review that does
-   not report reading every input to its last line. Normal findings are only printed.
+2. If the scan passes, the `public-leak` lens, run as an agent, reviews exactly what the scan read
+   (`scan.sh --export`) through `claude -p`. Any finding not rated Normal refuses the push, and so does any open
+   question, or a review that does not report reading every input to its last line. Normal findings are only printed.
 
 Neither the scan nor the review reads binary content. The review raises an open question for every binary file the
 push adds or changes, so such a push is always refused, and binaries go out only over the SSH override below.
@@ -48,10 +48,12 @@ Any error refuses the push, including a missing tool, a failed `claude` run or a
 fetched.
 
 **What it trusts.** At push time the hook fetches the remote's default branch and its branch and tag tips from the
-push URL into a temporary mirror. The agent definition, reviewer brief, review profile, `CLAUDE.md` and leak-scan
-allowlist come from that default branch, never from the branch being pushed or from the clone's remote-tracking refs.
-A repository whose default branch has no `.claude/agents/code-review/public-leak.md`, or no reviewer brief (the
-lens-review plugin's, or its own at `.claude/agents/references/reviewer-brief.md`), cannot be pushed through this hook. The scan reads the mirror, so the repository's config and attributes cannot change what it reads. The review
+push URL into a temporary mirror. The lens, the `lens-review` agent that names its model, the reviewer brief, review
+profile, `CLAUDE.md` and leak-scan allowlist come from that default branch, never from the branch being pushed or from
+the clone's remote-tracking refs. A repository whose default branch has no
+`.claude/agents/lens-review/reference/public-leak.md`, no `.claude/agents/lens-review/lens-review.md`, or no reviewer
+brief (the lens-review plugin's, or its own at `.claude/agents/references/reviewer-brief.md`), cannot be pushed through
+this hook. The scan reads the mirror, so the repository's config and attributes cannot change what it reads. The review
 runs under `--restricted`, so it reads only its own inputs and loads no `CLAUDE.md`.
 
 The review also runs with a fixed environment: `PATH`, `HOME`, `USER`, `LOGNAME`, the locale, and

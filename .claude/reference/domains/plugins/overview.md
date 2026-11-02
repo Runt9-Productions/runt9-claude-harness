@@ -10,7 +10,7 @@ measured_on: "Claude Code 2.1.310 and 2.1.316"
 
 # Plugin Platform
 
-> **Scope.** How Claude Code loads, updates and names a plugin, and what a plugin cannot carry. The `#measured` lines are carried from measurements taken on 2.1.310 and were not re-measured when this note was written, except the four on two copies of one plugin and the two on a plugin's own `$.tool.call`, measured on 2.1.316 in `claude -p` runs; the `[vendor]` lines come from the plugin docs (loading, manifest, marketplace and hosting pages) and were never measured. Not covered: plugin LSP and MCP servers, output styles beyond whether a plugin may ship them, and how a session's `--tools` caps a plugin agent's grant.
+> **Scope.** How Claude Code loads, updates and names a plugin, and what a plugin cannot carry. The `#measured` lines are carried from measurements taken on 2.1.310 and were not re-measured when this note was written, except the four on two copies of one plugin and the two on a plugin's own `$.tool.call`, measured on 2.1.316 in `claude -p` runs, and the two on files in a subfolder of `.claude/agents/`, measured on 2.1.316 on 2026-11-01; the `[vendor]` lines come from the plugin docs (loading, manifest, marketplace and hosting pages) and were never measured. Not covered: plugin LSP and MCP servers, output styles beyond whether a plugin may ship them, and how a session's `--tools` caps a plugin agent's grant.
 
 Read this before writing a plugin, naming one of its skills or agents in a prompt or a `subagent_type`, or reasoning
 about when a change reaches the people who installed it. The traps here produce a plugin that looks loaded and is
@@ -37,6 +37,8 @@ running something else, or a name that resolves to a different skill.
 - [trap] The kit's type docs for `ToolCallResult.text` say it is absent on a hook's own `{ result }`, which the line above contradicts, and the kit's test engine follows the docs (a kit test whose hook returned only `{ result }` gave the caller no `text`); a mod that reads `text` on its own call works live and gets nothing in a kit test unless the test's hook returns `text` itself. Re-measure on a newer version rather than trusting either alone #measured
 - [trap] A plugin agent spawns only by its namespaced name, `<plugin>:<agent>`; the bare name fails with "not found" even when nothing else uses it #measured
 - [fact] A project agent with the same name as a plugin agent owns the bare name, and the plugin agent stays reachable by its namespaced name #measured
+- [fact] An agent file in a subfolder of `.claude/agents/`, such as `.claude/agents/<group>/<agent>.md`, loads as a project agent #measured (2.1.316, 2026-11-01: a headless probe on haiku, and a live session that gained the agent on reloading its agent list)
+- [fact] A `.md` file with no frontmatter under `.claude/agents/`, in a subfolder included, is not loaded as an agent, so reference files an agent reads can sit beside it #measured (2.1.316, 2026-11-01: the same probe's frontmatter-less file, and nine in one subfolder in the live session, none of which appeared as agents)
 - [fact] A plugin skill whose name nothing else uses answers to its bare name as well as to `/<plugin>:<skill>` #measured
 - [trap] A plugin skill named like a built-in never answers to the bare name: a typed `/code-review` reaches the built-in, not the plugin's skill #measured
 - [fact] A bare skill name resolves user skill first, then project skill, then built-in; a plugin skill is not in that chain when its name collides #measured

@@ -8,7 +8,7 @@ tags:
 - board
 - handoff
 - sandbox
-status: implementation
+status: complete
 opened: '2026-10-31'
 ---
 
@@ -20,7 +20,7 @@ away. It ends when the plugin merges with its README's mode table backed by kit 
 
 ## Where it stands
 
-- [status] Built, verified live and reviewed; its draft pull request (#80) waits on the owner's review.
+- [status] Complete: merged in #80 (15e18f3).
 
 ## Goal
 

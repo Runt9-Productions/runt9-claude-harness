@@ -8,7 +8,7 @@
     {
       "name": "lens-review",
       "source": "./plugins/lens-review",
-      "description": "Runs a repository's own panel of reviewer agents over a diff, merges their findings into one graded report and delivers it where the repository's profile says"
+      "description": "Reviews a diff through a repository's own lenses in one reviewer agent, writes one graded report and delivers it where the repository's profile says"
     },
     {
       "name": "reference-kb",

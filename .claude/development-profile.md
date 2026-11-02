@@ -8,8 +8,9 @@ a knowledge base note already answers a question, this file points there.
 - GitHub issues on `Runt9-Productions/runt9-claude-harness`. Every change, fix or feature, is an issue in the shape
   of `.github/ISSUE_TEMPLATE/change.md`; `CLAUDE.md`, "Issues and pull request text", has the rules for writing one.
 - A review finding deferred from its pull request becomes an issue labelled `from-review`.
-- Step 3's setup: label `bug` or `enhancement`, plus exactly one of `area:harness`, `area:ci`, `area:plugins` and
-  `area:review`. There are no assignment, planning or estimate fields; the estimate lives in the spec only.
+- Step 3's setup: label `bug` or `enhancement`, plus exactly one of `area:harness`, `area:ci`, `area:plugins`,
+  `area:review` and `area:kb`. There are no assignment, planning or estimate fields; the estimate lives in the spec
+  only.
 - Work started: no update.
 - Automation: none of this repository's own. GitHub closes an issue when a pull request whose body names it with a
   closing keyword (`Closes #<n>`) merges into `main`.
@@ -121,38 +122,34 @@ pre-push gate trusts it, so a build never writes to it.
 
 ## 9. Review
 
-- Panel: the `lens-review` plugin, loaded from the pull request's own `plugins/lens-review`, with
-  `.claude/code-review-profile.md` and the reviewers in `.claude/agents/code-review/`, run locally.
+- Code review tool: the `lens-review` plugin, with `.claude/code-review-profile.md` and the agent and lenses in
+  `.claude/agents/lens-review/` of the checkout the session runs in, run locally.
 - When: the test review and the code review each run once per pull request, when it is first pushed: the test review,
   then the code review over the head that carries its fixes. A later push, after a fix round or the owner's review
   round, gets CI only; say what changed and the owner decides whether it gets another review, since a review costs far
-  more than a CI run and a fix round rarely needs a whole panel. A trivial pull request, such as one config line or a
+  more than a CI run and a fix round rarely needs a whole review. A trivial pull request, such as one config line or a
   one-line doc fix, gets neither review and opens ready.
 - Test review: `.claude/test-review-profile.md` exists. Run `/test-review` in the pull request's worktree before the
-  code review, and commit and push the fixes wanted, so the panel reviews the tests as they will merge. Skipped when
+  code review, and commit and push the fixes wanted, so the code review reads the tests as they will merge. Skipped when
   the pull request changes no test, or its test changes are trivial enough for the owner to check at a glance.
-- Code review: a headless run in the pull request's worktree, checked out at its pushed head, started in the
-  background so the session can move on. `gh` in it needs `GH_TOKEN` (section 1).
-
-  ```
-  CODE_REVIEW_OUTPUT=<scratch dir> claude -p "/lens-review <n> auto" --plugin-dir plugins/lens-review \
-    --permission-mode auto --strict-mcp-config --no-session-persistence --output-format json > <run log>
-  ```
-
-  The run loads the head's own project settings, hooks and plugin code, and those run outside the auto-mode
-  classifier. So review only a branch of this repository, never a fork, and when the head adds or changes
-  `.claude/settings*.json`, `.mcp.json` or anything under `plugins/lens-review/hooks/`, the owner reads that change
-  before the run starts. Always `--permission-mode auto`, never `dontAsk` or a bypass mode: the tool calls the run
-  makes on pull request content go through the classifier, and `dontAsk` refuses any tool not allowed in advance.
-  `--strict-mcp-config` keeps the user's MCP servers out of a review that is posted publicly. Before posting, check
-  `jq '{is_error, permission_denials}' <run log>`: a blocked call is skipped and the report still looks whole. The
-  report and payload land in a run directory under the scratch directory. A draft is reviewed like any other pull
-  request.
+- Code review: invoke `/lens-review <n> auto` as a skill in the session doing the work, from any checkout on any
+  branch, so the owner sees the run: never a headless `claude -p` run and never a background one. The skill fetches
+  the pull request's head and reads its files from the run directory, so no worktree of the pull request is needed.
+  `gh` in the skill's commands needs `GH_TOKEN` (section 1). The session runs in auto mode or with prompts, never a
+  bypass mode, so the review's tool calls on pull request content are judged. A refused or blocked call is skipped
+  and the report still looks whole, so before posting, read the refused calls the report's coverage names; on one, run
+  again or say in the posted review what went unread. The report and payload land in a run directory under the
+  profile's output root. A draft is reviewed like any other pull request.
+- A pull request that changes `plugins/lens-review` is reviewed by its own copy of the plugin, in a session started
+  in its checkout with `claude --plugin-dir plugins/lens-review`. That session loads the head's project settings,
+  hooks and plugin code, which run outside the auto-mode classifier, so it is started only on a branch of this
+  repository, never a fork, and when the head adds or changes `.claude/settings*.json`, `.mcp.json` or anything under
+  `plugins/lens-review/hooks/`, the owner reads that change before the session starts.
 - Posting: the bot posts the result as one comment-type review from the payload the skill wrote. Run the second
   command only when GitHub rejects the first, which it does for the whole review when one comment misses the diff. It
   posts the report as the body alone, cut below GitHub's 65,536-character limit for a review body. No tooling posts
   images; evidence is text. Before either, run what would be posted through `review-text.sh` (section 1): the payload's
-  text (`jq -r '.body, .comments[].body'`) and `review.md` in one file. The reviewers load the user's own `CLAUDE.md`
+  text (`jq -r '.body, .comments[].body'`) and `review.md` in one file. The reviewer loads the user's own `CLAUDE.md`
   and memory, so a finding can quote them; on a hit, edit both files and check again.
 
   ```

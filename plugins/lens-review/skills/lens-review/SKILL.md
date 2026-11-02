@@ -1,198 +1,144 @@
 ---
 name: lens-review
-description: Runs the repository's own reviewer panel over one change (the working tree, a commit, a range or a pull request), merges what the reviewers find into a single graded report, and delivers it as the repo's review profile directs. Use for "/lens-review", "review my changes", "review this diff", "review PR 12", "run the panel", "look over this branch before I merge", or any request to check a change for defects before it ships.
-argument-hint: "[<sha> | <ref> | <a>..<b> | <pr number>] [<id>,<id>... | default | auto] [-- <open question>]"
+description: Reviews one change (the working tree, a commit, a range or a pull request) through the repository's lenses in a single reviewer pass, and delivers one graded report as the repo's review profile directs. Use for "/lens-review", "review my changes", "review this diff", "review PR 12", or any request to check a change for defects before it ships.
+argument-hint: "[<sha> | <ref> | <a>..<b> | <pr number>] [auto | default | <id>,<id>...]"
 context: fork
-allowed-tools: Bash, Read, Write, Agent
+agent: lens-review
+allowed-tools: Bash, Read, Write
 ---
 
 # /lens-review
 
 Arguments: `$ARGUMENTS`
 
-You coordinate a panel of reviewer agents over one diff and turn their output into one report. You do not review the
-code yourself, and you never edit it. The reviewers and the profile are the repository's own; this skill carries only
-how a panel runs.
+You are reviewing one change. Nobody who wrote it is in this conversation, and nothing here tells you what to
+conclude.
 
-## Why this runs in a fork
-
-Whoever calls this skill usually wrote the change. If findings were weighed and merged in that session, the author's
-own reasoning would shape which ones survive. So the skill runs in a forked context, and three things follow:
-
-- You cannot ask the caller anything. When you need an answer to continue, end with the question; the caller answers
-  by invoking the skill again.
-- Only your final message leaves the fork. Put everything the caller needs in it.
-- In an interactive session that message goes to the lead session, even when a teammate invoked the skill.
-
-## 1. Read the profile and the brief
+## 1. Read the profile and the brief, and parse the arguments
 
 Read `.claude/code-review-profile.md` in full. If it does not exist, stop and say so, pointing at "Setting a
-repository up" below: every later step depends on it.
+repository up" in `${CLAUDE_PLUGIN_ROOT}/README.md`.
 
-Read the reviewer brief, `${CLAUDE_PLUGIN_ROOT}/skills/lens-review/references/reviewer-brief.md`. Every dispatch
-prompt carries it (step 6), so a reviewer's own file need not point at it. If it cannot be read, stop and say so:
-reviewers dispatched without it run without its checks.
-
-## 2. Parse the arguments
+Read the reviewer brief, `${CLAUDE_PLUGIN_ROOT}/skills/lens-review/references/reviewer-brief.md`, and follow it. If it
+cannot be read, stop and say so.
 
 Every argument is optional.
 
 - **Target**, at most one token. None means the working tree. A token containing `..` is a range. A token of digits
   only is a pull request number. Anything else is a commit, given as a SHA or a ref.
-- **Panel**. `default`, `auto`, or reviewer ids separated by commas. `default` and `auto` are panel words, never
-  targets, even when they come first.
-- **Deep pass**. Text after `--` is one open question from an earlier run. Run only the profile's deep-pass reviewer,
-  scoped to that question (step 6).
+- **Lenses**: `auto`, `default`, or lens ids separated by commas. None means `auto`. `auto` and `default` are lens
+  words, never targets, even when they come first.
 
-List the pool. Every `.md` under `.claude/agents/code-review/`, at any depth, is a reviewer, and its id is its
-frontmatter `name`:
-
-```bash
-find .claude/agents/code-review -name '*.md' -print0 | while IFS= read -r -d '' file; do
-    printf '%s\t%s\t%s\n' "$(sed -n '2,/^---$/s/^name: //p' "$file")" \
-        "$(sed -n '2,/^---$/s/^model: //p' "$file")" "$file"
-done
-```
-
-Stop, with the reason, when an id given does not match one in the pool (list the valid ids), or when the panel is
-`default` and the profile names no always-on reviewers.
-
-## 3. Fetch the diff once
+## 2. Fetch the diff once
 
 Fetch it with the profile's commands, into a new directory for this run, and never read it into your own context
-except to inline it in step 6. Fill in the first four values and run:
+except to review it. Fill in the first five values and run:
 
 ```bash
 set -euo pipefail
 label='worktree'                # worktree, the SHA or ref, the range, or pr-<n>
 pr=''                           # the number, for a pull request target
-fetch() { git diff HEAD; }      # the profile's command, for any other target
+commit=''                       # the SHA or ref, for a commit target; a range's right side, or HEAD when it is empty
+fetch() { git diff HEAD; }      # the profile's command, for any target but a pull request
 root="<output root>"            # the profile's "Output" root; a variable it names stays a shell expansion
 mkdir -p "$root"
 dir=$(mktemp -d "$root/$(printf '%s' "$label" | tr -c 'A-Za-z0-9._-' '_')-$(date -u +%Y%m%dT%H%M%SZ)-XXXX")
 if [[ -n $pr ]]; then
-    # The payload names the head the diff came from, so fetch again if a push lands in between.
+    # The diff and the files read beside it must come from one head, so fetch again if a push lands in between.
     for _ in 1 2 3; do
         before=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
         gh pr diff "$pr" > "$dir/patch.diff"
         after=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
         if [[ $before == "$after" ]]; then
-            printf '%s\n' "$after" > "$dir/head-sha"
+            commit=$after
             break
         fi
     done
-    # Reviewers read files on disk, so a checkout of another commit puts their line numbers on the wrong text. In a
-    # merge checkout the PR head is HEAD^2.
-    if [[ -s $dir/head-sha ]]; then
-        head=$(< "$dir/head-sha")
-        if [[ $(git rev-parse HEAD) != "$head" && $(git rev-parse -q --verify 'HEAD^2' || true) != "$head" ]]; then
-            echo "the checkout is not the PR head $head"
-            exit 4
-        fi
-    fi
+    [[ -n $commit ]] || { echo "the pull request's head kept moving"; exit 4; }
     gh pr view "$pr" --json commits,body > "$dir/pr.json"
+    # The URL is the repository gh resolved the pull request against, whatever the local remotes are named, and gh's
+    # login is the fetch's only credential, so it works where git itself authenticates only over SSH.
+    if ! git cat-file -e "$commit^{commit}" 2> /dev/null; then
+        git -c credential.helper= -c credential.helper='!gh auth git-credential' \
+            fetch --quiet --no-tags "$(gh repo view --json url --jq .url)" "refs/pull/$pr/head"
+    fi
 else
     fetch > "$dir/patch.diff"
 fi
 [[ -s $dir/patch.diff ]] || { echo "empty diff"; exit 3; }
+if [[ -n $commit ]]; then
+    # The checkout may hold another commit, whose files would put the review's line numbers on the wrong text.
+    git rev-parse --verify "$commit^{commit}" > "$dir/head-sha"
+    mkdir "$dir/tree"
+    git archive "$(< "$dir/head-sha")" | tar -x -C "$dir/tree"
+    # Claude Code loads the instruction files and skills of a directory it reads in, and reading a symlink follows it
+    # out of the tree, so none of them stays.
+    find "$dir/tree" \( -type l -o -iname CLAUDE.md -o -iname CLAUDE.local.md -o -iname AGENTS.md \
+        -o -ipath '*/.claude/rules' -o -ipath '*/.claude/skills' -o -ipath '*/.claude/commands' \) \
+        -prune -exec rm -rf {} +
+fi
 echo "$dir"
 ```
 
-An empty diff ends the run with that message, and so does a checkout that is not the PR's head: check out the head, or
-its merge, and run again.
-Every later block runs in a new shell, so start each by setting `dir` to the path this one printed. When a pull
-request has no `head-sha`, it kept moving; leave `commit_id` out of the payload.
+An empty diff ends the run with that message, and so does a pull request whose head moved on each of three fetches:
+run again.
+Every later block runs in a new shell, so give each the path this one printed as its run directory. For every target
+but the working tree, the run directory also holds `head-sha`, the commit the diff ends at, and `tree/`, that commit's
+files.
 
-A merge commit as target prints a combined diff, which the index below cannot read. Fetch it as the range
+A merge commit as target prints a combined diff, which the index below refuses. Fetch it as the range
 `<sha>^1..<sha>` instead and say so in the report.
 
-## 4. Index the diff without reading it
+## 3. Index the diff without reading it
 
-Run this on the run directory. It writes `manifest.tsv` (per file: lines added, lines removed, the file's line span
-inside `patch.diff`, and the path) and `hunks.txt` (per file: the new-side line spans its hunks cover, comma
-separated, or `-` for none, then the path). It prints the patch's line count.
-
-<!-- Claude Code replaces a dollar sign before a digit with an argument when it loads a skill, so every awk field in
-this file carries a backslash, which the load removes. -->
+Run the index on the run directory:
 
 ```bash
-set -euo pipefail
-dir='<run directory>'
-cd "$dir"
-# git apply reads a patch without applying it and prints each file's raw path, NUL-terminated, so quoting and the
-# tab git adds after a path with a space never reach the parsing below. Its records come in patch order.
-mapfile -d '' records < <(git apply --numstat -z < patch.diff)
-# One line per `diff --git` section: its first and last line in patch.diff, then the new-side spans of its hunks.
-mapfile -t sections < <(awk '
-    /^diff --git / { n++; start[n] = NR; if (n > 1) end[n - 1] = NR - 1; next }
-    n && /^@@+ / && match(\$0, /\+[0-9]+(,[0-9]+)?/) {
-        k = split(substr(\$0, RSTART + 1, RLENGTH - 1), part, ",")
-        count = k > 1 ? part[2] + 0 : 1
-        if (count > 0) spans[n] = spans[n] (spans[n] == "" ? "" : ",") part[1] "-" (part[1] + count - 1)
-    }
-    END { end[n] = NR; for (i = 1; i <= n; i++) printf "%d\t%d\t%s\n", start[i], end[i], spans[i] }
-' patch.diff)
-if (( ${#records[@]} != ${#sections[@]} )); then
-    echo "index: git apply found ${#records[@]} files but the patch has ${#sections[@]} sections" >&2
-    exit 1
-fi
-: > manifest.tsv
-: > hunks.txt
-for i in "${!records[@]}"; do
-    added=${records[i]%%$'\t'*}
-    rest=${records[i]#*$'\t'}
-    removed=${rest%%$'\t'*}
-    path=${rest#*$'\t'}
-    # Both files hold one tab-separated record per line, so such a path could forge a record of its own.
-    if [[ $path == *[$'\t\n']* ]]; then
-        echo "index: a path holds a tab or newline, which the index cannot carry: ${path@Q}" >&2
-        exit 1
-    fi
-    IFS=$'\t' read -r start end spans <<< "${sections[i]}"
-    printf '%s\t%s\t%s-%s\t%s\n' "$added" "$removed" "$start" "$end" "$path" >> manifest.tsv
-    printf '%s\t%s\n' "${spans:--}" "$path" >> hunks.txt
-done
-wc -l < patch.diff
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/diff_index.py" index '<run directory>'
 ```
+
+It writes `manifest.tsv` (per file: lines added, lines removed, the file's line span inside `patch.diff`, and the
+path) and `hunks.txt` (per file: the new-side line spans its hunks cover, comma separated, or `-` for none, then the
+path) into the run directory, and prints the patch's line count.
 
 If it fails, stop and report the error; a review placed from a wrong index puts comments on the wrong lines.
 
-## 5. Choose the panel
+## 4. Choose your lenses
 
-Match the manifest's paths, and the kind of code they hold, against the profile's routing table.
+Your lens directory is `.claude/agents/lens-review/reference/`. List its lenses, each id with its one-line summary:
 
-- **Deep pass** (`--` given): the profile's deep-pass reviewer alone, dispatched without a proposal.
-- **No panel argument and no `--`**: dispatch nothing. End with a proposal: one or two sentences on what the diff
-  touches; each reviewer you would pick, with one reason and its frontmatter model; each reviewer you would leave
-  out, with why; and the exact command that runs your pick. Any size of panel is fine.
-- **`default`**: the profile's always-on reviewers. Still run the routing match, and list in the report every row that
-  matched but was not run.
-- **`auto`**: the always-on reviewers plus every routing match, dispatched without asking. The report says why each
-  reviewer ran and why each one in the pool did not.
-- **An id list**: exactly those reviewers.
+```bash
+for file in .claude/agents/lens-review/reference/*.md; do
+    [[ -e $file ]] || { echo "no lenses"; exit 3; }
+    id=${file##*/}
+    printf '%s\t%s\n' "${id%.md}" "$(sed -n '2,$ { /[^[:space:]]/ { p; q; } }' "$file")"
+done
+```
 
-## 6. Dispatch
+- **`auto`**: choose from what the change touches alone; the profile's default lenses play no part. Apply every lens
+  whose routing row in the profile's "Lenses" section matches the diff's paths or the kind of code they hold; those
+  rows are binding. Apply any other lens your judgment says this change needs.
+- **`default`**: exactly the profile's default lenses. The report also names each routing row that matched and so
+  did not run.
+- **An id list**: exactly those lenses.
 
-Send every reviewer in one message, as parallel Agent calls with `subagent_type` set to its id and
-`run_in_background: false`. A reviewer left in the background would report after the fork has ended. Do not pass
-`model`; each reviewer's frontmatter sets it.
+The report says which lenses you applied, which you left out and why.
 
-Each prompt holds these parts and nothing else:
+Stop, with the reason, when the directory holds no lens, when an id given is not one listed (name the valid ids), or
+when the lenses are `default` and the profile names none.
 
-1. The reviewer brief from step 1, copied word for word.
-2. The task: review this diff.
-3. Where the diff is: `$dir/patch.diff`, plus `$dir/pr.json` for a pull request. When the patch is under the
-   profile's inline threshold, put the diff itself in the prompt instead.
-4. The severity rubric below.
-5. The response format below.
-6. The profile's "Standing instructions" section, copied word for word.
-7. The contents of `manifest.tsv`.
+## 5. Review
 
-Leave out any word on depth, focus, priorities or what you expect to be found. Each reviewer's own file sets those,
-and the reviewer brief tells them to refuse a prompt that steers.
+Review the diff with the lenses you chose, as your instructions describe, reading the files around each hunk.
 
-For a deep pass, send only the profile's deep-pass reviewer, with the parts above plus the open question quoted as
-the earlier report gave it and the files it involves.
+For every target but the working tree, read those files in the run directory's `tree/`, never in the checkout, which
+may hold another commit. Reach history through the commit in `head-sha`: `git show <sha>:<path>`,
+`git grep <pattern> <sha>`, `git log <sha>`. Some paths are missing from `tree/`: every symlink, any path the target's
+`.gitattributes` marks `export-ignore`, and the files Claude Code would load as instructions or skills (`CLAUDE.md`,
+`CLAUDE.local.md`, `AGENTS.md`, `.claude/rules/`, `.claude/skills/` and `.claude/commands/`, at any depth). A path
+marked `export-subst` is rewritten there. Read any of these with `git show <sha>:<path>`, which prints a symlink's
+target rather than following it. The profile and the lenses stay the checkout's, so a change under review cannot
+rewrite its own review.
 
 **Severity rubric.**
 - Critical (Must Fix): merging it ships something broken, unsafe or private.
@@ -202,31 +148,19 @@ the earlier report gave it and the files it involves.
 Use the profile's "Severity calibration" for what each level looks like here.
 
 **Response format.**
-- Findings, each with: severity; location as `path:line`, using the new-side line number; the claim; what goes
+- Findings, each with: severity; location as `path:line`, using the path the diff names rather than its copy in
+  `tree/`, and the new-side line number; the claim; what goes
   wrong because of it; and the evidence, meaning the lines opened and what they show.
 - Open questions: what is unknown, why it matters, and what would settle it.
 - Coverage: each file read whole, each read in part with the line ranges, and each skipped. When the diff was on
-  disk, give the line ranges of `patch.diff` read.
+  disk, give the line ranges of `patch.diff` read. Name every tool call that was refused or blocked and what it would
+  have read, or say there was none.
 
-## 7. Synthesize
+The report has a Critical, a High and a Normal heading, each present even when empty, then the open questions, then
+which lenses you applied and left out, then coverage: each changed file read whole, read in part (with ranges) or
+skipped.
 
-This is a single pass. No reviewer checks another's work, and you do not send findings back out.
-
-1. **Coverage.** Compare the reviewers' coverage with the manifest. Name every changed file no reviewer read, and,
-   when the diff was on disk, every file whose span in `patch.diff` no reviewer read in full.
-2. **Open questions.** Settle one only from another reviewer's output, and cite it. Every other question goes in the
-   report with the command that sends it to the deep-pass reviewer: `/lens-review <target> -- <question>`.
-3. **Wrong findings.** Drop any finding that is plainly wrong on its own evidence, and list each dropped one with the
-   reason.
-4. **Duplicates.** Merge findings that describe the same defect into one, crediting every reviewer that raised it.
-5. **Grades.** Grade the combined set again with the rubric and the profile's calibration. When reviewers disagree,
-   the deep-pass reviewer's grade weighs most. For each finding whose final severity differs from a reviewer's, add
-   one line saying what changed and why.
-
-The report has a Critical, a High and a Normal heading, each present even when empty. It names every reviewer that
-ran, and says what the panel did not cover; never write it as if a small panel saw everything.
-
-## 8. Deliver
+## 6. Deliver
 
 Follow the profile's "Delivery" section.
 
@@ -234,21 +168,11 @@ Whether a finding goes inline is a lookup, not a judgment. A finding goes inline
 span listed for its path in `hunks.txt`; every other finding stays in the body alone.
 
 Never type a path into a command: paths come from the diff, and a file name can carry shell syntax. Instead, use
-Write to create `$dir/locations.tsv` with one line per finding: its line number, a tab, then its path exactly as
-`hunks.txt` gives it. Then run this, which prints each of those lines prefixed with `inline` or `body`:
+Write to create `locations.tsv` in the run directory with one line per finding: its line number, a tab, then its path
+exactly as `hunks.txt` gives it. Then run this, which prints each of those lines prefixed with `inline` or `body`:
 
 ```bash
-dir='<run directory>'
-awk -F'\t' '
-    { path = \$0; sub(/^[^\t]*\t/, "", path) }
-    FNR == NR { if (\$1 != "-") spans[path] = \$1; next }
-    {
-        line = \$1 + 0; hit = 0
-        n = split(spans[path], span, ",")
-        for (i = 1; i <= n; i++) if (split(span[i], b, "-") == 2 && line >= b[1] + 0 && line <= b[2] + 0) hit = 1
-        print (hit ? "inline" : "body") "\t" \$0
-    }
-' "$dir/hunks.txt" "$dir/locations.tsv"
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/lens-review/scripts/diff_index.py" place '<run directory>'
 ```
 
 Check any JSON you write with `jq empty <file>` before ending.
@@ -257,12 +181,3 @@ Check any JSON you write with `jq empty <file>` before ending.
   severity, and every path written.
 - When it names none, end with the report itself.
 - When delivery fails and the profile gives no fallback for it, end with the report and the error.
-
-## Setting a repository up
-
-A repository supplies the profile and the pool; this plugin supplies the rest. Templates for both are in
-`${CLAUDE_PLUGIN_ROOT}/skills/lens-review/references/`:
-
-- `profile-template.md`, for `.claude/code-review-profile.md`.
-- `reviewer-template.md`, for each reviewer under `.claude/agents/code-review/`. They are project agents, so the
-  bare id in `subagent_type` spawns them.
