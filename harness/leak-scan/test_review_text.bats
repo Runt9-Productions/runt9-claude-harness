@@ -9,7 +9,7 @@ setup() {
     review_text=$BATS_TEST_DIRNAME/review-text.sh
 
     # The stub goes first on PATH, so the real claude is never reached. It keeps the bundle, agent definitions, model
-    # and effort it was given, and passes with every input read to its last line.
+    # and effort it was given, and reports every input read to its last line, with the findings in ~/findings or none.
     export HOME=$BATS_TEST_TMPDIR/home
     mkdir -p "$HOME/.local/bin"
     export PATH=$HOME/.local/bin:$PATH
@@ -29,7 +29,8 @@ read=
 for file in *; do
     read+="{\"file\":\"$file\",\"lines\":$(wc -l < "$file")},"
 done
-echo "{\"structured_output\":{\"findings\":[],\"open_questions\":[],\"read\":[${read%,}]}}"
+findings=$(cat "$HOME/findings" 2> /dev/null || echo '[]')
+echo "{\"structured_output\":{\"findings\":$findings,\"open_questions\":[],\"read\":[${read%,}]}}"
 EOF
     chmod +x "$HOME/.local/bin/claude"
 
@@ -56,11 +57,17 @@ EOF
     [ -f "$HOME/bundle/reviewer-brief.md" ]
 }
 
-@test "the review runs the whole lens as its prompt, under the lens-review agent's model at high effort" {
+@test "the review runs the trusted ref's whole lens as its prompt, under its lens-review agent's model at high effort" {
     printf 'Example title\n' > "$body"
+    trusted_lens=$(< "$lens")
+    # A checked-out branch with its own lens and model, which the review must not use.
+    git -C "$repo" switch -q -c topic
+    printf '# Lens: public-leak\n\nTopic summary.\n' > "$lens"
+    sed -i 's/^model: .*/model: topic-model/' "$repo/.claude/agents/lens-review/lens-review.md"
+    git -C "$repo" -c user.name=Dev -c user.email=dev@example.com commit -qam topic
     run "$review_text" "$body" "$repo" main
     [ "$status" -eq 0 ]
-    [ "$(jq -r '."public-leak".prompt' "$HOME/agents.json")" == "$(< "$lens")" ]
+    [ "$(jq -r '."public-leak".prompt' "$HOME/agents.json")" == "$trusted_lens" ]
     [ "$(jq -r '."public-leak".description' "$HOME/agents.json")" == "Example summary." ]
     [ "$(< "$HOME/model")" == example-model ]
     [ "$(< "$HOME/effort")" == high ]
@@ -74,4 +81,19 @@ EOF
     [ "$status" -eq 1 ]
     [[ $output == *"email-address  (body):1  someone${at}acme-corp.com"* ]]
     [ ! -d "$HOME/bundle" ]
+}
+
+@test "a review finding not rated Normal exits 1" {
+    printf 'Example title\n' > "$body"
+    echo '[{"severity":"High","location":"a","text":"t","reveals":"r"}]' > "$HOME/findings"
+    run "$review_text" "$body" "$repo" main
+    [ "$status" -eq 1 ]
+    [[ $output == *"leak-review: raised 1 question(s) or finding(s) not rated Normal"* ]]
+}
+
+@test "a check that did not run exits 2, not 1" {
+    printf 'Example title\n' > "$body"
+    run "$review_text" "$body" "$repo" missing
+    [ "$status" -eq 2 ]
+    [[ $output == *"trusted ref 'missing' does not exist"* ]]
 }

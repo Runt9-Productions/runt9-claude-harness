@@ -137,7 +137,7 @@ pre-push gate trusts it, so a build never writes to it.
 
   ```
   CODE_REVIEW_OUTPUT=<scratch dir> claude -p "/lens-review <n> auto" --plugin-dir plugins/lens-review \
-    --permission-mode auto --strict-mcp-config --no-session-persistence --output-format json > <run log>
+    --permission-mode auto --strict-mcp-config --output-format json > <run log>
   ```
 
   The run loads the head's own project settings, hooks and plugin code, and those run outside the auto-mode

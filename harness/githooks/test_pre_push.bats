@@ -45,7 +45,6 @@ read="[${read%,}]"
 finding() { printf '[{"severity":"%s","location":"a","text":"t","reveals":"r"}]' "$1"; }
 case $mode in
     normal|crash) output="{\"findings\":$(finding Normal),\"open_questions\":[],\"read\":$read}" ;;
-    high) output="{\"findings\":$(finding High),\"open_questions\":[],\"read\":$read}" ;;
     unknown) output="{\"findings\":$(finding Low),\"open_questions\":[],\"read\":$read}" ;;
     question) output="{\"findings\":[],\"open_questions\":[{\"location\":\"a\",\"text\":\"t\",\"question\":\"q\"}],\"read\":$read}" ;;
     short) output="{\"findings\":[],\"open_questions\":[],\"read\":$read}" ;;
@@ -122,18 +121,14 @@ leak="write to someone@acme-corp"".com"
     [[ $output == *"leak-review: did not run (claude exited 0)"* ]]
 }
 
-@test "High finding: refused" {
-    push high "$remote" "$(new_branch)"
-    [ "$status" -eq 1 ]
-    [ "$calls" -eq 1 ]
-    [[ $output == *"raised 1 question(s) or finding(s) not rated Normal"* ]]
-}
-
-@test "finding of a severity outside the schema: refused" {
+@test "finding of a severity outside the schema: refused, and not kept as a pass" {
     push unknown "$remote" "$(new_branch)"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
     [[ $output == *"raised 1 question(s) or finding(s) not rated Normal"* ]]
+    push fail "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 1 ]
 }
 
 @test "open question: refused" {
@@ -193,6 +188,19 @@ leak="write to someone@acme-corp"".com"
     [ "$calls" -eq 1 ]
 }
 
+@test "a pass under another lens-review model is not reused" {
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 0 ]
+    git -C "$repo" switch -q main
+    sed -i 's/^model: .*/model: example-model/' "$repo/.claude/agents/lens-review/lens-review.md"
+    commit "change the model"
+    git -C "$repo" push -q "$remote" main
+    git -C "$repo" switch -q claude/change
+    push fail "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 1 ]
+}
+
 @test "a pass for other content is not reused" {
     push normal "$remote" "$(new_branch)"
     [ "$status" -eq 0 ]
@@ -228,15 +236,6 @@ leak="write to someone@acme-corp"".com"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 0 ]
     [[ $output == *"cannot fetch the default branch of"* ]]
-}
-
-@test "shape finding: refused before review" {
-    echo "$leak" > "$repo/leak.txt"
-    commit leak
-    push normal "$remote" "$(new_branch)"
-    [ "$status" -eq 1 ]
-    [ "$calls" -eq 0 ]
-    [[ $output == *"the leak scan flagged this push"* ]]
 }
 
 @test "a local remote-tracking ref at the leak does not take it out of the check" {
@@ -296,6 +295,32 @@ leak="write to someone@acme-corp"".com"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 0 ]
     [[ $output == *"has no reviewer brief"* ]]
+}
+
+@test "default branch whose lens-review agent has no frontmatter: refused" {
+    git -C "$repo" switch -q main
+    printf '# Reviewer\nmodel: example-model\n' > "$repo/.claude/agents/lens-review/lens-review.md"
+    commit "drop the frontmatter"
+    git -C "$repo" push -q "$remote" main
+    git -C "$repo" switch -q claude/change
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"lens-review.md in "*" does not start with frontmatter"* ]]
+}
+
+@test "a push the scan cannot read, such as an octopus merge: refused before review" {
+    for side in one two; do
+        git -C "$repo" switch -q -c "$side" main
+        echo "$side" > "$repo/$side.txt"
+        commit "$side"
+    done
+    git -C "$repo" switch -q claude/change
+    git -C "$repo" merge -q --no-edit one two
+    push normal "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"pre-push: the leak scan did not run, push refused"* ]]
 }
 
 @test "the review gets identities, what a merge adds, tag messages and ref names" {
@@ -392,6 +417,14 @@ agent_push() {
     [[ $output == *"user.name='$bot_name'"*" rebase --exec "*" bot/main"* ]]
 }
 
+@test "claude.botEmail without claude.botName, from a session: refused, even for a deletion" {
+    git -C "$repo" config claude.botEmail "$bot_email"
+    agent_push fail "$remote" "(delete) $zero refs/heads/claude/change $(git -C "$repo" rev-parse main)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 0 ]
+    [[ $output == *"claude.botEmail is set but claude.botName is not; set both or neither"* ]]
+}
+
 @test "a commit with the bot's email but not its name, from a session: refused" {
     use_bot
     echo "a misnamed line" > "$repo/misnamed.txt"
@@ -427,6 +460,20 @@ agent_push() {
     git -C "$repo" fetch -q "$remote" '+refs/heads/*:refs/remotes/bot/*'
     git -C "$repo" switch -q claude/bot
     git -C "$repo" "${as_bot[@]}" merge -q --no-edit main
+    agent_push normal "$remote" "$(update_of refs/heads/claude/bot "$pushed")"
+    [ "$status" -eq 0 ]
+    [ "$calls" -eq 1 ]
+}
+
+@test "the owner's commit already on the remote branch, which no remote-tracking ref has: allowed" {
+    use_bot
+    echo "an owner fix" > "$repo/fix.txt"
+    commit fix
+    # Pushed by URL with no remote configured, so no remote-tracking ref records it.
+    git -C "$repo" push -q "$remote" claude/bot
+    pushed=$(git -C "$repo" rev-parse HEAD)
+    echo "another bot line" >> "$repo/bot.txt"
+    commit more "${as_bot[@]}"
     agent_push normal "$remote" "$(update_of refs/heads/claude/bot "$pushed")"
     [ "$status" -eq 0 ]
     [ "$calls" -eq 1 ]

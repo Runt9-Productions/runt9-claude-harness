@@ -21,9 +21,11 @@ Draw the breaks from the rules, not from the tests. List each rule the spec or d
 code states, and write one break per rule: the smallest change to production code that a plausible wrong reading of
 that rule would make. Apply each break, run the tests with the profile's run command, and restore the code before the
 next one: from git for a file that was clean, and from your copy for a file that was dirty. Check each restore with
-`git status` and `git diff`. A break that turns no test red marks a rule the tests do not check: fix or add a test
-until one does. Use which tests each break turned red for criteria 3 and 4, and judge names and scenarios by reading.
-Run the breaks again after your changes.
+`git status` and `git diff`. Run the breaks and the tests in the foreground and wait for them: the review ends with
+your turn, and a command still running in the background then is cut off with its break left in the code. A break
+that turns no test red marks a rule the tests do not check: fix or add a test until one does. Use which tests each
+break turned red for criteria 3 and 4, and judge names and scenarios by reading. Run the breaks again after your
+changes.
 
 Fix the tests to match the truth and never weaken an assertion to make one pass. Leave production code exactly as you
 found it, and report its defects.
