@@ -16,7 +16,8 @@ The settled design for #55. The rulings behind it are in [[Test Review Breaks De
   files into a directory outside the working tree, review, report.
 - **Breaks from the rules.** The reviewer lists each rule the spec or documented contract of the production code
   states and makes one break per rule, the smallest change a plausible wrong reading of it would make. It applies
-  each break, runs the tests with the profile's run command, and restores before the next: from git for a clean file,
+  a batch of breaks no single test could catch more than one of, runs the tests that exercise the broken code with the
+  profile's run command, and restores before the next batch: from git for a clean file,
   from its copy for a dirty one, checked with `git status` and `git diff`. Breaks and tests run in the foreground,
   since the review ends with the reviewer's turn and a command still running in the background is cut off with its
   break left in the code. A break no test catches marks a rule the tests miss, and the reviewer fixes or adds a test
