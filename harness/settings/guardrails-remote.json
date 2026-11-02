@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(sftp *)",
+      "Bash(slogin *)",
+      "Bash(autossh *)",
+      "Bash(sshpass *)",
+      "Bash(ssh-copy-id *)",
+      "Bash(mosh *)",
+      "Bash(rsync *:*)"
+    ]
+  }
+}
