@@ -1,7 +1,7 @@
 # develop
 
 A development process for one ticket at a time: investigation and an effort estimate, a spec, a worktree, one
-engineer teammate per task, verification, a draft pull request, test and panel review, fixes, an optional external
+engineer teammate per task, verification, a draft pull request, test and code review, fixes, an optional external
 review, a reviewer guide, hand-off, and the owner's review loop. Everything that differs between repositories comes
 from a development profile the repository keeps.
 
@@ -15,7 +15,7 @@ from a development profile the repository keeps.
 It depends on the `delegation` plugin, whose skill governs every teammate and whose templates are the starting point
 for the implementer, verifier and research agents. A template is not an agent: copy each one a repository uses into
 its `.claude/agents/`, fill in every placeholder (that plugin's README, "Adopting the templates", says how), and name
-the ids it is spawned as in the profile's section 5. The `lens-review` plugin runs the panel review in step 7 unless
+the ids it is spawned as in the profile's section 5. The `lens-review` plugin runs the code review in step 7 unless
 the profile names another, so install it unless every repository brings its own. The `test-review` skill is
 optional: step 7 runs it when it is installed and the repository has a test-review profile.
 

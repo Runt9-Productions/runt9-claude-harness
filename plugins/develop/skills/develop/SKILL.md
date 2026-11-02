@@ -179,16 +179,15 @@ separate issue.
 Run section 6's pre-push step. Check how far the branch lags its base, and merge the base in if section 2 asks for
 that. Push, then open a draft pull request against the base with its body read from a file, and start the CI watch.
 
-### 7. Test review, then panel review
+### 7. Test review, then code review
 
 If the repository has `.claude/test-review-profile.md`, the `test-review` skill is installed and section 9 does not
 opt out, run `/test-review` first.
 
-Then run the panel review section 9 names on the pull request, the way it says: invoked locally with a panel, or
-through a CI trigger such as a label. Where it names none, the panel is the `lens-review` skill; if that is not
-installed, stop and name the `lens-review` plugin. Invoked without a panel, `lens-review` stops after proposing one,
-on purpose. Invoke it again with that proposal plus any additions, and give a reason for each proposed reviewer left
-out.
+Then run the code review section 9 names on the pull request, the way it says: invoked locally, or through a CI
+trigger such as a label. Where it names none, the code review is the `lens-review` skill; if that is not installed,
+stop and name the `lens-review` plugin. Invoked without a lens argument, `lens-review` runs `auto`: every lens whose
+routing row matches the change, and any other the reviewer judges it needs, with no default lenses added.
 
 Author notes wait until this step is done, because reviewers anchor on them. A review that runs after step 10 is
 told those notes are not established fact. The review runs in a fork and returns its report as text: save it in the
@@ -214,7 +213,7 @@ from the current code.
 ### 9. External review
 
 Only when section 9 names an external reviewer: file an owner task to request the review, wait for it, and treat
-its findings as in step 8. A clean panel is no reason to skip it, because outside reviewers find what the panel does
+its findings as in step 8. A clean code review is no reason to skip it, because outside reviewers find what it does
 not.
 
 ### 10. Reviewer guide
