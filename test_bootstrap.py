@@ -86,9 +86,9 @@ class Sandbox:
         self.git(self.root, "init", "--quiet", "-b", "main", str(repo))
         return repo
 
-    def run(self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None):
+    def run(self, *args: str, stdin: str | None = None, env: dict[str, str] | None = None, flags: tuple[str, ...] = ()):
         return subprocess.run(
-            [sys.executable, str(self.clone / "bootstrap.py"), *args],
+            [sys.executable, *flags, str(self.clone / "bootstrap.py"), *args],
             cwd=self.root,
             env={**self.env, **(env or {})},
             input=stdin,
@@ -118,6 +118,7 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.git(tmp_path, "init", "--quiet", "-b", "main", str(box.clone))
     box.git(box.clone, "remote", "add", "origin", str(tmp_path / "origin.git"))
     shutil.copy(SCRIPT, box.clone / "bootstrap.py")
+    shutil.copytree(SCRIPT.parent / "bootstrap", box.clone / "bootstrap", ignore=shutil.ignore_patterns("__pycache__"))
     box.write(".claude-plugin/marketplace.json", json.dumps(MARKETPLACE).encode())
     box.set_version("0.1.0")
     box.write("harness/githooks/pre-push", PRE_PUSH, 0o755)
@@ -251,6 +252,12 @@ def test_older_python_stops_with_one_line(sandbox: Sandbox) -> None:
 
     assert result.returncode == 1
     assert result.stderr == "bootstrap: needs Python 3.12 or newer, and this is 3.11.9\n"
+
+
+def test_runs_with_the_script_directory_off_sys_path(sandbox: Sandbox) -> None:
+    result = sandbox.run("--list", flags=("-P",))
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize("variable", ["CLAUDE_CODE_SESSION_ID", "CLAUDECODE"])
