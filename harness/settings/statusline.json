@@ -1,7 +1,6 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "python3 \"$HOME/.claude/harness/current/statusline/statusline.py\"",
-    "padding": 2
+    "command": "python3 \"$HOME/.claude/harness/current/statusline/statusline.py\""
   }
 }

@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
 """Claude Code status line: model, branch and session name, then context and rate-limit meters.
 
-Reads the session JSON Claude Code passes on stdin. Whatever this prints, a traceback included, becomes the status
-line, so every field is optional and any failure prints an empty line.
+Reads the session JSON Claude Code passes on stdin and prints two lines, such as:
+
+    [Model X·high] | ⎇ main | ✳ session name
+    [ctx ██░░░░░░░░ 25% (50k/200k)] | [5hr ██████░░░░ 60% (22:13)] | [1wk █████████░ 90% (11/14)]
+
+Only stdout becomes the status line, so every field is optional. On any failure stdout is an empty line and the
+traceback goes to stderr, which `claude --debug` logs.
+
+Runs under whatever `python3` the shell finds, so it keeps to Python 3.9.
 """
 
+from __future__ import annotations
+
 import json
+import math
 import os
 import re
 import subprocess
 import sys
+import traceback
+from collections.abc import Callable
 from datetime import datetime
 
 RESET = "\033[0m"
@@ -22,8 +34,9 @@ CYAN = "\033[36m"
 FILLED = "█"
 EMPTY = "░"
 
-# (minimum terminal columns, bar width), widest first.
-BAR_TIERS = ((100, 10), (91, 8), (0, 6))
+# (minimum terminal columns, bar width), widest first. Each minimum fits line two at that bar width with every meter at
+# 100% and its longest detail.
+BAR_TIERS = ((100, 10), (91, 8), (85, 6), (0, 4))
 
 # With less room than this, the session name is left out rather than cut to a stub.
 MIN_SESSION_NAME = 12
@@ -57,8 +70,8 @@ def colour(pct: float) -> str:
 
 def bar(pct: float, width: int) -> str:
     pct = max(0.0, min(100.0, pct))
-    # Truncated, not rounded, so the bar reads full only at 100%; any usage above 0 shows one block.
-    filled = int(pct / 100 * width)
+    # Floored like the label, so neither reads full before 100%; any usage above 0 shows one block.
+    filled = math.floor(pct * width / 100)
     if pct > 0 and filled == 0:
         filled = 1
     return f"{colour(pct)}{FILLED * filled}{DIM}{EMPTY * (width - filled)}{RESET}"
@@ -73,7 +86,7 @@ def human(n: int) -> str:
 
 
 def meter(label: str, pct: float, detail: str, width: int) -> str:
-    body = f"{DIM}{label}{RESET} {bar(pct, width)} {colour(pct)}{pct:.0f}%{RESET}"
+    body = f"{DIM}{label}{RESET} {bar(pct, width)} {colour(pct)}{math.floor(pct)}%{RESET}"
     if detail:
         body += f" {DIM}({detail}){RESET}"
     return f"{DIM}[{RESET}{body}{DIM}]{RESET}"
@@ -88,12 +101,20 @@ def git_branch() -> str | None:
     return out.stdout.strip() or None
 
 
-def reset_time(timestamp: float, as_clock: bool) -> str:
+def clock(when: datetime) -> str:
+    return when.strftime("%H:%M")
+
+
+def month_day(when: datetime) -> str:
+    return f"{when.month}/{when.day}"
+
+
+def reset_time(timestamp: float, show: Callable[[datetime], str]) -> str:
     try:
         when = datetime.fromtimestamp(timestamp)
     except (TypeError, ValueError, OverflowError, OSError):
         return ""
-    return when.strftime("%H:%M") if as_clock else f"{when.month}/{when.day}"
+    return show(when)
 
 
 def context_pct(window: dict) -> float | None:
@@ -147,12 +168,12 @@ def line_two(data: dict) -> str:
         meters.append(meter("ctx", pct, f"{human(used)}/{human(size)}" if size else "", width))
 
     limits = data.get("rate_limits") or {}
-    for key, label, as_clock in (("five_hour", "5hr", True), ("seven_day", "1wk", False)):
+    for key, label, show in (("five_hour", "5hr", clock), ("seven_day", "1wk", month_day)):
         limit = limits.get(key) or {}
         used_pct = limit.get("used_percentage")
         if used_pct is None:
             continue
-        resets = reset_time(limit["resets_at"], as_clock) if limit.get("resets_at") else ""
+        resets = reset_time(limit["resets_at"], show) if limit.get("resets_at") else ""
         meters.append(meter(label, float(used_pct), resets, width))
 
     return f" {DIM}|{RESET} ".join(meters)
@@ -163,6 +184,7 @@ def main() -> None:
         data = json.load(sys.stdin)
         lines = [line for line in (line_one(data), line_two(data)) if line]
     except Exception:
+        traceback.print_exc()
         lines = [""]
     for line in lines:
         print(line)
