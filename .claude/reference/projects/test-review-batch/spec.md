@@ -53,7 +53,7 @@ The settled design for #55. The rulings behind it are in [[Test Review Breaks De
 - `plugins/test-review/skills/test-review/scripts/`: removed.
 - `plugins/test-review/skills/test-review/references/profile-template.md` and `.claude/test-review-profile.md`: no
   section for the script.
-- `plugins/test-review/README.md`, `.claude-plugin/plugin.json`: what ships; version 0.2.1.
+- `plugins/test-review/README.md`, `.claude-plugin/plugin.json`: what ships; version 0.2.2.
 - `.claude/agents/engineer.md` and `plugins/delegation/templates/engineer.md`: the testing lines; delegation 0.1.2.
 - `plugins/lens-review/`: the skill, agent template, six lens templates, profile template, reviewer brief and README;
   version 0.2.0.
