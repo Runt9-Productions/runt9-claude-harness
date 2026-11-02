@@ -72,4 +72,16 @@ Updating: when `harness/harness.json`'s version rises, check out `main`, pull an
 imported yet and `settings:<name>` for a settings fragment that is new or has changed. For a plugin, run
 `claude plugin update <name>@runt9`; running `bootstrap.py` again does not update a plugin already installed.
 
+## Clearing merged branches
+
+Pull requests here are squash-merged, so `git branch -d` refuses a merged branch. From any checkout, run
+`scripts/prune-merged.sh` to delete each local branch whose tip is exactly the head of a pull request for it that
+GitHub reports as merged, after removing its worktree, and to prune remote-tracking refs whose branch is gone. It asks
+GitHub through your own `gh` login and remotes, prints a line for each worktree removed, branch deleted or kept with
+the reason, and ref pruned, and ends with `git worktree prune`. A remote it cannot reach is skipped with git's error
+and the run exits 1. A branch with later commits, or whose worktree has
+changes or is locked, is kept, as are the branches of the main worktree and of the one it runs from. Untracked files
+that git ignores, such as `.claude/output`, go with a removed worktree. `--dry-run` prints the same lines and changes
+nothing.
+
 MIT licensed.
