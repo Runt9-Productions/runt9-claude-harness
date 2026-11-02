@@ -9,6 +9,7 @@ your own settings, not here.
 | `guardrails-stores` | `permissions.deny` rules for `Read` of common credential stores, private keys and keystores. |
 | `guardrails-automode` | Auto-mode `environment`, `allow` and `soft_deny` rules; each rule's label names what it covers. |
 | `guardrails-sandbox` | A sandbox configuration, shipped with `enabled: false`. |
+| `statusline` | `statusLine`, running `harness/statusline/statusline.py`: model, effort, branch and session name, then meters for context and the 5-hour and 7-day rate limits. A status line you already set is kept; take yours out first to use this one. |
 
 The three name credential stores in the form each layer reads, so their lists differ: `Read` deny rules take globs
 anywhere on disk, the sandbox takes paths, and the auto-mode classifier reads prose. The
