@@ -38,7 +38,8 @@ STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
-sys.exit(int(os.environ.get("EXAMPLE_CLAUDE_EXIT", "0")))
+fail = os.environ.get("EXAMPLE_CLAUDE_FAIL")
+sys.exit(3 if fail and sys.argv[1:3] == ["plugin", fail] else 0)
 """
 
 
@@ -672,6 +673,8 @@ def test_plugin_writes_its_templates_as_example_files_and_lists_them(sandbox: Sa
     sandbox.write("plugins/example-one/local.example/example-rules.md", b"example rules template\n")
     sandbox.write("plugins/example-one/local.example/example-nested/example-deep.md", b"example deep template\n")
     sandbox.commit("Add example templates")
+    sandbox.write("plugins/example-one/local.example/example-rules.md", b"example uncommitted edit\n")
+    sandbox.write("plugins/example-one/local.example/example-untracked.md", b"example untracked\n")
     local = sandbox.home / ".claude/local"
 
     result = sandbox.run("plugin:example-one", "plugin:example-two")
@@ -682,19 +685,22 @@ def test_plugin_writes_its_templates_as_example_files_and_lists_them(sandbox: Sa
     assert sorted(path for path in local.rglob("*") if path.is_file()) == sorted([rules, deep])
     assert rules.read_bytes() == b"example rules template\n"
     assert deep.read_bytes() == b"example deep template\n"
+    assert f"plugin:example-one: wrote {rules}\n" in result.stdout
     installed, _, listed = result.stdout.partition(TEMPLATES_HEADER)
     assert installed.endswith("Installed plugin:example-one, plugin:example-two.\n")
     assert sorted(listed.splitlines()) == sorted([str(rules), str(deep)])
 
 
 def test_plugin_template_keeps_what_exists_and_writes_through_a_linked_local(sandbox: Sandbox) -> None:
-    for name in ("example-kept.md", "example-filled.md"):
+    for name in ("example-kept.md", "example-filled.md", "example-linked.md"):
         sandbox.write(f"plugins/example-one/local.example/{name}", b"example template\n")
     sandbox.commit("Add example templates")
     own = sandbox.root / "example-own-local/example-one"
     own.mkdir(parents=True)
     (own / "example-kept.md.example").write_bytes(b"example own edit\n")
     (own / "example-filled.md").write_bytes(b"example own rules\n")
+    link_target = sandbox.root / "example-link-target"
+    (own / "example-linked.md.example").symlink_to(link_target)
     local = sandbox.home / ".claude/local"
     local.parent.mkdir()
     local.symlink_to(own.parent)
@@ -706,18 +712,36 @@ def test_plugin_template_keeps_what_exists_and_writes_through_a_linked_local(san
     assert (own / "example-kept.md.example").read_bytes() == b"example own edit\n"
     assert (own / "example-filled.md").read_bytes() == b"example own rules\n"
     assert (own / "example-filled.md.example").read_bytes() == b"example template\n"
+    assert not os.path.lexists(link_target)
     assert f"kept {local / 'example-one/example-kept.md.example'}, which already exists" in result.stdout
+    assert f"kept {local / 'example-one/example-linked.md.example'}, which already exists" in result.stdout
     assert result.stdout.endswith(f"{TEMPLATES_HEADER}{local / 'example-one/example-filled.md.example'}\n")
     assert rerun.returncode == 0, rerun.stderr
     assert TEMPLATES_HEADER not in rerun.stdout
 
 
-def test_failing_claude_command_stops_the_run(sandbox: Sandbox) -> None:
-    result = sandbox.run("plugin:example-one", "plugin:example-two", env={"EXAMPLE_CLAUDE_EXIT": "3"})
+def test_symlink_in_plugin_templates_stops_the_plugin_with_none_written(sandbox: Sandbox) -> None:
+    sandbox.write("plugins/example-one/local.example/example-rules.md", b"example rules template\n")
+    (sandbox.clone / "plugins/example-one/local.example/example-link").symlink_to("example-rules.md")
+    sandbox.commit("Add an example template symlink")
+
+    result = sandbox.run("plugin:example-one")
 
     assert result.returncode == 1
-    assert f"claude {' '.join(MARKETPLACE_ADD)} exited 3" in result.stderr
-    assert sandbox.claude_calls() == [MARKETPLACE_ADD]
+    assert "plugins/example-one/local.example/example-link in HEAD is not a regular file (mode 120000)" in result.stderr
+    assert not (sandbox.home / ".claude/local").exists()
+
+
+def test_failing_claude_command_stops_the_run_before_its_templates(sandbox: Sandbox) -> None:
+    sandbox.write("plugins/example-one/local.example/example-rules.md", b"example rules template\n")
+    sandbox.commit("Add an example template")
+
+    result = sandbox.run("plugin:example-one", "plugin:example-two", env={"EXAMPLE_CLAUDE_FAIL": "install"})
+
+    assert result.returncode == 1
+    assert "claude plugin install example-one@example-market exited 3" in result.stderr
+    assert sandbox.claude_calls() == [MARKETPLACE_ADD, ["plugin", "install", "example-one@example-market"]]
+    assert not (sandbox.home / ".claude/local").exists()
 
 
 @pytest.mark.parametrize("in_settings", [False, True], ids=["shell", "settings"])
