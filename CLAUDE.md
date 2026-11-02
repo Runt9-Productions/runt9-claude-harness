@@ -69,7 +69,9 @@ Changes to this repository, fixes and new features alike, are tracked as GitHub 
 
 A plugin reads machine-local data from `~/.claude/local/<plugin>/` and treats a missing file as empty; a skill in
 `harness/skills/` does the same from `~/.claude/local/<skill>/`. Examples,
-with synthetic content only, live in `plugins/<name>/local.example/`, or beside the file in `harness/`. The user's own
+with synthetic content only, live in `plugins/<name>/local.example/`, or beside the file in `harness/`. After
+installing a plugin, `bootstrap.py` copies each file in its `local.example/` to `~/.claude/local/<plugin>/` as a
+`<file>.example` template, which no skill reads, and never overwrites one that exists. The user's own
 machine-local rules go in `~/.claude/local/local.md`, which `harness/claude-md-template.md` imports; it is theirs to
 write, so no example ships.
 

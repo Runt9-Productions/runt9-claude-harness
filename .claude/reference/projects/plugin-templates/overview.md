@@ -18,7 +18,7 @@ reads and has a starting copy to fill in. It ends when that merges with tests at
 
 ## Where it stands
 
-- [status] Spec written; the build waits for a session started in the worktree.
+- [status] Task 01 built and staged with its tests and docs; it waits for the lead's review and commit.
 
 ## Goal
 

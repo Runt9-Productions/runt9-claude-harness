@@ -29,7 +29,7 @@ The per-file map for issue #37, with the rulings in [[Plugin Templates Decisions
 
 | File | Change |
 |---|---|
-| `bootstrap/harness.py` | The listing half of `export_tree` (`:46-63`), `ls-tree` plus the mode check, becomes a function both it and the template copy call; `export_tree` keeps its `ships` filter and its refusal of an empty source. |
+| `bootstrap/harness.py` | The listing half of `export_tree` (`:46-63`), `ls-tree` plus the mode check, becomes a function both it and the template copy call; `export_tree` keeps its `ships` filter and its refusal of an empty source. The mode check now runs before the filter, so a link that would not ship also stops the harness; HEAD has none. |
 | `bootstrap/plugins.py` | `LOCAL_DIR = CLAUDE_DIR / "local"`, the template copy, and its call at the end of `install_plugin`. |
 | `bootstrap/core.py` | `Run.templates`. |
 | `bootstrap.py` | The closing list. |

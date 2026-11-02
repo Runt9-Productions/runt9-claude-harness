@@ -82,6 +82,10 @@ def bootstrap(args: argparse.Namespace) -> None:
             raise Stop(f"{component.name} failed: {error}; installed before it: {installed}") from error
         run.installed.append(component.name)
     print(f"Installed {', '.join(run.installed)}.")
+    if run.templates:
+        print("Templates to fill in, saved without .example to take effect:")
+        for template in run.templates:
+            print(template)
 
 
 def main() -> int:

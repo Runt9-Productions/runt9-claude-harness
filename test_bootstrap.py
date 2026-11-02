@@ -25,6 +25,7 @@ MARKETPLACE = {
 }
 MARKETPLACE_ADD = ["plugin", "marketplace", "add", "Runt9-Productions/runt9-claude-harness"]
 PRE_PUSH = b"#!/bin/sh\necho example pre-push\n"
+TEMPLATES_HEADER = "Templates to fill in, saved without .example to take effect:\n"
 BLOCK_START = "<!-- runt9-claude-harness: bootstrap.py keeps the lines from here to the end marker -->"
 BLOCK_END = "<!-- runt9-claude-harness: end -->"
 EXAMPLE_IMPORT = "@~/.claude/harness/current/fragments/example-rules.md"
@@ -665,6 +666,50 @@ def test_plugins_run_the_marketplace_commands_in_order(sandbox: Sandbox) -> None
         ["plugin", "install", "example-one@example-market"],
         ["plugin", "install", "example-two@example-market"],
     ]
+
+
+def test_plugin_writes_its_templates_as_example_files_and_lists_them(sandbox: Sandbox) -> None:
+    sandbox.write("plugins/example-one/local.example/example-rules.md", b"example rules template\n")
+    sandbox.write("plugins/example-one/local.example/example-nested/example-deep.md", b"example deep template\n")
+    sandbox.commit("Add example templates")
+    local = sandbox.home / ".claude/local"
+
+    result = sandbox.run("plugin:example-one", "plugin:example-two")
+
+    assert result.returncode == 0, result.stderr
+    rules = local / "example-one/example-rules.md.example"
+    deep = local / "example-one/example-nested/example-deep.md.example"
+    assert sorted(path for path in local.rglob("*") if path.is_file()) == sorted([rules, deep])
+    assert rules.read_bytes() == b"example rules template\n"
+    assert deep.read_bytes() == b"example deep template\n"
+    installed, _, listed = result.stdout.partition(TEMPLATES_HEADER)
+    assert installed.endswith("Installed plugin:example-one, plugin:example-two.\n")
+    assert sorted(listed.splitlines()) == sorted([str(rules), str(deep)])
+
+
+def test_plugin_template_keeps_what_exists_and_writes_through_a_linked_local(sandbox: Sandbox) -> None:
+    for name in ("example-kept.md", "example-filled.md"):
+        sandbox.write(f"plugins/example-one/local.example/{name}", b"example template\n")
+    sandbox.commit("Add example templates")
+    own = sandbox.root / "example-own-local/example-one"
+    own.mkdir(parents=True)
+    (own / "example-kept.md.example").write_bytes(b"example own edit\n")
+    (own / "example-filled.md").write_bytes(b"example own rules\n")
+    local = sandbox.home / ".claude/local"
+    local.parent.mkdir()
+    local.symlink_to(own.parent)
+
+    result = sandbox.run("plugin:example-one")
+    rerun = sandbox.run("plugin:example-one")
+
+    assert result.returncode == 0, result.stderr
+    assert (own / "example-kept.md.example").read_bytes() == b"example own edit\n"
+    assert (own / "example-filled.md").read_bytes() == b"example own rules\n"
+    assert (own / "example-filled.md.example").read_bytes() == b"example template\n"
+    assert f"kept {local / 'example-one/example-kept.md.example'}, which already exists" in result.stdout
+    assert result.stdout.endswith(f"{TEMPLATES_HEADER}{local / 'example-one/example-filled.md.example'}\n")
+    assert rerun.returncode == 0, rerun.stderr
+    assert TEMPLATES_HEADER not in rerun.stdout
 
 
 def test_failing_claude_command_stops_the_run(sandbox: Sandbox) -> None:
