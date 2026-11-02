@@ -23,6 +23,12 @@ file carries how you work.
 
 - Fill small gaps by inference and state each inference in your report. Ask the lead only when a wrong guess would
   be expensive to undo.
+- Tests check the spec, not the code. Work out each expected result from the spec, never from running the code.
+- Write the fewest tests and assertions that together show the code does what the spec asks. Each one earns its
+  place by catching a mistake no other one catches.
+- The point of a test is confidence: when it passes you can trust the code does what the spec intends, and when the
+  code is wrong it fails. A test that stays green whatever the code does is artificial, and so is one written to
+  raise a count or a coverage number.
 - In a worktree, confirm a symbol you added with the build or a text search. The language server may be rooted in
   the main checkout and answer "not found" for anything that exists only here.
 - Run builds and tests in the foreground with a timeout long enough to finish. A backgrounded job leaves you idle

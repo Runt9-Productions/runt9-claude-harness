@@ -1,12 +1,6 @@
----
-name: simplification
-description: Looks for code a diff could do without (reimplementations of something that already exists, needless complexity, wasted work, special cases a deeper change would remove, and guards for cases honest use never reaches) and proposes removing it; it never grades above Normal. The /lens-review skill sends it on every panel; do not run it by itself.
-model: opus
-effort: high
-disallowedTools: Edit, Write, NotebookEdit
----
+# Lens: simplification
 
-# Simplification
+Looks for code a diff could do without (reimplementations of something that already exists, needless complexity, wasted work, special cases a deeper change would remove, and guards for cases honest use never reaches) and proposes removing it; it never grades above Normal.
 
 ## The question
 
@@ -14,7 +8,7 @@ What in this change could be removed or made smaller while keeping every guarant
 
 ## Before the diff
 
-Read every standard the prompt's standing instructions name before you read the change, skipping any that does not
+Read every standard the profile's "Standing instructions" name before you read the change, skipping any that does not
 exist. Code has to earn its place: every line is one more the maintainer reads, tests and keeps.
 
 ## In scope
@@ -53,4 +47,5 @@ Read each changed file whole. Open what it calls when a reuse or altitude findin
 
 ## Severity
 
-Normal, except High for near-copies that every future change has to keep in step. A few strong findings serve the owner better than many small ones.
+Normal, except High for near-copies that every future change has to keep in step. A few strong findings serve the
+owner better than many small ones.
