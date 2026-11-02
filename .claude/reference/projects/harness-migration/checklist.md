@@ -9,12 +9,12 @@ tags: [migration, harness]
 
 ## Status
 
-- **Live item:** 09: board (#54) and handoff (#53) are merged, and away is in progress as #67; context-budget is
-  dropped (#73, closed as not planned)
-- **How far along:** 01 to 08 merged; 07 without its judge mod, which is tabled; 10's pieces in this repository are
-  filed as #74 and #75
-- **Blocked on:** nothing outside the project
-- **Last moved:** 2026-10-31
+- **Live item:** 10: no-progress-reminder (#94), the status line (#93) and the preferences and remote-shell settings
+  fragments (#96) are open as drafts; the mod engine notes (#97) and the GitHub App identity component (#75) are not
+  started
+- **How far along:** 01 to 09 merged; 07 without its judge mod, which is tabled
+- **Blocked on:** the three drafts wait for the review plugins' tuning before their reviews
+- **Last moved:** 2026-11-01
 
 ## Build Order
 
@@ -33,6 +33,6 @@ same process. 04 and 05 stack on 03: 04 adds a bootstrap component, and 05 needs
 - [x] 06 Delegation and the dev-process plugins, shipped as four pull requests
 - [x] 07 Guardrails, plus bootstrap's settings merge (judge mod tabled)
 - [x] 08 CLAUDE.md template and fragments
-- [ ] 09 board, handoff and away (context-budget dropped)
-- [ ] 10 no-progress-reminder and the GitHub App identity component; the remaining machine-local hooks are dropped or stay local, outside this repository
+- [x] 09 board, handoff and away (context-budget dropped)
+- [ ] 10 no-progress-reminder, the status line, settings fragments, the mod engine notes and the GitHub App identity component; the remaining machine-local hooks are dropped or stay local, outside this repository
 - [ ] 11 Cleanup: remove the source copies of what moved
