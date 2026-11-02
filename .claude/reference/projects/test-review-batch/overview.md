@@ -33,8 +33,9 @@ Designs ruled out:
 
 ## Where it stands
 
-- [status] test-review and lens-review are built, checked on a planted-defect bench, test-reviewed and lens-reviewed;
-  the review fixes and the reviewer guide are next
+- [status] PR #90 is out of draft at 6c545e7 with CI green: test-review and lens-review are built, the built
+  lens-review caught 19 of 24 planted defects with no noise on a review benchmark, and the test review, the lens
+  review's fixes and the reviewer guide are in. Left: the owner's review, the merge, then `bootstrap.py harness` straight after
 - [trap] The pre-push gate reads `public-leak.md` from the default branch at the path its installed version knows, so
   `bootstrap.py harness` runs right after this pull request merges: an installed harness 0.1.18 refuses every push
   before the merge, and 0.1.17 refuses every push after it
