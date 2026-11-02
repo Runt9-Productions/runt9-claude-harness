@@ -59,5 +59,9 @@ The skill ends by inlining `~/.claude/local/delegation/additions.md`, for rules 
 context thresholds, a shared build directory, where reports go. Where an addition conflicts with the skill, the
 addition wins. A missing file shows as `(none)`. The plugin never creates or changes the file.
 
+`python3 bootstrap.py plugin:delegation`, run from a clone of the repository, writes `local.example/additions.md` to
+`~/.claude/local/delegation/additions.md.example`, unless that path already exists. The skill does not read that name,
+so the additions take effect only once you save a filled copy as `additions.md`.
+
 The skill's `allowed-tools` grants `Read(~/.claude/local/delegation/**)`, which the injection needs to read a file
 outside the working directory.

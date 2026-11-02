@@ -16,6 +16,7 @@ class Run:
     repos: list[Path]
     picked: list[str] = field(default_factory=list)
     installed: list[str] = field(default_factory=list)
+    templates: list[Path] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

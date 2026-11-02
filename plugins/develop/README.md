@@ -59,5 +59,9 @@ Machine-local data lives in `~/.claude/local/develop/`, and a missing file count
 - `additions.md` holds rules for `develop` on this machine.
 - `effort-estimate.md` holds rules for `effort-estimate` on this machine.
 
+`python3 bootstrap.py plugin:develop`, run from a clone of the repository, writes each file in `local.example/` to
+this directory with `.example` added to its name, unless that path already exists. No skill reads a `.example` file,
+so a template takes effect only once you save a filled copy without `.example`.
+
 Each skill inlines its files when it loads, and a rule there wins over the skill's own where they conflict. Each
 skill's `allowed-tools` grants `Read(~/.claude/local/develop/**)`, which reading outside the working directory needs.

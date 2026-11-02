@@ -32,7 +32,7 @@ With no component named it asks about each one. The components, in install order
 | `skills` | A link `~/.claude/skills/<name>` to `~/.claude/harness/current/skills/<name>` for each skill, and removes links to a skill the installed version no longer has. Other skills are never touched. |
 | `fragment:<name>` | The line `@~/.claude/harness/current/fragments/<name>.md`, one component per file in `harness/fragments/`, added to a block in `~/.claude/CLAUDE.md` between two `runt9-claude-harness` marker lines. It shows the diff and asks before writing, adds the block at the end when there is none, and never changes a line outside it. A missing `~/.claude/CLAUDE.md` starts from the installed harness's `claude-md-template.md` where it has one. A file that already imports the fragment, anywhere, is left alone. A `CLAUDE.md` that links elsewhere keeps its link, and the file it names changes. |
 | `settings:<name>` | `~/.claude/harness/current/settings/<name>.json`, one component per `.json` file in `harness/settings/`, merged into `~/.claude/settings.json`: a list gains the fragment's entries it lacks, an object gains the keys it lacks, and a value already set is never replaced. It shows the diff and asks before writing, and changes nothing the fragment does not name. The file is rewritten in its own indentation with its keys in order; other whitespace and a duplicate key are not kept. A missing `settings.json` is written from the fragment alone; a `settings.json` that links elsewhere keeps its link. |
-| `plugin:<name>` | `claude plugin marketplace add Runt9-Productions/runt9-claude-harness`, then `claude plugin install <name>@runt9`. Plugins come from GitHub, never from this clone. |
+| `plugin:<name>` | `claude plugin marketplace add Runt9-Productions/runt9-claude-harness`, then `claude plugin install <name>@runt9`. The plugin comes from GitHub, never from this clone. Its templates come from this clone's HEAD: each file in `plugins/<name>/local.example/` is written to `~/.claude/local/<name>/<path>.example` unless that path already exists, and the run ends by listing the ones written. No skill reads a `.example` file, so a template takes effect only once you save a filled copy without `.example`. A link or submodule under `local.example/` stops the run before anything installs. |
 
 Everything else goes through `current`, so a new version takes effect for hooks and skills at once, and the leak
 gate's pass cache in `~/.claude/harness/state/` survives it. To change an installed skill, add rules in
@@ -58,8 +58,9 @@ rest stop at that component:
   same run), or a `~/.claude/settings.json` that is not a JSON object. At that component, a key the fragment holds as
   a list or an object that `settings.json` holds as something else, which you fix by hand. Answering no to the diff
   stops the run there.
-- `plugin:<name>`: `claude` missing from `PATH`. It warns when `CLAUDE_CODE_PLUGIN_DIRS` is set, since a plugin that
-  loads replaces the installed one of the same name.
+- `plugin:<name>`: before anything installs, `claude` missing from `PATH`, or a link or submodule under
+  `plugins/<name>/local.example/` in HEAD. It warns when `CLAUDE_CODE_PLUGIN_DIRS` is set, since a plugin that loads
+  replaces the installed one of the same name.
 
 `hooks-path`, `skills`, the fragments and the settings need the harness installed first, in the same run or an earlier
 one. A component installed before a later one failed stays installed. Git runs without `GIT_DIR`, `GIT_WORK_TREE` and

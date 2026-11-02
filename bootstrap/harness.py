@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from bootstrap.core import CLAUDE_DIR, CLONE, Run, Stop, answered_yes, warn
@@ -43,24 +44,41 @@ def ships(path: str) -> bool:
     return not any(PurePosixPath(path).match(pattern) for pattern in NOT_SHIPPED)
 
 
-def export_tree(commit: str, source: str, target: Path) -> None:
-    """Writes the blobs under `source` in `commit` that ship to `target`, bypassing every filter and attribute."""
+@dataclass(frozen=True)
+class TreeFile:
+    path: str
+    mode: int
+    blob: str
+
+
+def tree_files(commit: str, source: str) -> list[TreeFile]:
+    """Every file under `source` in `commit`, empty when it has none. Raises Stop for a link or a submodule there."""
     listing = git(CLONE, "ls-tree", "-r", "-z", "--full-tree", commit, "--", source)
-    entries = [entry for entry in listing.split(b"\0") if entry]
-    if not entries:
-        raise Stop(f"{commit} has no {source}")
-    for entry in entries:
+    files = []
+    for entry in listing.split(b"\0"):
+        if not entry:
+            continue
         meta, raw_path = entry.split(b"\t", 1)
         mode, _, blob = meta.decode().split()
         path = os.fsdecode(raw_path)
-        if not ships(path):
-            continue
         if mode not in FILE_MODES:
             raise Stop(f"{path} in {commit} is not a regular file (mode {mode}); only regular files install")
-        destination = target / Path(path).relative_to(source)
+        files.append(TreeFile(path, FILE_MODES[mode], blob))
+    return files
+
+
+def export_tree(commit: str, source: str, target: Path) -> None:
+    """Writes the blobs under `source` in `commit` that ship to `target`, bypassing every filter and attribute."""
+    files = tree_files(commit, source)
+    if not files:
+        raise Stop(f"{commit} has no {source}")
+    for file in files:
+        if not ships(file.path):
+            continue
+        destination = target / Path(file.path).relative_to(source)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(git(CLONE, "cat-file", "blob", blob))
-        destination.chmod(FILE_MODES[mode])
+        destination.write_bytes(git(CLONE, "cat-file", "blob", file.blob))
+        destination.chmod(file.mode)
 
 
 def harness_version(commit: str) -> str:
