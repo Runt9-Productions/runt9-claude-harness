@@ -29,6 +29,9 @@ does not weigh the findings, and only the final message comes back.
 - **Templates**, in `skills/lens-review/references/`: `profile-template.md`, `agent-template.md`, and lenses in
   `lenses/`: `correctness`, `test-quality`, `code-health`, `simplification`, `staleness-and-debris` and
   `guard-security`.
+- **A script**, `skills/lens-review/scripts/diff_index.py` with its pytest tests. `diff_index.py index` indexes the
+  fetched diff into a per-file manifest and the hunk spans findings are placed against, and `diff_index.py place`
+  says whether each finding's line falls inside a hunk and so can go inline.
 
 ## Setting a repository up
 
@@ -45,8 +48,8 @@ Adding or changing a lens touches only its file and, where it should run by defa
 
 ## Needs
 
-`bash` 4.4 or newer, `git`, `jq`, `awk` and `sed`. `gh`, authenticated, for pull request targets and for a profile
-that posts reviews to GitHub.
+`bash`, Python 3.12 or newer, `git`, `jq` and `sed`. `gh`, authenticated, for pull request targets and for a
+profile that posts reviews to GitHub.
 
 The profile keeps the path `.claude/code-review-profile.md`: it names the activity, not the plugin.
 
