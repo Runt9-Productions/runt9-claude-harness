@@ -15,7 +15,7 @@ source copies of what moved.
 
 ## Where it stands
 
-- [status] Steps 01 to 09 are merged; 10 is under way.
+- [status] Steps 01 to 09 are merged; in 10, all but #75 and #97 are merged.
 
 ## Documents
 
