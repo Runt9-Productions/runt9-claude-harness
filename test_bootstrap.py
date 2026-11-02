@@ -118,6 +118,7 @@ def sandbox(tmp_path: Path) -> Sandbox:
     box.git(tmp_path, "init", "--quiet", "-b", "main", str(box.clone))
     box.git(box.clone, "remote", "add", "origin", str(tmp_path / "origin.git"))
     shutil.copy(SCRIPT, box.clone / "bootstrap.py")
+    shutil.copytree(SCRIPT.parent / "bootstrap", box.clone / "bootstrap", ignore=shutil.ignore_patterns("__pycache__"))
     box.write(".claude-plugin/marketplace.json", json.dumps(MARKETPLACE).encode())
     box.set_version("0.1.0")
     box.write("harness/githooks/pre-push", PRE_PUSH, 0o755)
