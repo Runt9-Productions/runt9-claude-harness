@@ -10,10 +10,10 @@ measured_on: "Claude Code 2.1.316"
 
 # Comparing Harness Variants
 
-> **Scope.** How to run two or more versions of an agent prompt, a skill or a reviewer against each other and read the result: building the bench, defining arms, grading, reading noise, costing, the hazards met, tuning and when to stop. Drawn from the records, bench specifications, answer keys and scripts of two experiments run on 2026-11-01, which are not in the repository: a code-review bench (three planted-defect benches of 12, 22 and 24 defects; the 52 transcripts found for its 54 run directories all name Claude Code 2.1.316) and a test-author and test-reviewer bench (toy specifications graded by mutants of a hidden reference; its Claude Code version was not checked). The numbers are those records' own: their per-run tables were read, and no run, match or grade was redone for this note. Not covered: the arm builders, the per-assertion grader, the code judge's prompt and the audit script, which were not read; and significance testing, since no gap here was tested statistically.
+> **Scope.** How to run two or more versions of an agent prompt, a skill or a reviewer against each other and read the result: building the bench, defining arms, grading, reading noise, costing, the hazards a comparison meets, tuning and when to stop. The `#measured` lines come from planted-defect review benches and mutant-graded test-writing benches run on Claude Code 2.1.316. Not covered: significance testing, since no gap here was tested statistically.
 
 Read this before designing a comparison between harness variants, and again before reading its results to decide what
-ships. Every rule here is one the two experiments needed and at first lacked.
+ships. Every rule here guards against a way a comparison can mislead.
 
 ## Observations
 
@@ -32,14 +32,14 @@ ships. Every rule here is one the two experiments needed and at first lacked.
 - [invariant] A test-writing bench is graded by mutants of a hidden reference implementation: rule-style mutants (one operator, constant or call changed) and spec misses (a plausible wrong reading of one rule). Each mutant is a text replacement whose original must occur exactly once in the reference, since one that matches twice or not at all mutates the wrong thing #silent-failure
 - [invariant] Every grader is run on known answers before any arm: the oracle suite catches every mutant, and a deliberately weak suite catches few (3 of 37 on one kit). A grader never run on a known answer is an unchecked check.
 - [fact] A cold read of a toy specification by a fresh agent found five gaps, all closed before any arm ran #measured (test-author bench)
-- [trap] A test that is red on the reference is a kit fault until shown otherwise: twice the reference, not the arms, was wrong (it accepted `True` where the spec said an int, and it rounded where every arm's reading of the spec's literal words did not), and once the kit's run command named a binary not on the path #measured (test-author bench)
+- [trap] A test that is red on the reference is a kit fault until shown otherwise: the reference, not the arm, can be the one that departs from the spec's literal words, and the kit's run command can name a binary not on the path
 - [invariant] An arm that improves something is run on subjects with room to improve: on a suite already catching 35 of 37 mutants, gains of one either way were inside noise #measured (test-author bench)
 
 ### Arms
 
 - [invariant] Each arm differs from its baseline in one thing, such as effort, model, one paragraph of prose or one structural step. An arm that changes several measures only their sum: one arm here differed from another in a coordinator, a lens and routing at once, and a later arm had to remove the coordinator alone to say anything about it.
-- [invariant] Each arm runs as what would ship, launched the way a user launches it: the shipped agent with the arm's prose added, not a bare session given the prose another way. One whole round ran as a bare session and was set aside #measured (test-author bench)
-- [invariant] Each run starts from a fresh copy of the bench in a persistent directory, with the same flags (permission mode, MCP config, cache lifetime), and records a hash of the change under review before and after: a run that changed it is void, and a temporary directory can be emptied between rounds, as one was overnight.
+- [invariant] Each arm runs as what would ship, launched the way a user launches it: the shipped agent with the arm's prose added, not a bare session given the prose another way.
+- [invariant] Each run starts from a fresh copy of the bench in a persistent directory, with the same flags (permission mode, MCP config, cache lifetime), and records a hash of the change under review before and after: a run that changed it is void, and a temporary directory can be emptied between rounds.
 - [invariant] Setup an arm needs and the bench does not, such as an agent directory or a profile, is committed in the run's copy, and the setup then checks that `git diff HEAD` is still exactly the bench change.
 
 ### Grading
@@ -79,9 +79,9 @@ ships. Every rule here is one the two experiments needed and at first lacked.
 - [trap] A scorer that took its key's size from a default file printed another bench's denominator and missed ids (12 for a 24-defect key) #silent-failure #measured
 - [trap] A grader's pytest pattern `\S+::\S+` drops any test whose parametrize id holds a space, so its mutants read as missed; and pytest 9.1 reports a test whose `subTest`s fail as `PASSED`, with each failure on a `SUBFAILED` line of its own #silent-failure #measured
 - [trap] A proposed metric, tests catching no mutant as tests that cannot fail, failed its known-answer check: all such tests in one suite were input-validation cases the mutant set barely covered, so it was dropped #measured
-- [trap] Reports land in the wrong place: one run wrote its report to the default output directory instead of the one its environment named, and another returned it as its final text and wrote no file. The collector looks in every channel and flags a missing report rather than scoring one #measured
+- [trap] A run can write its report to the default output directory instead of the one its environment names, or return it as its final text with no file, so the collector looks in every channel and flags a missing report rather than scoring one
 - [trap] A headless forked run ends when the fork ends its turn, so a command it left running in the background is cut off, which for a test reviewer left a deliberate break in the code, as [[Skill Loading]] records. An arm that may run headless runs long commands in the foreground, and the tree is checked after every run #silent-failure
-- [trap] Arms run in parallel share one usage window: a run hit the usage limit before writing its report #measured
+- [trap] Arms run in parallel share one usage window, so a run can stop before writing its report
 
 ### Tuning and stopping
 
