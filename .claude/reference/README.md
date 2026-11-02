@@ -21,6 +21,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Test Review Breaks](projects/test-review-batch/overview.md) | resuming #55, the cost of test-review's breaks |
 | [Away Plugin](projects/away-plugin/overview.md) | building or changing the `away` plugin (issue #67) |
 | [Bootstrap Split](projects/bootstrap-split/overview.md) | splitting `bootstrap.py` into its package (issue #14) |
+| [Plugin Templates](projects/plugin-templates/overview.md) | changing how bootstrap copies a plugin's `local.example/` templates (issue #37) |
 
 ## Local conventions
 
