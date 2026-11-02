@@ -59,8 +59,9 @@ List production files with uncommitted changes:
 git status --porcelain -uall
 ```
 
-Any entry that is neither a test file nor one of the profile's helpers is production and dirty. Copy each one aside
-before your first break: restoring a dirty file from git would destroy uncommitted work.
+Any entry that is neither a test file nor one of the profile's helpers is production and dirty. Copy each one into a
+directory outside the working tree before your first break: restoring a dirty file from git would destroy uncommitted
+work.
 
 ## 5. Review
 

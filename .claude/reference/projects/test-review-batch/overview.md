@@ -33,10 +33,11 @@ Designs ruled out:
 
 ## Where it stands
 
-- [status] test-review is built; the lens-review plugin is committed and this repository's lens layout and leak gate
-  are staged; one `/lens-review` run of the built plugin, then the test review, lens review and reviewer guide are next
-- [trap] The pre-push gate reads `public-leak.md` at the new lens path on the default branch, so `bootstrap.py
-  harness` runs only after this pull request merges: an installed harness 0.1.18 refuses every push until then
+- [status] test-review and lens-review are built, checked on a planted-defect bench, test-reviewed and lens-reviewed;
+  the review fixes and the reviewer guide are next
+- [trap] The pre-push gate reads `public-leak.md` from the default branch at the path its installed version knows, so
+  `bootstrap.py harness` runs right after this pull request merges: an installed harness 0.1.18 refuses every push
+  before the merge, and 0.1.17 refuses every push after it
 
 ## Documents
 

@@ -2,9 +2,9 @@
 
 `/test-review` judges whether existing tests are worth having, against four criteria: the name claims only what the
 test asserts, the scenario can really happen, a wrong implementation would fail it, and no other test already
-reports the same defect. Every verdict rests on a run: for each rule the spec or contract of the production code
-states, the reviewer makes the change a plausible wrong reading of that rule would make, runs the tests, and restores
-the code. It then fixes the tests and reports production defects without fixing them.
+reports the same defect. Whether a wrong implementation would fail a test rests on a run: for each rule the spec or
+contract of the production code states, the reviewer makes the change a plausible wrong reading of that rule would
+make, runs the tests, and restores the code. It then fixes the tests and reports production defects without fixing them.
 
 ```
 /test-review                    every test file changed against the default branch, uncommitted ones included

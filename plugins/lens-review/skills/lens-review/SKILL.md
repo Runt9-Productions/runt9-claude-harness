@@ -92,8 +92,9 @@ set -euo pipefail
 dir='<run directory>'
 cd "$dir"
 # git apply reads a patch without applying it and prints each file's raw path, NUL-terminated, so quoting and the
-# tab git adds after a path with a space never reach the parsing below. Its records come in patch order.
-mapfile -d '' records < <(git apply --numstat -z < patch.diff)
+# tab git adds after a path with a space never reach the parsing below. Its records come in patch order. Inside a
+# checkout it drops every path outside the current directory, so the ceiling keeps it from finding one above this.
+mapfile -d '' records < <(GIT_CEILING_DIRECTORIES=${PWD%/*} git apply --numstat -z < patch.diff)
 # One line per `diff --git` section: its first and last line in patch.diff, then the new-side spans of its hunks.
 mapfile -t sections < <(awk '
     /^diff --git / { n++; start[n] = NR; if (n > 1) end[n - 1] = NR - 1; next }
