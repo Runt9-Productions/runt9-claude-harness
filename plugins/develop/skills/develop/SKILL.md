@@ -24,12 +24,14 @@ step number, start there; see "Starting mid-process".
   `reference-kb` skill's format (load that skill first):
   - `overview.md`: the goal and the designs ruled out, each with why.
   - `decisions.md`: settled decisions with their ids, and open questions.
-  - `checklist.md`: the engineer tasks, one deliverable commit each. Steps 5 to 12 are not deliverable commits, so
-    their progress lives in the task-progress tool or the checklist's status section.
+  - `checklist.md`: the engineer tasks, one deliverable commit each.
   - `spec.md`: the per-file implementation map and the draft ticket description.
   - `research/`: the estimate, as a note.
 
-  Without a knowledge base, section 4 names the location and its format.
+  Without a knowledge base, section 4 names the location and its format. The spec location records only what was
+  built. The progress of steps 5 to 12 goes to the task-progress tool, or to the handoff where there is none, because
+  the spec merges with the pull request and progress written there is stale from that moment. Step 11 gives the spec
+  location its final form.
 - **Working directory**: per-ticket scratch that section 3 names, defaulting to `.claude/output/<ticket>/` when that
   path is git-excluded. It lies in the checkout the session works in, the ticket's worktree once one exists, and is
   named by its absolute path in briefs, the handoff and resume lines. It is transient: removing the worktree deletes
@@ -38,7 +40,7 @@ step number, start there; see "Starting mid-process".
   it must outlive the teammate that produced it.
 - **Decision tools**: the tools the "Decision tools" section at the end names for four kinds of output: decisions,
   owner tasks, task progress and the status line. Where it names none for a kind, decisions are asked in chat, owner
-  tasks go in the final report, and progress is kept in the spec location's checklist.
+  tasks go in the final report, and progress is kept in the handoff.
 - **The three lists**: `reviewer-notes.md` (notes for the human reviewer, including every owner request that the
   pull request mention something), `pending-strings.md` (user-facing strings still awaiting product sign-off) and
   `accepted-gaps.md` (gaps the owner has accepted), all in the working directory. Each is started with its first
@@ -136,6 +138,7 @@ present.
   - every decision so far with its id, the owner's answer and any note, quoted;
   - the ticket changes made, the estimate value included;
   - owner tasks still open, and capacity notes;
+  - where no task-progress tool is named, the progress of steps 5 to 12;
   - what the build session does first.
 
 Exit: every decision answered and step 4 unblocked.
@@ -234,13 +237,18 @@ notes often exposes a behaviour change nobody decided on; that becomes a decisio
 - Record the actual size next to the estimate: files, and lines added and removed against the base, production and
   test separately, plus one line on what the estimate missed. That record is how estimates get calibrated.
 - Rewrite the ticket description to describe the final result rather than the progress.
-- Update the plan and the handoff, and set the status to say who is waiting on whom.
+- Give the spec location its final form in the pull request: every checklist item ticked, and a status that says what
+  was built in words still true after the merge, with no review or merge progress. Where the spec location is a
+  reference knowledge base project, set its status as the format describes for a finished project, and do whatever
+  else the format asks of one. Then merging makes the spec true, and no follow-up pull request is needed to finish it.
+- Update the handoff, and set the status line to say who is waiting on whom.
 
 ### 12. Review loop
 
 Classify each incoming comment as a fix, an answer or a decision. An engineer makes the fixes. A design change sends
 the work back through steps 4 to 8, except that step 7 runs again only when the owner, asked, wants a new review,
-since a review costs far more than a CI run. Every push in this step refreshes the step 10 notes and
+since a review costs far more than a CI run. A change that adds or alters work updates the spec location in the same
+pull request, keeping the final form step 11 gave it. Every push in this step refreshes the step 10 notes and
 evidence it made stale. When the host rejects a review because the owner has an unsubmitted one, ask them to submit
 it. The pull request still leaves draft only as the standing rules say.
 

@@ -6,7 +6,7 @@ tags:
 - bootstrap
 - plugins
 - local-files
-status: implementation
+status: complete
 opened: '2026-11-01'
 ---
 
@@ -18,7 +18,7 @@ reads and has a starting copy to fill in. It ends when that merges with tests at
 
 ## Where it stands
 
-- [status] PR #106 built, reviewed and fixed, with the reviewer guide posted; it waits on the owner's review.
+- [status] Complete: tasks 01 and 01b built in #106 (29124ac); the durable facts are in [[Bootstrap]].
 
 ## Goal
 
@@ -36,6 +36,7 @@ reads and has a starting copy to fill in. It ends when that merges with tests at
 
 ## Relations
 
+- see_also [[Bootstrap]]
 - see_also [[Plugin Templates Decisions]]
 - see_also [[Plugin Templates Checklist]]
 - see_also [[Plugin Templates Spec]]

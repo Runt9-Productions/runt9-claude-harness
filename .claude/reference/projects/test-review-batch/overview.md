@@ -3,7 +3,7 @@ title: Test Review Breaks
 type: note
 permalink: projects/test-review-batch/overview
 tags: [test-review, cost]
-status: implementation
+status: complete
 opened: "2026-10-31"
 ---
 
@@ -33,12 +33,9 @@ Designs ruled out:
 
 ## Where it stands
 
-- [status] PR #90 is out of draft at 6c545e7 with CI green: test-review and lens-review are built, the built
-  lens-review caught 19 of 24 planted defects with no noise on a review benchmark, and the test review, the lens
-  review's fixes and the reviewer guide are in. Left: the owner's review, the merge, then `bootstrap.py harness` straight after
-- [trap] The pre-push gate reads `public-leak.md` from the default branch at the path its installed version knows, so
-  `bootstrap.py harness` runs right after this pull request merges: an installed harness 0.1.18 refuses every push
-  before the merge, and 0.1.17 refuses every push after it
+- [status] Complete: test-review and lens-review built in #90 (84831ae); the built lens-review caught 19 of 24
+  planted defects with no noise on a review benchmark. The durable facts are in [[Skill Loading]],
+  [[Plugin Platform]], [[Comparing Harness Variants]] and [[Development Process]]
 
 ## Documents
 
@@ -48,4 +45,8 @@ Designs ruled out:
 
 ## Relations
 
+- see_also [[Skill Loading]]
+- see_also [[Plugin Platform]]
+- see_also [[Comparing Harness Variants]]
+- see_also [[Development Process]]
 - see_also [[Test Review Breaks Spec]]

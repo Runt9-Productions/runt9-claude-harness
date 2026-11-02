@@ -6,7 +6,7 @@ tags:
 - bootstrap
 - harness
 - refactor
-status: implementation
+status: complete
 opened: '2026-10-31'
 ---
 
@@ -18,7 +18,7 @@ split merges with `test_bootstrap.py` passing and no test function changed.
 
 ## Where it stands
 
-- [status] Both tasks built; the draft pull request (#104) is open, in its review fix round.
+- [status] Complete: tasks 01 and 02 built in #104 (734b1d1); the durable facts are in [[Bootstrap]].
 
 ## Goal
 
@@ -35,6 +35,7 @@ split merges with `test_bootstrap.py` passing and no test function changed.
 
 ## Relations
 
+- see_also [[Bootstrap]]
 - see_also [[Bootstrap Split Decisions]]
 - see_also [[Bootstrap Split Checklist]]
 - see_also [[Bootstrap Split Spec]]

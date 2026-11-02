@@ -3,19 +3,21 @@ title: Development Process
 type: note
 permalink: development-process/overview
 tags: [development-process, ci, releasing]
-verified: 2026-10-31
+verified: 2026-11-02
 coverage: partial
 sources:
   - .github/scripts/guard-versions.sh
   - .github/workflows/ci.yml
+  - harness/githooks/pre-push
+  - harness/leak-scan/review.sh
 ---
 
 # Development Process
 
-> **Scope.** How a change becomes a release here, and the CI and GitHub rules a pull request runs into: `guard-versions.sh` and the `on:` trigger, the `gate` job and the pytest step of `ci.yml` were read, and the `leak-scan` job's `PR_AUTHOR` setting and the mod type-check step's `--plugin-dir` per dependency were read and change none of these claims. The GitHub push refusal itself is carried from an earlier observation; that it looks only at the commits a push adds was measured. Not covered: the leak scan, the pre-push gate, the invisible-character and marketplace guards, and the bot's commit identity.
+> **Scope.** How a change becomes a release here, and the CI, GitHub and pre-push rules a pull request runs into. Read at 29124ac, with every claim resting on them re-checked: `guard-versions.sh`; the `on:` trigger, the `gate` job and the pytest step of `ci.yml`; the pre-push gate's fetch of the default branch in `pre-push` and the review files `review.sh` reads from it. The `leak-scan` job's `PR_AUTHOR` setting and the mod type-check step's `--plugin-dir` per dependency were read earlier and change none of these claims. The GitHub push refusal itself is carried from an earlier observation; that it looks only at the commits a push adds was measured. Not covered: the leak scan, the rest of the pre-push gate, the invisible-character and marketplace guards, and the bot's commit identity.
 
-Read this before changing what a plugin ships, before editing anything under `.github/workflows/`, or before adding a
-filter to CI. Each trap here produces a pull request that looks finished and either reaches nobody or never reports.
+Read this before changing what a plugin ships, before editing anything under `.github/workflows/`, before adding a
+filter to CI, or before moving a file the pre-push gate reads. Each trap here produces a pull request that looks finished and either reaches nobody or never reports.
 
 ## Observations
 
@@ -35,6 +37,7 @@ filter to CI. Each trap here produces a pull request that looks finished and eit
 - [decision] Code review and test review run locally, never in a GitHub workflow (owner, 2026-10-30): CI saved little over a local run and cost much in workarounds, and a reviewer that needs web search and fetch cannot run there.
 - [decision] CI runs pytest and ruff at the exact versions `requirements-dev.txt` pins, installed as wheels only (owner, 2026-10-26): installing then runs no package's build code.
 - [trap] CI's pytest reads no config file (`-c /dev/null`), so only default discovery applies: a test file not named `test_*.py` never runs, and nothing fails while some other test still runs #silent-failure
+- [trap] The pre-push gate reads its leak review's files from the remote's default branch (`refs/trusted`, `harness/githooks/pre-push:133-140`) at the paths the installed `review.sh` lists (`harness/leak-scan/review.sh:70-92`), and refuses the push when the `public-leak` lens or the `lens-review` agent is not there. A change that moves either refuses every push from a harness installed from the branch until it merges, and from one installed before it once it merges, until `bootstrap.py harness` installs the version that matches the default branch #order-dependent
 - [decision] Docs, skills and notes give each rule its structure and a one-line reason, never the history behind it (owner, 2026-10-26): the structure is what a reader needs.
 
 ## Relations
