@@ -22,6 +22,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Away Plugin](projects/away-plugin/overview.md) | building or changing the `away` plugin (issue #67) |
 | [Bootstrap Split](projects/bootstrap-split/overview.md) | splitting `bootstrap.py` into its package (issue #14) |
 | [Plugin Templates](projects/plugin-templates/overview.md) | changing how bootstrap copies a plugin's `local.example/` templates (issue #37) |
+| [Bootstrap Update](projects/bootstrap-update/overview.md) | building or changing `bootstrap.py update` (issue #41) |
 
 ## Local conventions
 
