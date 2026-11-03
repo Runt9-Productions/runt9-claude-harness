@@ -29,9 +29,9 @@ step number, start there; see "Starting mid-process".
   - `research/`: the estimate, as a note.
 
   Without a knowledge base, section 4 names the location and its format. The spec location records only what was
-  built. The progress of steps 5 to 12 goes to the task-progress tool, or to the handoff where there is none, because
-  the spec merges with the pull request and progress written there is stale from that moment. Step 11 gives the spec
-  location its final form.
+  built. The progress of steps 5 to 12 goes to the handoff, and to the task-progress tool as well where one is named,
+  because the spec merges with the pull request and progress written there is stale from that moment. Step 11 gives
+  the spec location its final form.
 - **Working directory**: per-ticket scratch that section 3 names, defaulting to `.claude/output/<ticket>/` when that
   path is git-excluded. It lies in the checkout the session works in, the ticket's worktree once one exists, and is
   named by its absolute path in briefs, the handoff and resume lines. It is transient: removing the worktree deletes
@@ -40,7 +40,7 @@ step number, start there; see "Starting mid-process".
   it must outlive the teammate that produced it.
 - **Decision tools**: the tools the "Decision tools" section at the end names for four kinds of output: decisions,
   owner tasks, task progress and the status line. Where it names none for a kind, decisions are asked in chat, owner
-  tasks go in the final report, and progress is kept in the handoff.
+  tasks go in the final report, and progress is kept in the handoff alone.
 - **The three lists**: `reviewer-notes.md` (notes for the human reviewer, including every owner request that the
   pull request mention something), `pending-strings.md` (user-facing strings still awaiting product sign-off) and
   `accepted-gaps.md` (gaps the owner has accepted), all in the working directory. Each is started with its first
@@ -138,7 +138,7 @@ present.
   - every decision so far with its id, the owner's answer and any note, quoted;
   - the ticket changes made, the estimate value included;
   - owner tasks still open, and capacity notes;
-  - where no task-progress tool is named, the progress of steps 5 to 12;
+  - the progress of steps 5 to 12, since the task-progress tool's state may not carry across sessions either;
   - what the build session does first.
 
 Exit: every decision answered and step 4 unblocked.
@@ -260,9 +260,9 @@ owner confirm the state the earlier steps left before doing anything.
 ## Resuming
 
 After a compaction or in a new session, read in this order: the decision tools' state, the plan, the handoff, the
-newest task result. Task-progress state that should exist and does not means a new session; rebuild it from the
-handoff and the plan. Then give the owner a short report of where things stand and the next action, and wait for
-their go-ahead.
+newest task result. Task-progress state that should exist and does not means a new session; rebuild the spec tasks
+from the plan and steps 5 to 12 from the handoff. Then give the owner a short report of where things stand and the
+next action, and wait for their go-ahead.
 
 ## Decision tools
 

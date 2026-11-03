@@ -55,7 +55,8 @@ commit against the ticket's base either way.
 Machine-local data lives in `~/.claude/local/develop/`, and a missing file counts as empty:
 
 - `decision-tools.md` names the tools for decisions, owner tasks, task progress and the status line. Without it,
-  `develop` asks in chat and keeps progress in the handoff, since the spec records only what was built.
+  `develop` asks in chat. Progress after the build is kept in the handoff either way, since the spec records only
+  what was built and a progress tool's state may not reach a new session.
   `local.example/` shows its shape with made-up tool names.
 - `additions.md` holds rules for `develop` on this machine.
 - `effort-estimate.md` holds rules for `effort-estimate` on this machine.

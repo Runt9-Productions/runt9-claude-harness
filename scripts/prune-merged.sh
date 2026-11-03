@@ -119,10 +119,11 @@ skipped_remote=false
 remotes=$(git remote)
 while read -r remote; do
     [[ -n $remote ]] || continue
-    # The C locale keeps git's report untranslated, so its lines can be matched. On failure git has printed nothing
-    # to stdout, so the first line is its error.
+    # The C locale keeps git's report untranslated, so its lines can be matched. On failure the transport, such as ssh,
+    # may print its own lines before git's `fatal:` line, which is the one that gives the reason.
     if ! report=$(LC_ALL=C git remote prune "${dry_run_flag[@]}" "$remote" 2>&1); then
-        echo "skipped remote $remote: ${report%%$'\n'*}"
+        reason=$(grep -m 1 '^fatal: ' <<< "$report" || true)
+        echo "skipped remote $remote: ${reason:-${report%%$'\n'*}}"
         skipped_remote=true
         continue
     fi

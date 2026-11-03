@@ -6,7 +6,8 @@ setup() {
     script=$BATS_TEST_DIRNAME/prune-merged.sh
 
     # The stub answers `gh pr list` from $PRS, one "<state> <branch> <head>" line per pull request, and prints each
-    # matching head as the script's `--jq '.[].headRefOid'` would.
+    # matching head as `--json headRefOid --jq '.[].headRefOid'` would. Asked for anything else it fails, because real
+    # gh would print values that match no branch tip and every keep test would still pass.
     export PRS=$BATS_TEST_TMPDIR/prs
     touch "$PRS"
     mkdir -p "$BATS_TEST_TMPDIR/bin"
@@ -16,13 +17,21 @@ setup() {
 [[ $1 == pr && $2 == list ]] || exit 1
 state=open
 head=
+json=
+jq=
 while (( $# )); do
     case $1 in
         --state) state=$2; shift ;;
         --head) head=$2; shift ;;
+        --json) json=$2; shift ;;
+        --jq) jq=$2; shift ;;
     esac
     shift
 done
+if [[ $json != headRefOid || $jq != '.[].headRefOid' ]]; then
+    echo "gh stub: asked for --json '$json' --jq '$jq'" >&2
+    exit 1
+fi
 awk -v state="$state" -v head="$head" '(state == "all" || $1 == state) && (head == "" || $2 == head) { print $3 }' "$PRS"
 EOF
     chmod +x "$BATS_TEST_TMPDIR/bin/gh"
@@ -149,14 +158,19 @@ snapshot() {
     [ -d "$trees/merged-tree" ]
 }
 
-@test "skips a remote it cannot reach, prunes the others and still prunes worktrees, exiting 1" {
-    # `git remote` lists remotes by name, so the unreachable one comes before origin.
-    git -C "$repo" remote add gone "$BATS_TEST_TMPDIR/missing.git"
+@test "skips a remote it cannot reach with git's fatal line, prunes the others and still prunes worktrees, exiting 1" {
+    # `git remote` lists remotes by name, so the unreachable one comes before origin. Its ssh prints a line of its own
+    # before git's error, as ssh does without an askpass helper.
+    git -C "$repo" remote add gone ssh://example.invalid/missing.git
+    printf '#!/usr/bin/env bash\necho "ssh_askpass: exec(ssh-askpass): No such file or directory" >&2\nexit 255\n' \
+        > "$BATS_TEST_TMPDIR/bin/ssh"
+    chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
+    export GIT_SSH_COMMAND=$BATS_TEST_TMPDIR/bin/ssh
     rm -rf "$trees/followed-up"
     cd "$repo"
     run "$script"
     [ "$status" -eq 1 ]
-    [[ $output == *"skipped remote gone: fatal: '$BATS_TEST_TMPDIR/missing.git' does not appear to be a git repository"* ]]
+    [[ $output == *"skipped remote gone: fatal: Could not read from remote repository."* ]]
     [[ $output == *"pruned origin/merged-tree"* ]]
     [[ $(git worktree list) != *followed-up* ]]
 }
