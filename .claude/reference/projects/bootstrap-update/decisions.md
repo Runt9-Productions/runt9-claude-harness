@@ -18,12 +18,14 @@ Rulings for the update mode. Read before changing what [[Bootstrap Update Spec]]
 - [decision] Settings entries to replace or remove come from comparing the installed fragment with HEAD's, before
   the harness switches versions (owner, 2026-10-31): the old fragment is still on disk then. An identical entry the
   user had before bootstrap goes with it, which is accepted.
-- [proposal] A settings fragment counts as installed when `settings.json` holds at least one entry of the installed
-  fragment (D15). Status: open, acted on as recommended.
-- [proposal] A value or list entry equal to the old fragment's moves to the new fragment's, or goes when the new one
-  drops it; any other value is the user's and is never touched (D16). Status: open, acted on as recommended.
-- [proposal] Update rewrites a `.example` template whose content differs from HEAD's and adds missing ones; real
-  local files are never touched (D17). Status: open, acted on as recommended.
+- [decision] Each changed settings fragment is offered on its own, with its diff of `settings.json` and its own
+  confirmation, and is offered when `settings.json` holds at least one entry of the installed fragment (owner,
+  2026-11-03): a wrong guess costs one "no", and the user approves each settings change separately.
+- [decision] A value or list entry equal to the old fragment's moves to the new fragment's, or goes when the new one
+  drops it; any other value is the user's and is never touched (owner, 2026-11-03): an entry still equal to the old
+  fragment's came from bootstrap.
+- [decision] Update rewrites a `.example` template whose content differs from HEAD's and adds missing ones; real
+  local files are never touched (owner, 2026-11-03): only bootstrap writes `.example` files.
 - [proposal] `update` is a word on the command line in place of component names, as the issue writes it; it takes
   no component names and no `--repo`. Status: open.
 

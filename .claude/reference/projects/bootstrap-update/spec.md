@@ -52,10 +52,15 @@ so update shows every diff, asks once, then writes each file. Install keeps call
 - `bootstrap.py update` takes no component names and no `--repo`; either with it stops with a one-line message.
   Inside a Claude Code session it refuses as an install does.
 - Output, in install order: one line per installed component saying `current`, or what would change, with the
-  `settings.json` diff and the harness version move; then `available:` and `vanished:` lines when there are any.
-  Nothing behind prints `Everything installed is current.` and exits 0 without asking.
-- One confirmation, `Update these? [y/N] `. No exits 1 with nothing written. A run without stdin stops as install
-  does.
+  harness version move; then `available:` and `vanished:` lines when there are any. Nothing behind prints
+  `Everything installed is current.` and exits 0 without asking.
+- Confirmations (D15): one for the harness, skills and plugins together, `Update these? [y/N] `; then, for each
+  settings fragment that would change `settings.json`, its own diff and `Apply settings:<name>? [y/N] `. Each
+  fragment's diff is computed against `settings.json` as the fragments confirmed before it left it, and all accepted
+  fragments are written in one staged write. A no to the first confirmation skips what it covers and still offers the
+  settings fragments; a no to a fragment skips only that fragment. Every no is listed in the closing summary. A run
+  without stdin stops as install does.
+- Every question is asked before anything is written, so a run stopped at a prompt changes nothing.
 - Apply order: harness, skills, settings, then plugins with their templates. A failure stops with the component and
   what updated before it, as install does.
 - Templates on update: rewrite each `.example` whose content differs from HEAD's, add missing ones, never touch a
@@ -72,7 +77,8 @@ Through `sandbox.run("update", ...)`, synthetic fixtures only:
 - A plugin whose HEAD version is newer: the stub `claude` sees the marketplace update, then the plugin update, and a
   changed template's `.example` is rewritten while the real file is unchanged. The stub needs a canned
   `plugin list --json` reply.
-- An answer of no writes nothing; a vanished plugin is reported and the run goes on.
+- With two changed settings fragments, yes to one and no to the other writes only the first one's change; a no to
+  the first confirmation leaves the harness and plugins alone; a vanished plugin is reported and the run goes on.
 
 Task 01's function also gets direct tests in the same file, since its cases are many and cheap: the reworded entry,
 a user-owned value, a dropped key, and the emptied object.
