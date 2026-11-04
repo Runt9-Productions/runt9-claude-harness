@@ -57,7 +57,7 @@ async function toggleExpanded($: EngineInterface, id: string) {
 export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
   const elements = $.ui.resolve(e)
   const { Box, Button, Text } = elements
-  // Mobile draws no Input yet, so there the note box is left out and only the option buttons answer.
+  // Mobile's table has no Input before Claude Code 2.1.318, so there the note box is left out and only the option buttons answer.
   const Input = 'Input' in elements ? elements.Input : undefined
   const allDecisions: BoardDecision[] = await read($, decisions)
   const allTasks: BoardTask[] = await read($, tasks)
