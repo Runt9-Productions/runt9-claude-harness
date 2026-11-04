@@ -26,6 +26,8 @@ nothing from an employer, a private project or a specific machine goes in, in co
   repository registers a component in `HARNESS_COMPONENTS` in `bootstrap/registry.py`; a new file in
   `harness/fragments/` or a new `.json` file in `harness/settings/` is a component without one. Its tests are
   `test_bootstrap.py` beside it.
+- `scripts/`: scripts the owner runs by hand from a checkout, with their bats tests beside them; so far
+  `prune-merged.sh`.
 - `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
   needs, since CI installs with `--no-deps`). Python that ships here uses the standard library only, except PyYAML
   in the reference-kb validator, which must parse frontmatter as Basic Memory writes it.

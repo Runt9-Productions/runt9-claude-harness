@@ -10,8 +10,8 @@ tags:
 
 ## Status
 
-- **Live item:** owner review of PR #106 (develop step 12)
-- **How far along:** built, verified, reviewed and fixed; the reviewer guide is posted and the draft waits on the owner
+- **Live item:** none; built in #106
+- **How far along:** 01 and 01b built, verified and reviewed
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-01
 

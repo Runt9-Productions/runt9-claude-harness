@@ -10,9 +10,9 @@ tags:
 
 ## Status
 
-- **Live item:** the owner's review of #104
-- **How far along:** built, reviewed, findings fixed, reviewer guide posted
-- **Blocked on:** the owner's review
+- **Live item:** none; built in #104
+- **How far along:** 01 and 02 built, verified and reviewed
+- **Blocked on:** nothing
 - **Last moved:** 2026-11-02
 
 ## Build Order
