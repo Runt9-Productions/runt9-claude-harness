@@ -31,8 +31,9 @@ Rulings for the update mode. Read before changing what [[Bootstrap Update Spec]]
   would repeat the same prompt on every update.
 - [decision] An object or list that update's removals leave empty is removed, and one the user had empty is kept
   (lead, 2026-11-03): otherwise a fragment that drops a whole list leaves an empty one behind.
-- [proposal] `update` is a word on the command line in place of component names, as the issue writes it; it takes
-  no component names and no `--repo`. Status: open.
+- [decision] Update is the `--update` flag: with no component names it covers everything installed, and with names
+  only those, each of which must be installed; `--repo` with it stops (owner, 2026-11-03): a flag leaves room to
+  update one component without updating the rest.
 
 ## Open questions
 

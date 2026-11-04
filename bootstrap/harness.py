@@ -124,6 +124,13 @@ def install_harness(run: Run) -> None:
             shutil.rmtree(other)
 
 
+def installed_version() -> str | None:
+    """The version `CURRENT` points at, or None when it is not a link to a version directory."""
+    if not CURRENT.is_symlink() or not CURRENT.is_dir():
+        return None
+    return CURRENT.readlink().name
+
+
 def require_harness() -> None:
     if not CURRENT.is_dir():
         raise Stop(f"the harness is not installed in {INSTALL_DIR}; install it first")

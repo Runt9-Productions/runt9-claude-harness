@@ -1,6 +1,7 @@
 """Runs bootstrap.py as a user does: from outside a synthetic clone, with HOME in a temporary directory and a stub
-claude on PATH that records each call. Every git call runs without the machine's global and system config.
-`updated_settings` is also called directly, since its cases are many and need no run. Needs git and pytest.
+claude on PATH that records each call and answers `plugin list --json` from a canned file. Every git call runs
+without the machine's global and system config. `updated_settings` is also called directly, since its cases are many
+and need no run. Needs git and pytest.
 """
 
 import json
@@ -40,6 +41,8 @@ STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1:] == ["plugin", "list", "--json"]:
+    print(open({plugins!r}).read() if os.path.exists({plugins!r}) else "[]")
 fail = os.environ.get("EXAMPLE_CLAUDE_FAIL")
 sys.exit(3 if fail and sys.argv[1:3] == ["plugin", fail] else 0)
 """
@@ -55,10 +58,11 @@ class Sandbox:
         self.claude_md = self.home / ".claude" / "CLAUDE.md"
         self.clone = root / "clone"
         self.log = root / "claude.log"
+        self.plugins = root / "example-plugin-list.json"
         bin_dir = root / "bin"
         bin_dir.mkdir()
         stub = bin_dir / "claude"
-        stub.write_text(STUB.format(python=sys.executable, log=str(self.log)))
+        stub.write_text(STUB.format(python=sys.executable, log=str(self.log), plugins=str(self.plugins)))
         stub.chmod(0o755)
         self.home.mkdir()
         # Built from nothing, so no session variable, plugin directory or git setting of the machine reaches a run.
@@ -101,6 +105,18 @@ class Sandbox:
             text=True,
         )
 
+    def list_plugins(self, versions: dict[str, str]) -> None:
+        """Sets what the stub's `plugin list --json` prints: each plugin in `versions` from the example marketplace,
+        and one from another marketplace."""
+        listed = [{"id": f"{name}@example-market", "version": version} for name, version in versions.items()]
+        listed.append({"id": "example-one@example-elsewhere", "version": "9.9.9"})
+        self.plugins.write_text(json.dumps(listed))
+
+    def set_plugin_version(self, name: str, version: str) -> None:
+        self.write(
+            f"plugins/{name}/.claude-plugin/plugin.json", json.dumps({"name": name, "version": version}).encode()
+        )
+
     def claude_calls(self) -> list[list[str]]:
         if not self.log.exists():
             return []
@@ -124,6 +140,8 @@ def sandbox(tmp_path: Path) -> Sandbox:
     shutil.copy(SCRIPT, box.clone / "bootstrap.py")
     shutil.copytree(SCRIPT.parent / "bootstrap", box.clone / "bootstrap", ignore=shutil.ignore_patterns("__pycache__"))
     box.write(".claude-plugin/marketplace.json", json.dumps(MARKETPLACE).encode())
+    for plugin in MARKETPLACE["plugins"]:
+        box.set_plugin_version(plugin["name"], "1.0.0")
     box.set_version("0.1.0")
     box.write("harness/githooks/pre-push", PRE_PUSH, 0o755)
     box.write("harness/githooks/README.md", b"example readme\n")
@@ -864,3 +882,187 @@ def test_prompt_without_stdin_stops(sandbox: Sandbox) -> None:
     assert "no answer on stdin; name the components on the command line" in result.stderr
     assert not sandbox.install.exists()
     assert sandbox.claude_calls() == []
+
+
+PLUGIN_LIST = ["plugin", "list", "--json"]
+
+
+def test_update_with_nothing_behind_reports_each_component_and_asks_nothing(sandbox: Sandbox) -> None:
+    assert (
+        sandbox.run("harness", "skills", "fragment:example-rules", "settings:example-deny", stdin="y\ny\n").returncode
+        == 0
+    )
+    sandbox.list_plugins({"example-one": "1.0.0"})
+
+    result = sandbox.run("--update")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == (
+        "harness: current\n"
+        "skills: current\n"
+        "fragment:example-rules: current\n"
+        "settings:example-deny: current\n"
+        "plugin:example-one: current\n"
+        "available: plugin:example-two, plugin:example-three\n"
+        "Everything installed is current.\n"
+    )
+    assert sandbox.claude_calls() == [PLUGIN_LIST]
+
+
+def test_update_moves_the_harness_to_a_new_version_and_links_its_new_skill(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness", "skills").returncode == 0
+    sandbox.write("harness/skills/example-gamma/SKILL.md", b"example gamma skill\n")
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Add an example gamma skill")
+
+    result = sandbox.run("--update", stdin="y\n")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith(
+        "harness: 0.1.0 to 0.2.0\n"
+        "skills: link example-gamma\n"
+        "available: fragment:example-rules, settings:example-deny, plugin:example-one, plugin:example-two,"
+        " plugin:example-three\n"
+        "Update harness, skills? [y/N] "
+    )
+    assert sandbox.current.readlink() == Path("versions/0.2.0")
+    assert (sandbox.skills / "example-gamma").readlink() == sandbox.current / "skills/example-gamma"
+    assert (sandbox.skills / "example-gamma/SKILL.md").read_bytes() == b"example gamma skill\n"
+
+
+def test_update_moves_settings_to_the_new_fragment_and_keeps_what_the_user_added(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    settings = sandbox.home / ".claude/settings.json"
+    own = {
+        "permissions": {
+            "deny": ["Read(./example-secret)", "Read(./example-key)", "Read(./example-own)"],
+            "defaultMode": "example-mode",
+        },
+        "model": "example-fragment-model",
+        "exampleOwn": True,
+    }
+    settings.write_text(json.dumps(own, indent=2) + "\n")
+    reworded = {
+        "permissions": {
+            "deny": ["Read(./example-secret)", "Read(./example-key-file)"],
+            "defaultMode": "example-new-mode",
+        },
+        "model": "example-fragment-model",
+    }
+    sandbox.write("harness/settings/example-deny.json", json.dumps(reworded).encode())
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Reword the example deny fragment")
+
+    result = sandbox.run("--update", stdin="y\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "Apply settings:example-deny? [y/N] " in result.stdout
+    assert json.loads(settings.read_text()) == {
+        "permissions": {
+            "deny": ["Read(./example-secret)", "Read(./example-own)", "Read(./example-key-file)"],
+            "defaultMode": "example-new-mode",
+        },
+        "model": "example-fragment-model",
+        "exampleOwn": True,
+    }
+
+
+def test_update_updates_a_newer_plugin_and_rewrites_its_changed_template(sandbox: Sandbox) -> None:
+    sandbox.write("plugins/example-one/local.example/example-rules.md", b"example rules template\n")
+    sandbox.commit("Add an example template")
+    assert sandbox.run("plugin:example-one").returncode == 0
+    local = sandbox.home / ".claude/local/example-one"
+    (local / "example-rules.md").write_bytes(b"example own rules\n")
+    sandbox.write("plugins/example-one/local.example/example-rules.md", b"example reworded template\n")
+    sandbox.set_plugin_version("example-one", "1.1.0")
+    sandbox.commit("Reword the example template")
+    sandbox.list_plugins({"example-one": "1.0.0"})
+    sandbox.log.unlink()
+
+    result = sandbox.run("--update", stdin="y\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "plugin:example-one: 1.0.0 to 1.1.0\n" in result.stdout
+    assert sandbox.claude_calls() == [
+        PLUGIN_LIST,
+        ["plugin", "marketplace", "update", "example-market"],
+        ["plugin", "update", "example-one@example-market"],
+    ]
+    template = local / "example-rules.md.example"
+    assert template.read_bytes() == b"example reworded template\n"
+    assert (local / "example-rules.md").read_bytes() == b"example own rules\n"
+    assert result.stdout.endswith(f"{TEMPLATES_HEADER}{template}\n")
+
+
+def test_update_applies_only_what_was_answered_yes_and_reports_a_vanished_plugin(sandbox: Sandbox) -> None:
+    sandbox.write("harness/settings/example-ask.json", json.dumps({"permissions": {"ask": ["Bash(example)"]}}).encode())
+    sandbox.commit("Add an example ask fragment")
+    installs = ("harness", "settings:example-ask", "settings:example-deny")
+    assert sandbox.run(*installs, stdin="y\ny\n").returncode == 0
+    settings = sandbox.home / ".claude/settings.json"
+    installed = json.loads(settings.read_text())
+    sandbox.write(
+        "harness/settings/example-ask.json", json.dumps({"permissions": {"ask": ["Bash(example-new)"]}}).encode()
+    )
+    sandbox.write(
+        "harness/settings/example-deny.json", json.dumps({**SETTINGS_FRAGMENT, "model": "example-new"}).encode()
+    )
+    sandbox.set_version("0.2.0")
+    sandbox.set_plugin_version("example-one", "1.1.0")
+    sandbox.commit("Change both example fragments and the example plugin")
+    sandbox.list_plugins({"example-one": "1.0.0", "example-gone": "1.0.0"})
+
+    # The harness and the plugin, then example-ask, then example-deny.
+    result = sandbox.run("--update", stdin="n\ny\nn\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "vanished: plugin:example-gone\n" in result.stdout
+    installed["permissions"]["ask"] = ["Bash(example-new)"]
+    assert json.loads(settings.read_text()) == installed
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+    assert sandbox.claude_calls() == [PLUGIN_LIST]
+    assert result.stdout.endswith(
+        "Updated settings:example-ask.\nSkipped harness, plugin:example-one, settings:example-deny.\n"
+    )
+
+
+def test_update_with_names_covers_only_those_named(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness").returncode == 0
+    sandbox.set_version("0.2.0")
+    sandbox.set_plugin_version("example-one", "1.1.0")
+    sandbox.commit("Raise the example versions")
+    sandbox.list_plugins({"example-one": "1.0.0", "example-gone": "1.0.0"})
+
+    result = sandbox.run("--update", "plugin:example-one", "plugin:example-gone", stdin="y\n")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith(
+        "plugin:example-one: 1.0.0 to 1.1.0\n"
+        "plugin:example-gone: vanished, since HEAD no longer ships it\n"
+        "Update plugin:example-one? [y/N] "
+    )
+    assert "available:" not in result.stdout
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+    assert sandbox.claude_calls()[-1] == ["plugin", "update", "example-one@example-market"]
+
+
+@pytest.mark.parametrize(
+    ("args", "reason"),
+    [
+        (["plugin:example-two"], "not installed: plugin:example-two; run bootstrap.py without --update"),
+        (["example-unknown"], "unknown component example-unknown"),
+        (["--repo", "{repo}"], "--update takes no --repo"),
+    ],
+    ids=["not-installed", "unknown-component", "repo"],
+)
+def test_update_usage_error_updates_nothing(sandbox: Sandbox, args: list[str], reason: str) -> None:
+    repo = sandbox.new_repo("example-repo")
+    assert sandbox.run("harness").returncode == 0
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Raise the example version")
+
+    result = sandbox.run("--update", "harness", *[arg.format(repo=repo) for arg in args], stdin="y\n")
+
+    assert result.returncode == 1
+    assert reason in result.stderr
+    assert sandbox.current.readlink() == Path("versions/0.1.0")

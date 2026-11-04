@@ -26,7 +26,7 @@ tags:
 - [ ] 01 A function in `bootstrap/settings.py` that, given `settings.json`'s object, the installed fragment and
   HEAD's, returns the updated object (replacing and removing what came from the old fragment, adding what the new one
   has); and `write_after_asking` split so a write can follow one confirmation for many files
-- [ ] 02 `bootstrap.py update`: detect each installed component, print the plan, ask once, apply in install order,
+- [ ] 02 `bootstrap.py --update`: detect each installed component, print the plan, ask once, apply in install order,
   report current, available and vanished components, with tests at the command's boundary
 - [ ] 03 The README section on updating, the module docstring, `CLAUDE.md`'s bootstrap bullet, and the
   `domains/bootstrap/overview.md` note re-verified against the changed modules

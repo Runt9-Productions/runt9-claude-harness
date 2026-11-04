@@ -52,7 +52,11 @@ so update shows every diff, asks once, then writes each file. Install keeps call
 
 ## Command (task 02)
 
-- `bootstrap.py update` takes no component names and no `--repo`; either with it stops with a one-line message.
+- `bootstrap.py --update` covers every installed component; `bootstrap.py --update <component>...` covers only
+  those named. A named component that is not installed stops with a one-line message saying to install it without
+  `--update`; an unknown name stops as install does; a named component HEAD no longer ships is reported as vanished.
+  The `available:` and `vanished:` lines are printed only without names. `--repo` with `--update` stops with a
+  one-line message.
   Inside a Claude Code session it refuses as an install does.
 - Output, in install order: one line per installed component saying `current`, or what would change, with the
   harness version move; then `available:` and `vanished:` lines when there are any. Nothing behind prints
@@ -88,9 +92,9 @@ a user-owned value, a dropped key, and the emptied object.
 
 ## Docs (task 03)
 
-- `README.md`: the "Updating" text (`README.md:70-73`) names `bootstrap.py update`, and the plugin sentence that
+- `README.md`: the "Updating" text (`README.md:70-73`) names `bootstrap.py --update`, and the plugin sentence that
   says bootstrap never updates a plugin goes; the line that updates are manual (`README.md:10`) names it too.
-- `bootstrap.py`'s docstring: the `update` form.
+- `bootstrap.py`'s docstring: the `--update` form.
 - `CLAUDE.md`, the bootstrap bullet: the command finds installed components from live state.
 
 ## Ticket

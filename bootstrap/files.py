@@ -38,15 +38,15 @@ def write_after_asking(target: Path, before: str, after: str) -> None:
     no_stdin = f"no answer on stdin to whether to write {target}; run bootstrap.py in a terminal"
     if not answered_yes(f"Write this to {target}? [y/N] ", no_stdin):
         raise Stop(f"not written, so {target} is unchanged")
-    write_staged(target, after)
+    write_staged(target, after.encode())
 
 
-def write_staged(target: Path, after: str) -> None:
+def write_staged(target: Path, content: bytes) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     # Staged beside the file and renamed over it, so a failed write leaves the old one whole.
     with tempfile.TemporaryDirectory(prefix=".staging-", dir=target.parent) as staging:
         staged = Path(staging) / target.name
-        staged.write_bytes(after.encode())
+        staged.write_bytes(content)
         if target.exists():
             shutil.copymode(target, staged)
         staged.replace(target)

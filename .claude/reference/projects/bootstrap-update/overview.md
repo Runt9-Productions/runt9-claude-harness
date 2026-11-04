@@ -13,7 +13,7 @@ opened: '2026-11-03'
 
 # Bootstrap Update
 
-Adds `bootstrap.py update` (issue #41): one command that brings every installed component up to the checkout,
+Adds `bootstrap.py --update` (issue #41): one command that brings every installed component up to the checkout,
 including plugins, and replaces or removes the settings entries a newer harness version changed or dropped. It ends
 when that merges with tests at the command's boundary.
 
@@ -23,7 +23,7 @@ when that merges with tests at the command's boundary.
 
 ## Goal
 
-- `update` finds what is installed from where it already lives, shows everything it would change, asks once, and
+- `--update` finds what is installed from where it already lives, shows everything it would change, asks once, and
   then applies the changes in install order.
 - A settings entry the user set is never changed; an entry bootstrap set from an older fragment follows the new one.
 

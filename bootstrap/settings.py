@@ -111,6 +111,29 @@ def json_indent(text: str) -> str:
     return match[1] if match else DEFAULT_INDENT
 
 
+def settings_text(settings: dict, before: str) -> str:
+    """`settings` as the text of settings.json, keeping the indentation of `before`, the file's current text."""
+    return json.dumps(settings, indent=json_indent(before), ensure_ascii=False) + "\n"
+
+
+def holds_an_entry(settings: dict, fragment: dict) -> bool:
+    """Whether `settings` holds at least one of `fragment`'s plain values at its key or one of its list entries in its
+    list."""
+    for key, value in fragment.items():
+        if key not in settings:
+            continue
+        present = settings[key]
+        if isinstance(value, dict) and isinstance(present, dict):
+            held = holds_an_entry(present, value)
+        elif isinstance(value, list) and isinstance(present, list):
+            held = any(entry in present for entry in value)
+        else:
+            held = present == value
+        if held:
+            return True
+    return False
+
+
 def install_settings(name: str, run: Run) -> None:
     fragment_path = require_installed(f"{SETTINGS}/{name}.json")
     fragment = read_json_object(fragment_path)
@@ -127,8 +150,7 @@ def install_settings(name: str, run: Run) -> None:
     if merged == settings:
         print(f"settings:{name}: {SETTINGS_FILE} already has everything in {fragment_path}")
         return
-    after = json.dumps(merged, indent=json_indent(before), ensure_ascii=False) + "\n"
-    write_after_asking(target, before, after)
+    write_after_asking(target, before, settings_text(merged, before))
     print(f"settings:{name}: {target} has everything in {fragment_path}")
 
 
