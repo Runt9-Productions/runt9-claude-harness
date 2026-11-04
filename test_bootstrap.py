@@ -1,5 +1,6 @@
 """Runs bootstrap.py as a user does: from outside a synthetic clone, with HOME in a temporary directory and a stub
-claude on PATH that records each call and answers `plugin list --json` from a canned file. Every git call runs
+claude on PATH that records each call, answers `plugin list --json` from a canned file, and moves a version there on
+`plugin update` only when told to. Every git call runs
 without the machine's global and system config. `updated_settings` is also called directly, since its cases are many
 and need no run. Needs git and pytest.
 """
@@ -41,10 +42,18 @@ STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
+fail = os.environ.get("EXAMPLE_CLAUDE_FAIL")
+if fail and sys.argv[1:3] == ["plugin", fail]:
+    sys.exit(3)
 if sys.argv[1:] == ["plugin", "list", "--json"]:
     print(open({plugins!r}).read() if os.path.exists({plugins!r}) else "[]")
-fail = os.environ.get("EXAMPLE_CLAUDE_FAIL")
-sys.exit(3 if fail and sys.argv[1:3] == ["plugin", fail] else 0)
+if sys.argv[1:3] == ["plugin", "update"] and os.path.exists({moves!r}):
+    moved = json.load(open({moves!r}))
+    listed = json.load(open({plugins!r}))
+    for entry in listed:
+        if entry["id"] == sys.argv[3] and entry["id"] in moved:
+            entry["version"] = moved[entry["id"]]
+    json.dump(listed, open({plugins!r}, "w"))
 """
 
 
@@ -59,10 +68,13 @@ class Sandbox:
         self.clone = root / "clone"
         self.log = root / "claude.log"
         self.plugins = root / "example-plugin-list.json"
+        self.moves = root / "example-plugin-moves.json"
         bin_dir = root / "bin"
         bin_dir.mkdir()
         stub = bin_dir / "claude"
-        stub.write_text(STUB.format(python=sys.executable, log=str(self.log), plugins=str(self.plugins)))
+        stub.write_text(
+            STUB.format(python=sys.executable, log=str(self.log), plugins=str(self.plugins), moves=str(self.moves))
+        )
         stub.chmod(0o755)
         self.home.mkdir()
         # Built from nothing, so no session variable, plugin directory or git setting of the machine reaches a run.
@@ -111,6 +123,12 @@ class Sandbox:
         listed = [{"id": f"{name}@example-market", "version": version} for name, version in versions.items()]
         listed.append({"id": "example-one@example-elsewhere", "version": "9.9.9"})
         self.plugins.write_text(json.dumps(listed))
+
+    def move_on_update(self, versions: dict[str, str]) -> None:
+        """Makes the stub's `plugin update` of each plugin in `versions` list it at that version afterwards. Any other
+        plugin stays where it was, as when GitHub's copy is older than the checkout."""
+        moves = {f"{name}@example-market": version for name, version in versions.items()}
+        self.moves.write_text(json.dumps(moves))
 
     def set_plugin_version(self, name: str, version: str) -> None:
         self.write(
@@ -977,6 +995,7 @@ def test_update_updates_a_newer_plugin_and_rewrites_its_changed_template(sandbox
     sandbox.set_plugin_version("example-one", "1.1.0")
     sandbox.commit("Reword the example template")
     sandbox.list_plugins({"example-one": "1.0.0"})
+    sandbox.move_on_update({"example-one": "1.1.0"})
     sandbox.log.unlink()
 
     result = sandbox.run("--update", stdin="y\n")
@@ -987,6 +1006,7 @@ def test_update_updates_a_newer_plugin_and_rewrites_its_changed_template(sandbox
         PLUGIN_LIST,
         ["plugin", "marketplace", "update", "example-market"],
         ["plugin", "update", "example-one@example-market"],
+        PLUGIN_LIST,
     ]
     template = local / "example-rules.md.example"
     assert template.read_bytes() == b"example reworded template\n"
@@ -1043,7 +1063,46 @@ def test_update_with_names_covers_only_those_named(sandbox: Sandbox) -> None:
     )
     assert "available:" not in result.stdout
     assert sandbox.current.readlink() == Path("versions/0.1.0")
-    assert sandbox.claude_calls()[-1] == ["plugin", "update", "example-one@example-market"]
+    assert ["plugin", "update", "example-one@example-market"] in sandbox.claude_calls()
+
+
+def test_update_reports_a_plugin_its_update_left_short_of_head(sandbox: Sandbox) -> None:
+    for name in ("example-one", "example-two"):
+        sandbox.set_plugin_version(name, "1.1.0")
+    sandbox.commit("Raise the example plugin versions")
+    sandbox.list_plugins({"example-one": "1.0.0", "example-two": "1.0.0"})
+    sandbox.move_on_update({"example-one": "1.1.0"})
+
+    result = sandbox.run("--update", stdin="y\n")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.endswith(
+        "plugin:example-two: left at 1.0.0, not HEAD's 1.1.0: claude plugin update installs GitHub's main, which can"
+        " differ from this checkout\n"
+        "Updated plugin:example-one.\n"
+    )
+
+
+def test_update_offers_to_remove_a_settings_fragment_the_new_harness_drops(sandbox: Sandbox) -> None:
+    assert sandbox.run("harness", "settings:example-deny", stdin="y\n").returncode == 0
+    settings = sandbox.home / ".claude/settings.json"
+    held = json.loads(settings.read_text())
+    held["permissions"]["deny"].append("Read(./example-own)")
+    held["model"] = "example-own-model"
+    settings.write_text(json.dumps(held, indent=2) + "\n")
+    (sandbox.clone / "harness/settings/example-deny.json").unlink()
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Drop the example deny fragment")
+
+    result = sandbox.run("--update", stdin="y\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    assert f"settings:example-deny: HEAD no longer ships it; removes its entries from {settings}\n" in result.stdout
+    assert "Remove settings:example-deny? [y/N] " in result.stdout
+    assert json.loads(settings.read_text()) == {
+        "permissions": {"deny": ["Read(./example-own)"]},
+        "model": "example-own-model",
+    }
 
 
 @pytest.mark.parametrize(

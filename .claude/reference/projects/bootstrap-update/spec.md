@@ -18,10 +18,10 @@ Each read happens before anything is written, so the plan can be shown whole.
 | Component | Installed when | Behind when | Update does |
 |---|---|---|---|
 | `harness` | `CURRENT` (`bootstrap/harness.py`) is a link to a version directory | that directory's name differs from `harness_version(HEAD)` | `install_harness`; the version is new, so it asks nothing of its own |
-| `skills` | any link in `SKILLS_DIR` points into `CURRENT / "skills"` (`is_link_to`, `bootstrap/skills.py:17`) | the harness is behind, or HEAD's skill names differ from the linked ones | `install_skills` after the harness |
+| `skills` | any link in `SKILLS_DIR` points into `CURRENT / "skills"` (`is_link_to`, `bootstrap/skills.py:17`) | the skill names of the harness this run leaves installed (HEAD's when the harness is behind and covered, `current`'s otherwise) differ from the linked ones | `install_skills` after the harness |
 | `hooks-path` | never detected | never: it points at `current` | nothing |
 | `fragment:<name>` | `~/.claude/CLAUDE.md` imports `current/fragments/<name>.md` | never: the import follows `current` | nothing; an import whose file HEAD no longer ships is reported as vanished |
-| `settings:<name>` | `settings.json` holds at least one leaf of the installed `current/settings/<name>.json` (D15) | the update function (task 01) returns a different object | one combined write of `settings.json` |
+| `settings:<name>` | `settings.json` holds at least one leaf of the installed `current/settings/<name>.json` (D15) | the update function (task 01) returns a different object; when the harness is behind and HEAD no longer ships the fragment, the new fragment is taken as empty, so its entries are offered for removal | one combined write of `settings.json` |
 | `plugin:<name>` | `claude plugin list --json` has an entry whose `id` is `<name>@<marketplace>` | its `version` differs from `plugins/<name>/.claude-plugin/plugin.json`'s at HEAD | `claude plugin marketplace update <marketplace>` once, `claude plugin update <name>@<marketplace>`, then the template copy |
 
 - `claude plugin list --json` prints a list of objects with `id`, `version`, `scope`, `enabled` and `installPath`
@@ -61,13 +61,18 @@ so update shows every diff, asks once, then writes each file. Install keeps call
 - Output, in install order: one line per installed component saying `current`, or what would change, with the
   harness version move; then `available:` and `vanished:` lines when there are any. Nothing behind prints
   `Everything installed is current.` and exits 0 without asking.
-- Confirmations (D15): one for the harness, skills and plugins together, `Update these? [y/N] `; then, for each
+- Confirmations (D15): one for the harness, skills and plugins together, naming them, as in
+  `Update harness, skills, plugin:<name>? [y/N] `; then, for each
   settings fragment that would change `settings.json`, its own diff and `Apply settings:<name>? [y/N] `. Each
   fragment's diff is computed against `settings.json` as the fragments confirmed before it left it, and all accepted
   fragments are written in one staged write. A no to the first confirmation skips what it covers and still offers the
-  settings fragments; a no to a fragment skips only that fragment. Every no is listed in the closing summary. A run
+  settings fragments; a no to a fragment skips only that fragment. A fragment HEAD no longer ships asks
+  `Remove settings:<name>? [y/N] ` instead. Every no is listed in the closing summary. A run
   without stdin stops as install does.
 - Every question is asked before anything is written, so a run stopped at a prompt changes nothing.
+- After the plugins, `claude plugin list --json` is read again, and a plugin still short of HEAD's version is
+  reported with the version it was left at, not as updated: `claude plugin update` installs GitHub's `main`, which
+  can differ from the checkout.
 - Apply order: harness, skills, settings, then plugins with their templates. A failure stops with the component and
   what updated before it, as install does.
 - Templates on update: rewrite each `.example` whose content differs from HEAD's, add missing ones, never touch a

@@ -52,6 +52,8 @@ class SettingsChange:
     name: str
     old: dict
     new: dict
+    # HEAD no longer ships the fragment, so `new` is empty and the change takes its entries out.
+    removes: bool = False
 
 
 @dataclass
@@ -64,6 +66,9 @@ class Survey:
     vanished: list[str] = field(default_factory=list)
     settings_before: str = ""
     settings: dict = field(default_factory=dict)
+    marketplace: str = ""
+    # HEAD's version of each plugin in `updates`.
+    plugin_heads: dict[str, str] = field(default_factory=dict)
 
 
 def unknown_components(names: list[str]) -> Stop:
@@ -100,6 +105,8 @@ def update(names: list[str]) -> None:
             raise Stop(f"{', '.join(step_names)} failed: {error}; updated before it: {updated}") from error
         run.installed.extend(step_names)
 
+    for name in plugins_left_behind(survey, run):
+        run.installed.remove(name)
     print(f"Updated {', '.join(run.installed) or 'nothing'}.")
     if skipped:
         print(f"Skipped {', '.join(skipped)}.")
@@ -114,7 +121,7 @@ def surveyed(names: set[str], run: Run) -> Survey:
     harness_moves = harness_behind and (not names or "harness" in names)
     survey_skills(survey, harness_moves)
     survey_fragments(survey)
-    survey_settings(survey)
+    survey_settings(survey, harness_moves)
     if not names or any(name.startswith(PLUGIN) for name in names):
         survey_plugins(survey, run)
     return survey
@@ -139,6 +146,8 @@ def narrowed(survey: Survey, names: list[str]) -> Survey:
         vanished=[name for name in survey.vanished if name in names],
         settings_before=survey.settings_before,
         settings=survey.settings,
+        marketplace=survey.marketplace,
+        plugin_heads=survey.plugin_heads,
     )
 
 
@@ -227,10 +236,11 @@ def survey_fragments(survey: Survey) -> None:
         survey.vanished.append(f"fragment:{name}")
 
 
-def survey_settings(survey: Survey) -> None:
+def survey_settings(survey: Survey, harness_moves: bool) -> None:
     """A settings fragment is installed when settings.json holds at least one entry of the installed harness's copy,
-    and behind when moving settings.json from that copy to HEAD's changes it. Read before the harness moves, since
-    the installed copy goes with the old version."""
+    and behind when moving settings.json from that copy to HEAD's changes it. One HEAD no longer ships is taken as
+    empty when the harness moves, so its entries are offered for removal. Read before the harness moves, since the
+    installed copy goes with the old version."""
     if SETTINGS_FILE.exists():
         survey.settings_before = SETTINGS_FILE.read_text(encoding="utf-8")
         survey.settings = parse_json_object(survey.settings_before, str(SETTINGS_FILE))
@@ -254,14 +264,21 @@ def survey_settings(survey: Survey) -> None:
         survey.found.append(Found(name, f"changes {SETTINGS_FILE}"))
         survey.settings_changes.append(SettingsChange(name, old, new))
     shipped_names = {path.stem for path in shipped}
-    for stem in held:
-        if stem not in shipped_names:
-            survey.vanished.append(f"settings:{stem}")
+    for stem, old in held.items():
+        if stem in shipped_names:
+            continue
+        name = f"settings:{stem}"
+        if not harness_moves:
+            survey.vanished.append(name)
+            continue
+        survey.found.append(Found(name, f"HEAD no longer ships it; removes its entries from {SETTINGS_FILE}"))
+        survey.settings_changes.append(SettingsChange(name, old, {}, removes=True))
 
 
 def survey_plugins(survey: Survey, run: Run) -> None:
     check_plugin_setup()
     marketplace, plugins = read_marketplace()
+    survey.marketplace = marketplace
     installed = installed_plugin_versions(marketplace)
     shipped = [plugin["name"] for plugin in plugins]
     for plugin in shipped:
@@ -277,6 +294,7 @@ def survey_plugins(survey: Survey, run: Run) -> None:
         check_plugin(plugin, run)
         survey.found.append(Found(name, f"{', '.join(sorted(versions))} to {head}"))
         survey.updates[name] = functools.partial(update_plugin, plugin, marketplace)
+        survey.plugin_heads[name] = head
     for plugin in sorted(set(installed) - set(shipped)):
         survey.vanished.append(f"{PLUGIN}{plugin}")
 
@@ -296,7 +314,8 @@ def confirmed_settings(survey: Survey, skipped: list[str]) -> tuple[list[str], s
             continue
         after = settings_text(updated, survey.settings_before)
         print_diff(target, text, after)
-        if answered_yes(f"Apply {change.name}? [y/N] ", NO_STDIN):
+        verb = "Remove" if change.removes else "Apply"
+        if answered_yes(f"{verb} {change.name}? [y/N] ", NO_STDIN):
             settings = updated
             text = after
             accepted.append(change.name)
@@ -309,3 +328,25 @@ def write_settings(text: str, run: Run) -> None:
     target = SETTINGS_FILE.resolve()
     write_staged(target, text.encode())
     print(f"settings: wrote {target}")
+
+
+def plugins_left_behind(survey: Survey, run: Run) -> list[str]:
+    """The plugins updated in this run that `claude plugin list --json` still shows short of HEAD's version, each
+    reported with the version it was left at."""
+    updated = [name for name in run.installed if name in survey.plugin_heads]
+    if not updated:
+        return []
+    listed = installed_plugin_versions(survey.marketplace)
+    behind = []
+    for name in updated:
+        head = survey.plugin_heads[name]
+        versions = listed.get(name.removeprefix(PLUGIN), set())
+        if versions == {head}:
+            continue
+        left_at = ", ".join(sorted(versions)) or "no version"
+        print(
+            f"{name}: left at {left_at}, not HEAD's {head}: claude plugin update installs GitHub's main, which can"
+            " differ from this checkout"
+        )
+        behind.append(name)
+    return behind
