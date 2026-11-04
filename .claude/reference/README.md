@@ -16,12 +16,13 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Built-in Worktrees](domains/worktrees/overview.md) | relying on a worktree's contents or base, or on a language server answer inside one |
 | [Guardrails](domains/guardrails/overview.md) | writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to stop a call |
 | [Comparing Harness Variants](domains/experiments/overview.md) | running two or more versions of a prompt, skill or reviewer against each other, or reading such a comparison's results |
-| [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, or anything under `.github/workflows/` |
+| [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, anything under `.github/workflows/`, or a file the pre-push gate reads |
+| [Bootstrap](domains/bootstrap/overview.md) | adding or moving a module of the `bootstrap/` package, or changing what `bootstrap.py` writes into `~/.claude/local/` |
 | [Harness Migration](projects/harness-migration/overview.md) | resuming the harness migration |
-| [Test Review Breaks](projects/test-review-batch/overview.md) | resuming #55, the cost of test-review's breaks |
+| [Test Review Breaks](projects/test-review-batch/overview.md) | reading the rulings and measurements behind test-review's breaks and the single-agent lens-review (issue #55) |
 | [Away Plugin](projects/away-plugin/overview.md) | building or changing the `away` plugin (issue #67) |
-| [Bootstrap Split](projects/bootstrap-split/overview.md) | splitting `bootstrap.py` into its package (issue #14) |
-| [Plugin Templates](projects/plugin-templates/overview.md) | changing how bootstrap copies a plugin's `local.example/` templates (issue #37) |
+| [Bootstrap Split](projects/bootstrap-split/overview.md) | reading the rulings and the module map behind the `bootstrap/` package (issue #14) |
+| [Plugin Templates](projects/plugin-templates/overview.md) | reading the rulings and the designs ruled out behind the template copy (issue #37) |
 
 ## Local conventions
 
