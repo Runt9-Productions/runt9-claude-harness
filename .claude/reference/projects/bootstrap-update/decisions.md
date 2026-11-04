@@ -34,6 +34,12 @@ Rulings for the update mode. Read before changing what [[Bootstrap Update Spec]]
 - [decision] Update is the `--update` flag: with no component names it covers everything installed, and with names
   only those, each of which must be installed; `--repo` with it stops (owner, 2026-11-03): a flag leaves room to
   update one component without updating the rest.
+- [decision] When the harness moves past a version that drops a settings fragment `settings.json` still holds,
+  update offers to remove that fragment's entries with its own diff and question (owner, 2026-11-04): after the move
+  no run can tell those entries came from bootstrap.
+- [decision] After updating plugins, update lists them again and reports a plugin left short of HEAD's version
+  rather than as updated (lead, 2026-11-04): `claude plugin update` installs GitHub's `main`, which can differ from
+  the checkout.
 
 ## Open questions
 

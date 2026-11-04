@@ -50,7 +50,7 @@ change only when they update and that version has risen; auto-update is off for 
 every PR that changes what a plugin ships raises its version, and CI fails it otherwise. Plugins with a contract
 between them bump together. Marketplace entries hold only a name, a description and `./plugins/<name>`. The harness
 works the same way with one version for all of `harness/`, in `harness/harness.json`: its rise is what tells a user
-to run `bootstrap.py harness` again.
+to run `bootstrap.py --update`.
 
 ## Issues and pull request text
 
@@ -76,7 +76,8 @@ A plugin reads machine-local data from `~/.claude/local/<plugin>/` and treats a 
 `harness/skills/` does the same from `~/.claude/local/<skill>/`. Examples,
 with synthetic content only, live in `plugins/<name>/local.example/`, or beside the file in `harness/`. After
 installing a plugin, `bootstrap.py` copies each file in its `local.example/` to `~/.claude/local/<plugin>/` as a
-`<file>.example` template, which no skill reads, and never overwrites one that exists. The user's own
+`<file>.example` template, which no skill reads, and never overwrites one that exists, except that `--update`
+rewrites one whose content differs from HEAD's; the filled copy without `.example` is never touched. The user's own
 machine-local rules go in `~/.claude/local/local.md`, which `harness/claude-md-template.md` imports; it is theirs to
 write, so no example ships.
 
