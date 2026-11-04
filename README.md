@@ -94,10 +94,14 @@ those; each must be installed.
 A settings fragment changes only what it put there: a value or list entry still equal to the installed copy's becomes
 HEAD's, or goes when HEAD drops it, and what HEAD adds is merged as on install. A value you changed and an entry you
 removed stay as you left them. When the harness moves and HEAD no longer ships a fragment that `settings.json` holds
-entries of, it asks to remove them instead. A plugin gets `claude plugin marketplace update runt9`, once per run,
-then `claude plugin update <name>@runt9`; each `.example` template that differs from HEAD's is rewritten and each
-missing one is added, and a filled copy without `.example` is never touched. `claude plugin update` installs GitHub's
-`main`, so a plugin still short of HEAD's version afterwards is reported with the version it was left at.
+entries of, it asks to remove them instead. In a run that moves the harness, a no to a settings fragment is final,
+since later runs compare `settings.json` against the fragments that run installed; each settings question says so,
+and the closing summary lists those fragments as skipped for good.
+
+A plugin gets `claude plugin marketplace update runt9`, once per run, then `claude plugin update <name>@runt9`; each
+`.example` template that differs from HEAD's is rewritten and each missing one is added, and a filled copy without
+`.example` is never touched. `claude plugin update` installs GitHub's `main`, so a plugin still short of HEAD's
+version afterwards is reported with the version it was left at and left out of the closing `Updated` line.
 
 It refuses inside a Claude Code session, with uncommitted changes to tracked files, with `--repo`, with `claude`
 missing from `PATH` unless only harness parts are named, and for a named component that is unknown, not installed or

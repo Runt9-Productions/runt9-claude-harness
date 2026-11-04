@@ -974,7 +974,7 @@ def test_update_moves_settings_to_the_new_fragment_and_keeps_what_the_user_added
     result = sandbox.run("--update", stdin="y\ny\n")
 
     assert result.returncode == 0, result.stderr
-    assert "Apply settings:example-deny? [y/N] " in result.stdout
+    assert "Apply settings:example-deny? A no keeps the current values for good. [y/N] " in result.stdout
     assert json.loads(settings.read_text()) == {
         "permissions": {
             "deny": ["Read(./example-secret)", "Read(./example-own)", "Read(./example-key-file)"],
@@ -1037,6 +1037,7 @@ def test_update_applies_only_what_was_answered_yes_and_reports_a_vanished_plugin
 
     assert result.returncode == 0, result.stderr
     assert "vanished: plugin:example-gone\n" in result.stdout
+    assert "Apply settings:example-deny? [y/N] " in result.stdout
     installed["permissions"]["ask"] = ["Bash(example-new)"]
     assert json.loads(settings.read_text()) == installed
     assert sandbox.current.readlink() == Path("versions/0.1.0")
@@ -1083,6 +1084,44 @@ def test_update_reports_a_plugin_its_update_left_short_of_head(sandbox: Sandbox)
     )
 
 
+def test_update_says_updated_nothing_only_when_it_applied_nothing(sandbox: Sandbox) -> None:
+    sandbox.set_plugin_version("example-one", "1.1.0")
+    sandbox.commit("Raise the example plugin version")
+    sandbox.list_plugins({"example-one": "1.0.0"})
+
+    declined = sandbox.run("--update", stdin="n\n")
+    left_behind = sandbox.run("--update", stdin="y\n")
+
+    assert declined.returncode == 0, declined.stderr
+    assert declined.stdout.endswith("Updated nothing.\nSkipped plugin:example-one.\n")
+    assert left_behind.returncode == 0, left_behind.stderr
+    assert left_behind.stdout.endswith(
+        "plugin:example-one: left at 1.0.0, not HEAD's 1.1.0: claude plugin update"
+        " installs GitHub's main, which can differ from this checkout\n"
+    )
+    assert "Updated" not in left_behind.stdout
+
+
+def test_update_that_moves_the_harness_reports_a_declined_settings_fragment_as_skipped_for_good(
+    sandbox: Sandbox,
+) -> None:
+    assert sandbox.run("harness", "settings:example-deny", stdin="y\n").returncode == 0
+    sandbox.write(
+        "harness/settings/example-deny.json", json.dumps({**SETTINGS_FRAGMENT, "model": "example-new"}).encode()
+    )
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Change the example deny fragment")
+
+    result = sandbox.run("--update", stdin="y\nn\n")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.endswith(
+        "Updated harness.\n"
+        "Skipped settings:example-deny for good: later runs compare settings.json against the fragments this run"
+        " installed.\n"
+    )
+
+
 def test_update_offers_to_remove_a_settings_fragment_the_new_harness_drops(sandbox: Sandbox) -> None:
     assert sandbox.run("harness", "settings:example-deny", stdin="y\n").returncode == 0
     settings = sandbox.home / ".claude/settings.json"
@@ -1098,7 +1137,7 @@ def test_update_offers_to_remove_a_settings_fragment_the_new_harness_drops(sandb
 
     assert result.returncode == 0, result.stderr
     assert f"settings:example-deny: HEAD no longer ships it; removes its entries from {settings}\n" in result.stdout
-    assert "Remove settings:example-deny? [y/N] " in result.stdout
+    assert "Remove settings:example-deny? A no keeps the current values for good. [y/N] " in result.stdout
     assert json.loads(settings.read_text()) == {
         "permissions": {"deny": ["Read(./example-own)"]},
         "model": "example-own-model",

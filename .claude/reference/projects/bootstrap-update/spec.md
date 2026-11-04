@@ -67,12 +67,16 @@ so update shows every diff, asks once, then writes each file. Install keeps call
   fragment's diff is computed against `settings.json` as the fragments confirmed before it left it, and all accepted
   fragments are written in one staged write. A no to the first confirmation skips what it covers and still offers the
   settings fragments; a no to a fragment skips only that fragment. A fragment HEAD no longer ships asks
-  `Remove settings:<name>? [y/N] ` instead. Every no is listed in the closing summary. A run
+  `Remove settings:<name>? [y/N] ` instead.
+  In a run that moves the harness, each settings question says a no keeps the current values for good, since
+  later runs compare against HEAD's copy, and the closing summary names each fragment declined that way. Every no is listed in the closing summary. A run
   without stdin stops as install does.
 - Every question is asked before anything is written, so a run stopped at a prompt changes nothing.
 - After the plugins, `claude plugin list --json` is read again, and a plugin still short of HEAD's version is
   reported with the version it was left at, not as updated: `claude plugin update` installs GitHub's `main`, which
   can differ from the checkout.
+  The closing `Updated` line names only what reached HEAD, and is left out when a left-behind plugin was the only
+  thing applied, so the run never ends with `Updated nothing.` after it ran an update.
 - Apply order: harness, skills, settings, then plugins with their templates. A failure stops with the component and
   what updated before it, as install does.
 - Templates on update: rewrite each `.example` whose content differs from HEAD's, add missing ones, never touch a
