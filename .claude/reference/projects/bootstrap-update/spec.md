@@ -115,8 +115,8 @@ a user-owned value, a dropped key, and the emptied object.
 
 ## Ticket
 
-#41 already describes this design. No change planned beyond filling the open points with the D15 to D17 answers once
-they are in.
+#41's body describes the command as built: named components, settings that ride with the harness, removal of a
+dropped fragment, and the plugin version check after updating.
 
 ## Relations
 

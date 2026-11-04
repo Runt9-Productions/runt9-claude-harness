@@ -7,7 +7,7 @@ tags:
 - harness
 - plugins
 - update
-status: implementation
+status: complete
 opened: '2026-11-03'
 ---
 
@@ -19,7 +19,7 @@ when that merges with tests at the command's boundary.
 
 ## Where it stands
 
-- [status] Spec written; the build waits for a session started in the worktree.
+- [status] Complete: tasks 01 to 03 built in #111; the durable facts are in [[Bootstrap]] and [[Guardrails]].
 
 ## Goal
 

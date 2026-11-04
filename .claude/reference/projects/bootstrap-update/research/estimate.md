@@ -35,6 +35,14 @@ removal and replacement, and the command around it is new.
 
 - Whether `claude plugin update` refreshes the catalog itself; running `marketplace update` first makes it moot.
 
+## Actual
+
+Against the base: production 612 lines added and 31 removed across 8 files, one new (`bootstrap/update.py`, 364);
+tests 493 added and 4 removed in `test_bootstrap.py`; docs and notes 418 added and 38 removed across 11 files; the
+board plugin's test fix 3 added and 12 removed across 3 files. The estimate missed the rulings made during the
+build: settings that ride with the harness, named components, removal of a dropped fragment, keeping what the
+user removed, and the plugin version check after updating. Each added detection or ordering code and its tests.
+
 ## Relations
 
 - part_of [[Bootstrap Update]]
