@@ -43,6 +43,9 @@ Rulings for the update mode. Read before changing what [[Bootstrap Update Spec]]
 - [decision] A no to a settings fragment in a run that moves the harness is final, and only the README says so
   (owner, 2026-11-04): later runs compare against the new harness's copy, and a warning at each question was not
   wanted.
+- [decision] Settings ride with the harness: a run that moves it asks about every changed settings fragment whatever
+  is named, and a run that leaves it behind offers none (owner, 2026-11-04): update knows a fragment's old entries
+  only from the installed harness's copy, so settings and the harness moving apart loses changes for good.
 
 ## Open questions
 

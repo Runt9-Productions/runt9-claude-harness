@@ -65,13 +65,18 @@ so update shows every diff, asks once, then writes each file. Install keeps call
   `Update harness, skills, plugin:<name>? [y/N] `; then, for each
   settings fragment that would change `settings.json`, its own diff and `Apply settings:<name>? [y/N] `. Each
   fragment's diff is computed against `settings.json` as the fragments confirmed before it left it, and all accepted
-  fragments are written in one staged write. A no to the first confirmation skips what it covers and still offers the
-  settings fragments; a no to a fragment skips only that fragment. A fragment HEAD no longer ships asks
+  fragments are written in one staged write. A no to the first confirmation skips what it covers and, when that
+  leaves the harness behind, the settings fragments too; a no to a fragment skips only that fragment. A fragment HEAD no longer ships asks
   `Remove settings:<name>? [y/N] ` instead.
   In a run that moves the harness, a no to a settings fragment is final, since later runs compare against HEAD's
   copy; the README says so, and the questions do not. Every no is listed in the closing summary. A run
   without stdin stops as install does.
 - Every question is asked before anything is written, so a run stopped at a prompt changes nothing.
+- Settings follow the harness, because update knows a fragment's old entries only from the installed harness's
+  copy: a run that moves the harness shows and asks about every changed settings fragment whatever is named, and a
+  run that leaves the harness behind (declined at the first question, or not named) offers no settings change and
+  lists each changed fragment as waiting for the harness. Naming only `settings:<name>` while the harness is behind
+  stops with a one-line message saying to name the harness too.
 - After the plugins, `claude plugin list --json` is read again, and a plugin still short of HEAD's version is
   reported with the version it was left at, not as updated: `claude plugin update` installs GitHub's `main`, which
   can differ from the checkout.
@@ -93,8 +98,10 @@ Through `sandbox.run("update", ...)`, synthetic fixtures only:
 - A plugin whose HEAD version is newer: the stub `claude` sees the marketplace update, then the plugin update, and a
   changed template's `.example` is rewritten while the real file is unchanged. The stub needs a canned
   `plugin list --json` reply.
-- With two changed settings fragments, yes to one and no to the other writes only the first one's change; a no to
-  the first confirmation leaves the harness and plugins alone; a vanished plugin is reported and the run goes on.
+- With two changed settings fragments and the harness accepted, yes to one and no to the other writes only the first
+  one's change; a no to the first confirmation leaves the harness, plugins and settings alone and lists the changed
+  fragments as waiting for the harness; `--update harness` asks about every changed fragment; a vanished plugin is
+  reported and the run goes on.
 
 Task 01's function also gets direct tests in the same file, since its cases are many and cheap: the reworded entry,
 a user-owned value, a dropped key, and the emptied object.

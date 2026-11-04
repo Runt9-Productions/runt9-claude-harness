@@ -6,6 +6,7 @@
 Run it in your own shell, not in a Claude Code session. With components named it installs exactly those, in the order
 --list shows; with none named it asks about each one. With --update it brings every installed component up to HEAD,
 or only those named, each of which must be installed: it prints what would change and asks before writing anything.
+Settings fragments update only in a run that moves the harness, and every changed one comes with it.
 README.md says what each component does, how each is found installed, and what it refuses.
 
 Exits 0 when everything picked installed, or on --update when nothing failed or was refused, whatever was declined.
@@ -28,8 +29,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bootstrap.core import Component, Run, Stop, answered_yes
 from bootstrap.plugins import print_templates
-from bootstrap.registry import all_components
-from bootstrap.update import unknown_components, update
+from bootstrap.registry import all_components, unknown_components
+from bootstrap.update import update
 
 SESSION_VARIABLES = ("CLAUDE_CODE_SESSION_ID", "CLAUDECODE")
 

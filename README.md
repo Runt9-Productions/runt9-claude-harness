@@ -87,9 +87,14 @@ It prints one line per installed component, `current` or what would change, then
 you have not installed, which it never installs, and `vanished:` for what you have installed and HEAD no longer
 ships. With nothing behind it prints `Everything installed is current.` and asks nothing. Otherwise it asks once
 about the harness, skills and plugins together, then shows each changed settings fragment's diff and asks about that
-fragment alone. Every question comes before the first write, so stopping at a prompt changes nothing, and a no skips
-only what that question covers. Name components, as in `python3 bootstrap.py --update harness skills`, to update only
-those; each must be installed.
+fragment alone. Every question comes before the first write, so stopping at a prompt changes nothing. Name
+components, as in `python3 bootstrap.py --update harness skills`, to update only those; each must be installed.
+
+Settings follow the harness, since a fragment's old entries are known only from the installed harness's copy. A run
+that moves the harness shows and asks about every changed settings fragment, named or not. A run that leaves the
+harness behind, because you answered no to the first question or did not name it, asks about none of them and lists
+each as waiting for the harness. Naming only settings fragments while the harness is behind stops and says to name
+the harness too.
 
 A settings fragment changes only what it put there: a value or list entry still equal to the installed copy's becomes
 HEAD's, or goes when HEAD drops it, and what HEAD adds is merged as on install. A value you changed and an entry you

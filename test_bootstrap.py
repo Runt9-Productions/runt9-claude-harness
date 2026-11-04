@@ -1027,7 +1027,35 @@ def test_update_updates_a_newer_plugin_and_rewrites_its_changed_template(sandbox
     assert result.stdout.endswith(f"{TEMPLATES_HEADER}{template}\n")
 
 
-def test_update_applies_only_what_was_answered_yes_and_reports_what_vanished(sandbox: Sandbox) -> None:
+def test_update_leaves_a_linked_or_unchanged_template_alone_and_adds_a_missing_one(sandbox: Sandbox) -> None:
+    for name in ("example-linked.md", "example-same.md"):
+        sandbox.write(f"plugins/example-one/local.example/{name}", b"example template\n")
+    sandbox.commit("Add example templates")
+    assert sandbox.run("plugin:example-one").returncode == 0
+    local = sandbox.home / ".claude/local/example-one"
+    linked = local / "example-linked.md.example"
+    link_target = sandbox.root / "example-own-template"
+    link_target.write_bytes(b"example own template\n")
+    linked.unlink()
+    linked.symlink_to(link_target)
+    sandbox.write("plugins/example-one/local.example/example-linked.md", b"example reworded template\n")
+    sandbox.write("plugins/example-one/local.example/example-added.md", b"example added template\n")
+    sandbox.set_plugin_version("example-one", "1.1.0")
+    sandbox.commit("Reword one example template and add another")
+    sandbox.list_plugins({"example-one": "1.0.0"})
+    sandbox.move_on_update({"example-one": "1.1.0"})
+
+    result = sandbox.run("--update", stdin="y\n")
+
+    assert result.returncode == 0, result.stderr
+    assert linked.readlink() == link_target
+    assert link_target.read_bytes() == b"example own template\n"
+    added = local / "example-added.md.example"
+    assert added.read_bytes() == b"example added template\n"
+    assert result.stdout.endswith(f"{TEMPLATES_HEADER}{added}\n")
+
+
+def test_update_declining_the_harness_holds_back_its_settings_and_reports_what_vanished(sandbox: Sandbox) -> None:
     sandbox.write("harness/settings/example-ask.json", json.dumps({"permissions": {"ask": ["Bash(example)"]}}).encode())
     sandbox.commit("Add an example ask fragment")
     installs = ("harness", "settings:example-ask", "settings:example-deny")
@@ -1047,18 +1075,52 @@ def test_update_applies_only_what_was_answered_yes_and_reports_what_vanished(san
     sandbox.commit("Change both example fragments and the example plugin, and drop the example rules")
     sandbox.list_plugins({"example-one": "1.0.0", "example-gone": "1.0.0"})
 
-    # The harness and the plugin, then example-ask, then example-deny.
-    result = sandbox.run("--update", stdin="n\ny\nn\n")
+    # A no to the harness and the plugin, then yeses a settings question would take.
+    result = sandbox.run("--update", stdin="n\ny\ny\n")
 
     assert result.returncode == 0, result.stderr
     assert "vanished: fragment:example-rules, plugin:example-gone\n" in result.stdout
-    installed["permissions"]["ask"] = ["Bash(example-new)"]
+    assert "Apply settings:" not in result.stdout
     assert json.loads(settings.read_text()) == installed
     assert sandbox.current.readlink() == Path("versions/0.1.0")
     assert sandbox.claude_calls() == [PLUGIN_LIST]
     assert result.stdout.endswith(
-        "Updated settings:example-ask.\nSkipped harness, plugin:example-one, settings:example-deny.\n"
+        "Updated nothing.\n"
+        "Skipped harness, plugin:example-one.\n"
+        "Waiting for the harness: settings:example-ask, settings:example-deny.\n"
     )
+
+
+def test_update_with_the_harness_named_asks_about_every_changed_settings_fragment(sandbox: Sandbox) -> None:
+    sandbox.write("harness/settings/example-ask.json", json.dumps({"permissions": {"ask": ["Bash(example)"]}}).encode())
+    sandbox.commit("Add an example ask fragment")
+    installs = ("harness", "settings:example-ask", "settings:example-deny")
+    assert sandbox.run(*installs, stdin="y\ny\n").returncode == 0
+    settings = sandbox.home / ".claude/settings.json"
+    installed = json.loads(settings.read_text())
+    sandbox.write(
+        "harness/settings/example-ask.json", json.dumps({"permissions": {"ask": ["Bash(example-new)"]}}).encode()
+    )
+    sandbox.write(
+        "harness/settings/example-deny.json", json.dumps({**SETTINGS_FRAGMENT, "model": "example-new"}).encode()
+    )
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Change both example fragments")
+
+    # The harness, then no to example-ask and yes to example-deny.
+    result = sandbox.run("--update", "harness", stdin="y\nn\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith(
+        "harness: 0.1.0 to 0.2.0\n"
+        f"settings:example-ask: changes {settings}\n"
+        f"settings:example-deny: changes {settings}\n"
+        "Update harness? [y/N] "
+    )
+    installed["model"] = "example-new"
+    assert json.loads(settings.read_text()) == installed
+    assert sandbox.current.readlink() == Path("versions/0.2.0")
+    assert result.stdout.endswith("Updated harness, settings:example-deny.\nSkipped settings:example-ask.\n")
 
 
 def test_update_with_names_covers_only_those_named(sandbox: Sandbox) -> None:
@@ -1086,23 +1148,28 @@ def test_update_with_names_covers_only_those_named(sandbox: Sandbox) -> None:
     ]
 
 
-def test_update_without_the_harness_named_judges_against_the_installed_one(sandbox: Sandbox) -> None:
+def test_update_without_the_harness_named_judges_against_it_and_holds_back_its_settings(sandbox: Sandbox) -> None:
     assert sandbox.run("harness", "skills", "settings:example-deny", stdin="y\n").returncode == 0
     sandbox.write("harness/skills/example-gamma/SKILL.md", b"example gamma skill\n")
     (sandbox.clone / "harness/settings/example-deny.json").unlink()
     sandbox.set_version("0.2.0")
     sandbox.commit("Add an example gamma skill and drop the example deny fragment")
-    settings = (sandbox.home / ".claude/settings.json").read_text()
+    settings = sandbox.home / ".claude/settings.json"
+    before = settings.read_text()
 
     result = sandbox.run("--update", "skills", "settings:example-deny")
+    only_settings = sandbox.run("--update", "settings:example-deny")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == (
         "skills: current\n"
-        "settings:example-deny: vanished, since HEAD no longer ships it\n"
-        "Everything installed is current.\n"
+        f"settings:example-deny: HEAD no longer ships it; removes its entries from {settings}\n"
+        "Updated nothing.\n"
+        "Waiting for the harness: settings:example-deny.\n"
     )
-    assert (sandbox.home / ".claude/settings.json").read_text() == settings
+    assert only_settings.returncode == 1
+    assert "name it too: --update harness settings:example-deny\n" in only_settings.stderr
+    assert settings.read_text() == before
     # No plugin named, so `claude plugin list` never ran.
     assert sandbox.claude_calls() == []
 
