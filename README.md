@@ -95,8 +95,8 @@ A settings fragment changes only what it put there: a value or list entry still 
 HEAD's, or goes when HEAD drops it, and what HEAD adds is merged as on install. A value you changed and an entry you
 removed stay as you left them. When the harness moves and HEAD no longer ships a fragment that `settings.json` holds
 entries of, it asks to remove them instead. In a run that moves the harness, a no to a settings fragment is final,
-since later runs compare `settings.json` against the fragments that run installed; each settings question says so,
-and the closing summary lists those fragments as skipped for good.
+since later runs compare `settings.json` against the new harness's copy, and the only way back is editing
+`settings.json` by hand.
 
 A plugin gets `claude plugin marketplace update runt9`, once per run, then `claude plugin update <name>@runt9`; each
 `.example` template that differs from HEAD's is rewritten and each missing one is added, and a filled copy without

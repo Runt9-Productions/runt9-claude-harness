@@ -91,12 +91,7 @@ def update(names: list[str]) -> None:
     if updates and not answered_yes(f"Update {', '.join(updates)}? [y/N] ", NO_STDIN):
         skipped.extend(updates)
         updates = {}
-    # Once this run moves `current` to HEAD's harness, later runs compare settings.json against HEAD's fragments, so
-    # a declined one is never offered again.
-    no_is_final = "harness" in updates
-    accepted_settings, declined_settings, settings_after = confirmed_settings(survey, no_is_final)
-    if not no_is_final:
-        skipped.extend(declined_settings)
+    accepted_settings, settings_after = confirmed_settings(survey, skipped)
 
     steps = [([name], action) for name, action in updates.items() if not name.startswith(PLUGIN)]
     if accepted_settings:
@@ -118,11 +113,6 @@ def update(names: list[str]) -> None:
         print("Updated nothing.")
     if skipped:
         print(f"Skipped {', '.join(skipped)}.")
-    if no_is_final and declined_settings:
-        declined = ", ".join(declined_settings)
-        print(
-            f"Skipped {declined} for good: later runs compare settings.json against the fragments this run installed."
-        )
     print_templates(run)
 
 
@@ -312,15 +302,13 @@ def survey_plugins(survey: Survey, run: Run) -> None:
         survey.vanished.append(f"{PLUGIN}{plugin}")
 
 
-def confirmed_settings(survey: Survey, no_is_final: bool) -> tuple[list[str], list[str], str]:
+def confirmed_settings(survey: Survey, skipped: list[str]) -> tuple[list[str], str]:
     """Shows each changed fragment's diff against settings.json as the fragments accepted before it leave it, and asks
-    about each. Returns the accepted fragments, the declined ones and the text to write."""
+    about each. Returns the accepted fragments and the text to write; appends each declined one to `skipped`."""
     target = SETTINGS_FILE.resolve()
     settings = survey.settings
     text = survey.settings_before
-    warning = " A no keeps the current values for good." if no_is_final else ""
     accepted = []
-    declined = []
     for change in survey.settings_changes:
         updated = updated_settings(settings, change.old, change.new)
         # A fragment accepted before this one already made the same change.
@@ -330,13 +318,13 @@ def confirmed_settings(survey: Survey, no_is_final: bool) -> tuple[list[str], li
         after = settings_text(updated, survey.settings_before)
         print_diff(target, text, after)
         verb = "Remove" if change.removes else "Apply"
-        if answered_yes(f"{verb} {change.name}?{warning} [y/N] ", NO_STDIN):
+        if answered_yes(f"{verb} {change.name}? [y/N] ", NO_STDIN):
             settings = updated
             text = after
             accepted.append(change.name)
         else:
-            declined.append(change.name)
-    return accepted, declined, text
+            skipped.append(change.name)
+    return accepted, text
 
 
 def write_settings(text: str, run: Run) -> None:

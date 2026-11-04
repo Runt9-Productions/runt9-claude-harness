@@ -40,6 +40,9 @@ Rulings for the update mode. Read before changing what [[Bootstrap Update Spec]]
 - [decision] After updating plugins, update lists them again and reports a plugin left short of HEAD's version
   rather than as updated (lead, 2026-11-04): `claude plugin update` installs GitHub's `main`, which can differ from
   the checkout.
+- [decision] A no to a settings fragment in a run that moves the harness is final, and only the README says so
+  (owner, 2026-11-04): later runs compare against the new harness's copy, and a warning at each question was not
+  wanted.
 
 ## Open questions
 

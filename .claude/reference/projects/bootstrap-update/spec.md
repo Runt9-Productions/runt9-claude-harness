@@ -68,8 +68,8 @@ so update shows every diff, asks once, then writes each file. Install keeps call
   fragments are written in one staged write. A no to the first confirmation skips what it covers and still offers the
   settings fragments; a no to a fragment skips only that fragment. A fragment HEAD no longer ships asks
   `Remove settings:<name>? [y/N] ` instead.
-  In a run that moves the harness, each settings question says a no keeps the current values for good, since
-  later runs compare against HEAD's copy, and the closing summary names each fragment declined that way. Every no is listed in the closing summary. A run
+  In a run that moves the harness, a no to a settings fragment is final, since later runs compare against HEAD's
+  copy; the README says so, and the questions do not. Every no is listed in the closing summary. A run
   without stdin stops as install does.
 - Every question is asked before anything is written, so a run stopped at a prompt changes nothing.
 - After the plugins, `claude plugin list --json` is read again, and a plugin still short of HEAD's version is
