@@ -32,7 +32,9 @@ sources:
 > against `merge_settings`, `updated_settings`, `added_entries`, `replaced_old_entries` and `holds_an_entry` in
 > `bootstrap/settings.py` and `survey_settings` and `confirmed_settings` in `bootstrap/update.py`, two of them measured
 > by calling those functions on synthetic fragments; the settings fragments were unchanged, and every other claim was
-> carried forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
+> carried forward without a re-check. At 095a549, after a change elsewhere in `bootstrap/update.py` moved their lines,
+> `survey_settings` and `confirmed_settings` were read again, unchanged, and their two citations corrected; the
+> `#measured` lines on them were not re-run, and every other claim was carried forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
 > (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build run end to end in
 > the sandbox.
 
@@ -71,11 +73,11 @@ stop a call.
   settings, where it still applies. #silent-failure
 - [fact] `bootstrap.py --update` removes that older text: `updated_settings` (`bootstrap/settings.py:44`) drops each
   list entry of the installed harness's copy of the fragment that HEAD's copy lacks, adds HEAD's new entries and keeps
-  the user's own, after `confirmed_settings` (`bootstrap/update.py:302`) has shown the diff and asked about that
+  the user's own, after `confirmed_settings` (`bootstrap/update.py:305`) has shown the diff and asked about that
   fragment. On a synthetic reworded `soft_deny` entry beside one of the user's, the old text went and the new came in.
   #measured
 - [trap] `--update` learns the older text only from the installed harness's copy (`survey_settings`,
-  `bootstrap/update.py:248`), so once a plain `bootstrap.py harness` has replaced that copy with HEAD's, the older text
+  `bootstrap/update.py:251`), so once a plain `bootstrap.py harness` has replaced that copy with HEAD's, the older text
   stays: a settings file holding only the old text no longer counts as having the fragment (`holds_an_entry`) and is
   offered as available, and one holding other entries of it is reported current. #measured #silent-failure
 
