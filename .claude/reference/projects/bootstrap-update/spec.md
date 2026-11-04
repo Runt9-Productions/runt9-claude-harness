@@ -36,11 +36,13 @@ Each read happens before anything is written, so the plan can be shown whole.
 together, key by key:
 
 - An object both have: recurse.
-- A list in `old`: remove each entry of `old`'s list that `new`'s lacks, when `settings` holds it; then add `new`'s
-  entries `settings` lacks, as `merge_settings` (`bootstrap/settings.py:23`) does.
+- A list in `old`: remove each entry of `old`'s list that `new`'s lacks, when `settings` holds it; then add the
+  entries `new`'s list has, `old`'s lacks and `settings` lacks, as `merge_settings` (`bootstrap/settings.py:23`) does.
 - A plain value: when `settings` holds exactly `old`'s value, set `new`'s, or delete the key when `new` lacks it; a
   different value is the user's and stays (D16).
 - A key only `new` has: added when `settings` lacks it, as `merge_settings` does.
+- A key or list entry `old` has and `settings` lacks was removed by the user and stays absent, whatever `new` holds
+  there, so an update never offers it back and never asks about it again.
 - An object or list in `new` where `settings` has something else stops with `merge_settings`'s message.
 - An object or list left empty by removals is removed too, unless `settings` had it empty before, so a fragment that
   drops a whole list leaves no empty list behind.

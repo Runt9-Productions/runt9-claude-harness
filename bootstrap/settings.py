@@ -43,11 +43,36 @@ def merge_settings(settings: dict, fragment: dict, at: str = "") -> None:
 
 def updated_settings(settings: dict, old: dict, new: dict) -> dict:
     """A copy of `settings` moved from the installed fragment `old` to HEAD's `new`: a value or list entry still equal
-    to `old`'s follows `new`, one that differs is the user's and stays, and what `new` adds is merged as
-    `merge_settings` merges it. Raises Stop where `merge_settings` would."""
+    to `old`'s follows `new`, one that differs is the user's and stays, one `old` has and `settings` lacks stays
+    absent, and what only `new` has is merged as `merge_settings` merges it. Raises Stop where `merge_settings`
+    would."""
     updated = copy.deepcopy(replaced_old_entries(settings, old, new))
-    merge_settings(updated, new)
+    merge_settings(updated, added_entries(settings, old, new))
     return updated
+
+
+def added_entries(settings: dict, old: dict, new: dict) -> dict:
+    """The keys and list entries `new` has and `old` lacks, leaving out all of `new` under a key `old` has and
+    `settings` lacks, since the user removed that key."""
+    added = {}
+    for key, new_value in new.items():
+        if key not in old:
+            added[key] = new_value
+            continue
+        if key not in settings:
+            continue
+        old_value = old[key]
+        if isinstance(old_value, dict) and isinstance(new_value, dict):
+            present = settings[key]
+            present_object = present if isinstance(present, dict) else {}
+            entries = added_entries(present_object, old_value, new_value)
+        elif isinstance(old_value, list) and isinstance(new_value, list):
+            entries = [entry for entry in new_value if entry not in old_value]
+        else:
+            continue
+        if entries:
+            added[key] = entries
+    return added
 
 
 def replaced_old_entries(settings: dict, old: dict, new: dict) -> dict:

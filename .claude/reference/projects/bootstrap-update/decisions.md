@@ -26,6 +26,11 @@ Rulings for the update mode. Read before changing what [[Bootstrap Update Spec]]
   fragment's came from bootstrap.
 - [decision] Update rewrites a `.example` template whose content differs from HEAD's and adds missing ones; real
   local files are never touched (owner, 2026-11-03): only bootstrap writes `.example` files.
+- [decision] A key or list entry the old fragment has and `settings.json` lacks stays absent on update, and only what
+  the new fragment adds beyond the old one is merged (owner, 2026-11-03): the user removed it, and offering it back
+  would repeat the same prompt on every update.
+- [decision] An object or list that update's removals leave empty is removed, and one the user had empty is kept
+  (lead, 2026-11-03): otherwise a fragment that drops a whole list leaves an empty one behind.
 - [proposal] `update` is a word on the command line in place of component names, as the issue writes it; it takes
   no component names and no `--repo`. Status: open.
 

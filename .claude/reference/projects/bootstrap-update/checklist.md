@@ -28,7 +28,8 @@ tags:
   has); and `write_after_asking` split so a write can follow one confirmation for many files
 - [ ] 02 `bootstrap.py update`: detect each installed component, print the plan, ask once, apply in install order,
   report current, available and vanished components, with tests at the command's boundary
-- [ ] 03 The README section on updating, the module docstring, and `CLAUDE.md`'s bootstrap bullet
+- [ ] 03 The README section on updating, the module docstring, `CLAUDE.md`'s bootstrap bullet, and the
+  `domains/bootstrap/overview.md` note re-verified against the changed modules
 
 ## Relations
 

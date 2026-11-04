@@ -641,17 +641,26 @@ def test_settings_the_fragment_cannot_merge_into_refuses_unchanged(sandbox: Sand
     assert settings.read_text() == content
 
 
-def test_settings_update_follows_the_new_fragment_and_keeps_what_the_user_set() -> None:
+def test_settings_update_follows_the_new_fragment_and_keeps_what_the_user_set_or_removed() -> None:
     old = {
-        "permissions": {"deny": ["Read(./example-reworded)", "Read(./example-same)"]},
+        "permissions": {
+            "deny": ["Read(./example-reworded)", "Read(./example-same)", "Read(./example-removed)"],
+            "ask": ["Bash(example-ask)"],
+        },
         "model": "example-old-model",
         "theme": "example-old-theme",
         "exampleDropped": "example-dropped",
+        "exampleRemoved": "example-old-removed",
     }
     new = {
-        "permissions": {"deny": ["Read(./example-rewording)", "Read(./example-same)"], "allow": ["Bash(example)"]},
+        "permissions": {
+            "deny": ["Read(./example-rewording)", "Read(./example-same)", "Read(./example-removed)"],
+            "ask": ["Bash(example-ask)", "Bash(example-ask-new)"],
+            "allow": ["Bash(example)"],
+        },
         "model": "example-new-model",
         "theme": "example-new-theme",
+        "exampleRemoved": "example-new-removed",
     }
     settings = {
         "permissions": {
