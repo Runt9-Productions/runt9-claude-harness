@@ -1,11 +1,15 @@
-"""Install the parts of runt9-claude-harness that cannot be plugins, and the plugins you pick.
+"""Install or update the parts of runt9-claude-harness that cannot be plugins, and the plugins you pick.
 
     python3 bootstrap.py [component ...] [--repo <path> ...] [--list]
+    python3 bootstrap.py --update [component ...]
 
 Run it in your own shell, not in a Claude Code session. With components named it installs exactly those, in the order
---list shows; with none named it asks about each one. README.md says what each component does and what it refuses.
+--list shows; with none named it asks about each one. With --update it brings every installed component up to HEAD,
+or only those named, each of which must be installed: it prints what would change and asks before writing anything.
+README.md says what each component does, how each is found installed, and what it refuses.
 
-Exits 0 when everything picked installed, otherwise 1 with one line naming the reason and what installed before it.
+Exits 0 when everything picked installed, or on --update when nothing failed or was refused, whatever was declined.
+Otherwise it exits 1 with one line naming the reason and what installed or updated before it.
 """
 
 import argparse
@@ -96,7 +100,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         prog="bootstrap.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("components", nargs="*", metavar="component", help="components to install, from --list")
+    parser.add_argument(
+        "components", nargs="*", metavar="component", help="components to install or update, from --list"
+    )
     parser.add_argument("--repo", action="append", default=[], type=Path, metavar="<path>", help="for hooks-path")
     parser.add_argument("--list", action="store_true", help="print the components and exit")
     parser.add_argument("--update", action="store_true", help="update the installed components, or those named")

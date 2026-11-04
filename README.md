@@ -7,7 +7,8 @@ Opt-in plugins and harness pieces for Claude Code, still being migrated in.
 /plugin install <name>@runt9
 ```
 
-Updates are manual: run `claude plugin update <name>@runt9` when you want one.
+Updates are manual: run `claude plugin update <name>@runt9` when you want one, or `python3 bootstrap.py --update`
+from a clone to update every plugin and harness part you installed ([how](#updating)).
 
 ## Harness parts
 
@@ -67,10 +68,42 @@ one. A component installed before a later one failed stays installed. Git runs w
 the other variables that point it at another repository. Nothing here keeps an agent from writing to
 `~/.claude/harness/`; that is your harness's job.
 
-Updating: when `harness/harness.json`'s version rises, check out `main`, pull and run
-`python3 bootstrap.py harness skills` again, adding `fragment:<name>` for a fragment `--list` shows that you have not
-imported yet and `settings:<name>` for a settings fragment that is new or has changed. For a plugin, run
-`claude plugin update <name>@runt9`; running `bootstrap.py` again does not update a plugin already installed.
+### Updating
+
+Check out `main`, pull and run `python3 bootstrap.py --update`. It brings each installed component up to HEAD, and
+finds what is installed where the component already lives rather than in a record of its own, which could drift:
+
+| Component | Installed when | Updated when |
+|---|---|---|
+| `harness` | `~/.claude/harness/current` links to a version | that version is not the one in HEAD's `harness/harness.json` |
+| `skills` | a link in `~/.claude/skills/` points into `current/skills/` | the links differ from the skills of the harness the run leaves installed |
+| `fragment:<name>` | `~/.claude/CLAUDE.md` imports it from `current/fragments/` | never, since the import follows `current` |
+| `settings:<name>` | `settings.json` holds at least one entry of the installed harness's copy | moving `settings.json` from that copy to HEAD's changes it |
+| `plugin:<name>` | `claude plugin list --json` lists it from `runt9` | its version is not the one in HEAD's `plugin.json` |
+
+`hooks-path` is never updated, since it names `current`.
+
+It prints one line per installed component, `current` or what would change, then `available:` for what HEAD has and
+you have not installed, which it never installs, and `vanished:` for what you have installed and HEAD no longer
+ships. With nothing behind it prints `Everything installed is current.` and asks nothing. Otherwise it asks once
+about the harness, skills and plugins together, then shows each changed settings fragment's diff and asks about that
+fragment alone. Every question comes before the first write, so stopping at a prompt changes nothing, and a no skips
+only what that question covers. Name components, as in `python3 bootstrap.py --update harness skills`, to update only
+those; each must be installed.
+
+A settings fragment changes only what it put there: a value or list entry still equal to the installed copy's becomes
+HEAD's, or goes when HEAD drops it, and what HEAD adds is merged as on install. A value you changed and an entry you
+removed stay as you left them. When the harness moves and HEAD no longer ships a fragment that `settings.json` holds
+entries of, it asks to remove them instead. A plugin gets `claude plugin marketplace update runt9`, once per run,
+then `claude plugin update <name>@runt9`; each `.example` template that differs from HEAD's is rewritten and each
+missing one is added, and a filled copy without `.example` is never touched. `claude plugin update` installs GitHub's
+`main`, so a plugin still short of HEAD's version afterwards is reported with the version it was left at.
+
+It refuses inside a Claude Code session, with uncommitted changes to tracked files, with `--repo`, with `claude`
+missing from `PATH` unless only harness parts are named, and for a named component that is unknown, not installed or
+`hooks-path`. A component that is behind also gets the checks its install runs first. A failure stops at that
+component and names what updated before it. To install something `available:` lists, run
+`python3 bootstrap.py <component>`.
 
 ## Clearing merged branches
 
