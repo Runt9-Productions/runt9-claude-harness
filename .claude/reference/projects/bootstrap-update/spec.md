@@ -42,7 +42,8 @@ together, key by key:
   different value is the user's and stays (D16).
 - A key only `new` has: added when `settings` lacks it, as `merge_settings` does.
 - An object or list in `new` where `settings` has something else stops with `merge_settings`'s message.
-- An object left empty by removals is removed too, unless `settings` had it empty before.
+- An object or list left empty by removals is removed too, unless `settings` had it empty before, so a fragment that
+  drops a whole list leaves no empty list behind.
 
 `write_after_asking` (`bootstrap/files.py:28`) splits into a diff printer, the confirmation, and the staged write,
 so update shows every diff, asks once, then writes each file. Install keeps calling the combined function.

@@ -41,6 +41,45 @@ def merge_settings(settings: dict, fragment: dict, at: str = "") -> None:
             raise Stop(f"{path} in {SETTINGS_FILE} is not {kind}, as the fragment's is; fix it by hand")
 
 
+def updated_settings(settings: dict, old: dict, new: dict) -> dict:
+    """A copy of `settings` moved from the installed fragment `old` to HEAD's `new`: a value or list entry still equal
+    to `old`'s follows `new`, one that differs is the user's and stays, and what `new` adds is merged as
+    `merge_settings` merges it. Raises Stop where `merge_settings` would."""
+    updated = copy.deepcopy(replaced_old_entries(settings, old, new))
+    merge_settings(updated, new)
+    return updated
+
+
+def replaced_old_entries(settings: dict, old: dict, new: dict) -> dict:
+    """A copy of `settings` in which each plain value equal to `old`'s takes `new`'s, or goes when `new` lacks its key,
+    and each entry of an `old` list that `new`'s lacks leaves the list. Values are shared with the arguments."""
+    replaced = {}
+    for key, present in settings.items():
+        if key not in old:
+            replaced[key] = present
+            continue
+        old_value = old[key]
+        new_value = new.get(key)
+        if isinstance(old_value, dict) and isinstance(present, dict):
+            new_object = new_value if isinstance(new_value, dict) else {}
+            remaining = replaced_old_entries(present, old_value, new_object)
+        elif isinstance(old_value, list) and isinstance(present, list):
+            new_list = new_value if isinstance(new_value, list) else []
+            remaining = [entry for entry in present if entry in new_list or entry not in old_value]
+        elif present != old_value:
+            replaced[key] = present
+            continue
+        else:
+            if key in new:
+                replaced[key] = new_value
+            continue
+        # An object or list the user had empty is theirs; one these removals emptied came from the old fragment.
+        emptied = bool(present) and not remaining
+        if not emptied:
+            replaced[key] = remaining
+    return replaced
+
+
 def json_indent(text: str) -> str:
     """The indentation of the first indented line in `text`, so a rewrite keeps the file's own."""
     match = re.search(r"\n([ \t]+)\S", text)

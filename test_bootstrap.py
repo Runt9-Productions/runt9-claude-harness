@@ -1,6 +1,6 @@
 """Runs bootstrap.py as a user does: from outside a synthetic clone, with HOME in a temporary directory and a stub
 claude on PATH that records each call. Every git call runs without the machine's global and system config.
-Needs git and pytest.
+`updated_settings` is also called directly, since its cases are many and need no run. Needs git and pytest.
 """
 
 import json
@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from bootstrap.settings import updated_settings
 
 SCRIPT = Path(__file__).resolve().parent / "bootstrap.py"
 GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
@@ -637,6 +639,51 @@ def test_settings_the_fragment_cannot_merge_into_refuses_unchanged(sandbox: Sand
     assert result.returncode == 1
     assert f"permissions.deny in {settings} is not a list" in result.stderr
     assert settings.read_text() == content
+
+
+def test_settings_update_follows_the_new_fragment_and_keeps_what_the_user_set() -> None:
+    old = {
+        "permissions": {"deny": ["Read(./example-reworded)", "Read(./example-same)"]},
+        "model": "example-old-model",
+        "theme": "example-old-theme",
+        "exampleDropped": "example-dropped",
+    }
+    new = {
+        "permissions": {"deny": ["Read(./example-rewording)", "Read(./example-same)"], "allow": ["Bash(example)"]},
+        "model": "example-new-model",
+        "theme": "example-new-theme",
+    }
+    settings = {
+        "permissions": {
+            "deny": ["Read(./example-reworded)", "Read(./example-same)", "Read(./example-own)"],
+            "allow": ["Bash(ls)"],
+        },
+        "model": "example-old-model",
+        "theme": "example-own-theme",
+        "exampleDropped": "example-dropped",
+        "exampleOwn": True,
+    }
+    before = json.dumps(settings)
+
+    updated = updated_settings(settings, old, new)
+
+    assert updated == {
+        "permissions": {
+            "deny": ["Read(./example-same)", "Read(./example-own)", "Read(./example-rewording)"],
+            "allow": ["Bash(ls)", "Bash(example)"],
+        },
+        "model": "example-new-model",
+        "theme": "example-own-theme",
+        "exampleOwn": True,
+    }
+    assert json.dumps(settings) == before
+
+
+def test_settings_update_removes_what_it_empties_and_keeps_what_the_user_had_empty() -> None:
+    old = {"permissions": {"deny": ["Read(./example-dropped)"]}, "exampleObject": {"exampleKey": "example"}}
+    settings = {"permissions": {"deny": ["Read(./example-dropped)"]}, "exampleObject": {}}
+
+    assert updated_settings(settings, old, {}) == {"exampleObject": {}}
 
 
 @pytest.mark.parametrize(

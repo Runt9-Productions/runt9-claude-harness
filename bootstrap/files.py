@@ -25,16 +25,23 @@ def read_json_object(path: Path) -> dict:
     return parse_json_object(text, str(path))
 
 
-def write_after_asking(target: Path, before: str, after: str) -> None:
-    """Shows the diff from `before` to `after` and writes `after` to `target` on yes. Raises Stop on no."""
+def print_diff(target: Path, before: str, after: str) -> None:
     diff = difflib.unified_diff(
         before.splitlines(), after.splitlines(), fromfile=str(target), tofile=str(target), lineterm=""
     )
     print("\n".join(diff))
+
+
+def write_after_asking(target: Path, before: str, after: str) -> None:
+    """Shows the diff from `before` to `after` and writes `after` to `target` on yes. Raises Stop on no."""
+    print_diff(target, before, after)
     no_stdin = f"no answer on stdin to whether to write {target}; run bootstrap.py in a terminal"
     if not answered_yes(f"Write this to {target}? [y/N] ", no_stdin):
         raise Stop(f"not written, so {target} is unchanged")
+    write_staged(target, after)
 
+
+def write_staged(target: Path, after: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     # Staged beside the file and renamed over it, so a failed write leaves the old one whole.
     with tempfile.TemporaryDirectory(prefix=".staging-", dir=target.parent) as staging:
