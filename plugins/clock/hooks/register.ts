@@ -6,9 +6,6 @@ const MINUTE_MS = 60_000
 const MINUTES_PER_HOUR = 60
 const ATTACH_INTERVAL_MS = 15 * MINUTE_MS
 
-// The prompts the user wrote. The others come from background tasks, schedules, other sessions and plugins.
-const USER_ORIGINS: ReadonlySet<PromptOrigin['kind']> = new Set(['composer', 'bridge', 'sdk'])
-
 const lastAttachedAt = atom({ plugin: 'clock', key: 'lastAttachedAt' } as const, null)
 const lastUserMessageAt = atom({ plugin: 'clock', key: 'lastUserMessageAt' } as const, null)
 
@@ -53,6 +50,32 @@ function timeNote(now: EpochMs, userMessageAt: EpochMs | null): string {
   return `${time} The user's previous message was ${elapsed} ago.`
 }
 
+// A prompt is the user's message when the person driving the session sent it from any client, or a plugin passed on
+// their own words. With no default case, a kind the engine adds fails tsc here until it is sorted into one side.
+function isUserMessage(origin: PromptOrigin): boolean {
+  switch (origin.kind) {
+    case 'composer':
+    case 'bridge':
+    case 'sdk':
+    case 'slack-ping':
+      return true
+    case 'plugin':
+      return origin.asUser === true
+    case 'task-notification':
+    case 'scheduled-trigger':
+    case 'peer':
+    case 'peer-send-message':
+    case 'projects-relay':
+    case 'channel':
+    case 'coordinator':
+    case 'observer':
+    case 'observer-activity':
+    case 'auto-continuation':
+    case 'unclassified':
+      return false
+  }
+}
+
 function withNote(prompt: PromptSubmitInput, note: string | undefined): PromptSubmitInput {
   if (note === undefined) return prompt
   const context = [...(prompt.context ?? []), note]
@@ -71,7 +94,16 @@ export const register: Register = on => {
     if (result.drop !== undefined) return result
 
     if (note !== undefined) await update($, lastAttachedAt, () => now)
-    if (USER_ORIGINS.has(e.origin.kind)) await update($, lastUserMessageAt, () => now)
+    if (isUserMessage(e.origin)) await update($, lastUserMessageAt, () => now)
+    return result
+  })
+
+  // The summary may leave out the last note, so the next prompt carries the time again.
+  on('session.compact', async ($, e, next) => {
+    const result = await next(e)
+    const isMainConversation = e.agentId === undefined
+    const didCompact = result.skip === undefined && e.trigger !== 'precompute'
+    if (isMainConversation && didCompact) await update($, lastAttachedAt, () => null)
     return result
   })
 }

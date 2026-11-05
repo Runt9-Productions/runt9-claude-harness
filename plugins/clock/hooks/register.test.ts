@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
-import type { On, PromptOrigin, PromptSubmitInput } from 'claude-code'
+import type { On, PromptOrigin, PromptSubmitInput, SessionMessage } from 'claude-code'
 
 const MINUTE_MS = 60_000
 // 2026-01-15 12:00 UTC, on a minute boundary so the note's minutes name the instant exactly.
@@ -10,10 +10,19 @@ const NOTE = /^Local time: (\w+) (\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d) \(UTC([+-])
 const USER: PromptOrigin = { kind: 'composer' }
 const REMOTE: PromptOrigin = { kind: 'bridge' }
 const SDK: PromptOrigin = { kind: 'sdk' }
+const SLACK: PromptOrigin = { kind: 'slack-ping' }
 const PEER: PromptOrigin = { kind: 'peer-send-message' }
 const TASK: PromptOrigin = { kind: 'task-notification' }
+const PLUGIN: PromptOrigin = { kind: 'plugin', name: 'reminder' }
+const PLUGIN_AS_USER: PromptOrigin = { kind: 'plugin', name: 'dictation', asUser: true }
 
-/** Stands for the engine: a prompt enters with the context it arrived with, unless `dropNext` is set. */
+const PROMPT_MESSAGE: SessionMessage = { role: 'user', text: 'next step', toolUses: [] }
+const SUMMARY_MESSAGE: SessionMessage = { role: 'user', text: 'a summary of the session so far', toolUses: [] }
+
+/**
+ * Stands for the engine: a prompt enters with the context it arrived with, unless `dropNext` is set, and a
+ * compaction leaves only its summary.
+ */
 function engine(on: On): { dropNext: boolean } {
   const world = { dropNext: false }
   on('prompt.submit', (_, e) => {
@@ -21,6 +30,7 @@ function engine(on: On): { dropNext: boolean } {
     world.dropNext = false
     return { drop: 'blocked by a settings hook' }
   })
+  on('session.compact', () => ({ messages: [SUMMARY_MESSAGE] }))
   return world
 }
 
@@ -100,15 +110,40 @@ test('the time comes again only 15 minutes after it last did, with the time sinc
   expect(parseNote(underAMinute?.[0]).rest).toBe("The user's previous message was less than 1 min ago.")
 })
 
-test('prompts from tasks and other sessions get the time but are not the user writing, while an SDK host is', async ($, on) => {
+test('prompts from other sessions, tasks and plugins get the time but are not the user writing, while an SDK host is', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   engine(on)
 
   await submit($, clock, 0, SDK)
   await submit($, clock, 20, PEER)
-  const context = await submit($, clock, 85, TASK)
+  await submit($, clock, 40, TASK)
+  await submit($, clock, 60, PLUGIN)
+  const context = await submit($, clock, 85, PEER)
 
   expect(parseNote(context?.[0]).rest).toBe("The user's previous message was 1 h 25 min ago.")
+})
+
+test('the user writing from Slack, or a plugin passing on their own words, is the user writing', async ($, on) => {
+  const clock = mock.clock(on, { now: START_MS })
+  engine(on)
+
+  await submit($, clock, 0, SLACK)
+  const afterSlack = await submit($, clock, 20, PLUGIN_AS_USER)
+  const afterPlugin = await submit($, clock, 40, TASK)
+
+  expect(parseNote(afterSlack?.[0]).rest).toBe("The user's previous message was 20 min ago.")
+  expect(parseNote(afterPlugin?.[0]).rest).toBe("The user's previous message was 20 min ago.")
+})
+
+test('the first prompt after a compaction carries the time, however soon it comes', async ($, on) => {
+  const clock = mock.clock(on, { now: START_MS })
+  engine(on)
+
+  await submit($, clock, 0, USER)
+  await $.session.compact({ trigger: 'auto', messages: [PROMPT_MESSAGE] })
+  const context = await submit($, clock, 5, USER)
+
+  expect(parseNote(context?.[0]).rest).toBe("The user's previous message was 5 min ago.")
 })
 
 test('a prompt that never entered does not hold back the time from the next one', async ($, on) => {
