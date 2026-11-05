@@ -39,7 +39,7 @@ sources:
 > `survey_harness`, `survey_settings` and `confirmed_settings` in `bootstrap/update.py` were read again with their citations, and the
 > two `#measured` settings lines were re-measured by calling `merge_settings`, `holds_an_entry` and `updated_settings`
 > on synthetic fragments (`bootstrap/settings.py` was unchanged); every other claim was carried forward without a
-> re-check. On the branch of issues #39 and #40, which added descriptions and `component_states` to `bootstrap/settings.py`
+> re-check. In #121, which added descriptions and `component_states` to `bootstrap/settings.py`
 > and `bootstrap/update.py`, `merge_settings`, `updated_settings`, `added_entries`, `replaced_old_entries` and
 > `holds_an_entry` in `bootstrap/settings.py` and `update`, `narrowed`, `survey_harness`, `survey_settings` and
 > `confirmed_settings` in `bootstrap/update.py` were read again, unchanged, with every citation into them corrected,
