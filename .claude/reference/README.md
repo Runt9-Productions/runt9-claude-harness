@@ -32,5 +32,8 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 - **Platform facts carry `measured_on`**, naming the Claude Code version (and any other tool) they were measured on.
   Re-measure on a newer version before depending on one.
 - **`[vendor]`** is a claim from Claude Code's documentation that was not measured here.
+- **A Scope line cites the pull request (`#NNN`) the sources were read on, never a branch commit.** Pull requests
+  squash-merge, so a branch commit is unreachable from `main` after the merge, while the pull request still leads
+  to its commits.
 - **`[decision]` lines name the owner and the date, with the reason in one line.** They say what was decided and why,
   never how it came to be decided.

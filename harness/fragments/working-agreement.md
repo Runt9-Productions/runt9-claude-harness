@@ -11,8 +11,9 @@
   showing in git. Both count as inside the working directories. Neither permits editing a tracked file.
 - When unsure, ask rather than assume: a question costs one reply, a wrong assumption costs the work built on it.
   Several questions go in one structured form where the client offers one, each with the recommended option first and
-  room for a note, rather than in one long message. A document meant to be read whole, such as a plan, goes on a
-  page the client renders where it can publish one, unless it is short.
+  room for a note, rather than in one long message. A document meant to be read whole, such as a plan, and results
+  from tests, benchmarks and experiments go on a page the client renders where it can publish one, unless they are
+  short.
 - The goal comes from the user, never from the agent: when it is unclear, ask. Delivering a task means a balance of
   speed and quality that keeps work moving and prevents later problems, not the fastest finish, and progress on a
   step, a checklist or a pull request is never a reason to judge a result. Evidence against the work (a failing check,

@@ -32,9 +32,9 @@ sources:
 > against `merge_settings`, `updated_settings`, `added_entries`, `replaced_old_entries` and `holds_an_entry` in
 > `bootstrap/settings.py` and `survey_settings` and `confirmed_settings` in `bootstrap/update.py`, two of them measured
 > by calling those functions on synthetic fragments; the settings fragments were unchanged, and every other claim was
-> carried forward without a re-check. At 095a549, after a change elsewhere in `bootstrap/update.py` moved their lines,
+> carried forward without a re-check. Later in #111, after a change elsewhere in `bootstrap/update.py` moved their lines,
 > `survey_settings` and `confirmed_settings` were read again, unchanged, and their two citations corrected; the
-> `#measured` lines on them were not re-run, and every other claim was carried forward without a re-check. At cc9aa99,
+> `#measured` lines on them were not re-run, and every other claim was carried forward without a re-check. Later again in #111,
 > after `--update` came to offer settings fragments only in a run that moves the harness, `update`, `narrowed`,
 > `survey_harness`, `survey_settings` and `confirmed_settings` in `bootstrap/update.py` were read again with their citations, and the
 > two `#measured` settings lines were re-measured by calling `merge_settings`, `holds_an_entry` and `updated_settings`

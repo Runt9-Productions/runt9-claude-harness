@@ -117,12 +117,15 @@ done
 
 - **`auto`**: choose from what the change touches alone; the profile's default lenses play no part. Apply every lens
   whose routing row in the profile's "Lenses" section matches the diff's paths or the kind of code they hold; those
-  rows are binding. Apply any other lens your judgment says this change needs.
+  rows are binding. The patterns in a row are alternatives: the row matches when any one of them does, and a path
+  pattern that matches a changed file binds the lens whatever the code in it does. Apply any other lens your judgment
+  says this change needs.
 - **`default`**: exactly the profile's default lenses. The report also names each routing row that matched and so
   did not run.
 - **An id list**: exactly those lenses.
 
-The report says which lenses you applied, which you left out and why.
+The report says which lenses you applied, which you left out and why, and for each lens applied by routing, the
+pattern in its row that matched.
 
 Stop, with the reason, when the directory holds no lens, when an id given is not one listed (name the valid ids), or
 when the lenses are `default` and the profile names none.
@@ -148,9 +151,21 @@ rewrite its own review.
 Use the profile's "Severity calibration" for what each level looks like here.
 
 **Response format.**
-- Findings, each with: severity; location as `path:line`, using the path the diff names rather than its copy in
-  `tree/`, and the new-side line number; the claim; what goes
-  wrong because of it; and the evidence, meaning the lines opened and what they show.
+- Findings, every one in this layout. The location is the path the diff names, never its copy in `tree/`, with the
+  new-side line number.
+
+  ```markdown
+  **<Severity>**, `<path>:<line>`. [<lens>] <the finding in one sentence>
+
+  **Claim.** What is wrong.
+
+  **What goes wrong.** What happens because of it.
+
+  **Fix.** The change that would fix it, only when one is clear.
+
+  **Evidence.** The lines opened and what they show.
+  ```
+
 - Open questions: what is unknown, why it matters, and what would settle it.
 - Coverage: each file read whole, each read in part with the line ranges, and each skipped. When the diff was on
   disk, give the line ranges of `patch.diff` read. Name every tool call that was refused or blocked and what it would
@@ -165,7 +180,8 @@ skipped.
 Follow the profile's "Delivery" section.
 
 Whether a finding goes inline is a lookup, not a judgment. A finding goes inline only when its line falls inside a
-span listed for its path in `hunks.txt`; every other finding stays in the body alone.
+span listed for its path in `hunks.txt`; every other finding stays in the body alone. An inline comment carries
+its finding in the same layout as the report.
 
 Never type a path into a command: paths come from the diff, and a file name can carry shell syntax. Instead, use
 Write to create `locations.tsv` in the run directory with one line per finding: its line number, a tab, then its path

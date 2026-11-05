@@ -1,6 +1,7 @@
-# Style skills
+# Harness skills
 
-Five Claude Code skills that tell Claude how to write and review code.
+Six Claude Code skills: five tell Claude how to write and review code, and `question-pages` how to put a set of
+questions to the user on a page.
 
 | skill | covers |
 |---|---|
@@ -9,6 +10,7 @@ Five Claude Code skills that tell Claude how to write and review code.
 | `kotlin-style` | code-style applied to Kotlin |
 | `typescript-style` | code-style applied to TypeScript |
 | `comment-style` | when a comment earns its place, worked examples, and a sweep over changed comments |
+| `question-pages` | a page that puts several questions to the user, saves each answer and is read back by the agent |
 
 A language skill loads together with `code-style`. A repository's own style guide wins over both wherever they differ.
 

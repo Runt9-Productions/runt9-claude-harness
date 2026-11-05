@@ -14,7 +14,8 @@ nothing from an employer, a private project or a specific machine goes in, in co
   `delegation.md`, `working-agreement.md`, `voice.md`, `reasoning.md` and `security.md`), `claude-md-template.md`
   (the template a missing `~/.claude/CLAUDE.md` starts from), `settings/` (fragments `bootstrap.py` merges into
   `~/.claude/settings.json`), `statusline/` (the status line script the `statusline` settings fragment runs) and
-  `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style` and `comment-style` skills). Its
+  `skills/` (the `code-style`, `python-style`, `kotlin-style`, `typescript-style`, `comment-style` and
+  `question-pages` skills). Its
   version is in `harness/harness.json`.
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
   `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the

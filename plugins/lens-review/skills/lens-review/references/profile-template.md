@@ -41,7 +41,8 @@ The skill fetches a pull request itself with `gh`.
 Default: `correctness`, `<id>`. These are the lenses `default` applies. `auto` does not read this list: it applies
 every lens whose routing row matches, then any other the reviewer judges the change needs.
 
-Routing, binding under `auto` when the diff matches:
+Routing, binding under `auto` when the diff matches any one pattern in a row; a path pattern that matches a changed
+file binds whatever the code in it does:
 
 | Lens | Matches |
 |---|---|

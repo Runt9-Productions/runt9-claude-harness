@@ -23,7 +23,8 @@ step number, start there; see "Starting mid-process".
   reference knowledge base it is the ticket's project under the knowledge base's `projects/` tree, written to the
   `reference-kb` skill's format (load that skill first):
   - `overview.md`: the goal and the designs ruled out, each with why.
-  - `decisions.md`: settled decisions with their ids, and open questions.
+  - `decisions.md`: settled decisions and open questions, each cited by what it decides and never by an id, since a
+    decision tool's numbering belongs to one session.
   - `checklist.md`: the engineer tasks, one deliverable commit each.
   - `spec.md`: the per-file implementation map and the draft ticket description.
   - `research/`: the estimate, as a note.
@@ -56,6 +57,12 @@ step number, start there; see "Starting mid-process".
   reversible choice with no reply yet is acted on as recommended, and the decision records that it was. A dismissal
   or silence means "later", not "no". Work proceeds while the owner is away, and every choice stays where they will
   find it.
+- **Decisions are recorded before they are asked.** A question goes into the spec location as an open `[question]`
+  before it is posted to a decision tool, so a session lost in between leaves a question the next one asks again.
+  The answer goes in as a `[decision]` with the owner's ruling, and the question leaves the open questions. An
+  agent's own ruling, such as a scope call made mid-task, is a `[proposal]` with its status, never a `[decision]`. A
+  proposal that changes behaviour or scope also goes to the owner as a decision when it is made, because owners skip
+  knowledge base files in review and would never learn of it there.
 - **Commit, push and the draft pull request.** These are granted for the whole run only when section 10 declares
   both guard hooks that stop destructive git commands and remote rules that stop pushes to protected branches.
   Without both, ask before each push. A standing grant is safe only when something outside the model rejects a bad
@@ -82,8 +89,15 @@ Exit: a chosen design and an estimate that fits it.
 
 ### 2. Spec
 
-Write to the spec location: the goal; the decisions settled so far, with ids; the rejected designs; the task list;
-a per-file implementation map; the estimate; a draft ticket description.
+Write to the spec location: the goal; the decisions settled so far; the rejected designs; the task list; a per-file
+implementation map; the estimate; a draft ticket description.
+
+Where the client can publish a page the owner can comment on, such as a claude.ai document or artifact, publish a
+reading copy of the spec (goal, decisions, rejected designs, tasks, file map, estimate, draft ticket text) and give
+the owner its link with the approval decision. The spec location stays the only copy later steps read: regenerate
+the page from it whenever the spec changes before step 3, and say on the page that it is a copy, so the two are
+never edited apart. Before step 3, read the page's comments and fold each into the spec location or answer it on its
+thread. Without such a client, the owner reviews the spec location itself.
 
 Size each task so one engineer, after the ramp-up section 5 states, finishes below the degradation point the
 `delegation` skill gives. Tasks run in order unless the list marks them independent. Paste the draft ticket text in
@@ -135,7 +149,8 @@ present.
   - the ticket, the repository, the main checkout, the worktree path, the branch and the base commit;
   - the working directory;
   - the spec paths in the main checkout, and the first task;
-  - every decision so far with its id, the owner's answer and any note, quoted;
+  - every decision so far, named by what it decides, with the owner's answer and any note, quoted; a decision
+    tool's id appears only as this session's handle for a question still unanswered;
   - the ticket changes made, the estimate value included;
   - owner tasks still open, and capacity notes;
   - the progress of steps 5 to 12, since the task-progress tool's state may not carry across sessions either;

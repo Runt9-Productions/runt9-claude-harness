@@ -39,7 +39,9 @@ From the "Writing here" rule in `CLAUDE.md` that tests are few, at the boundarie
 Criterion 4 judges each test against it:
 
 - **Boundaries.** Drive a shipped entry point the way its real caller does (a hook through its stdin and arguments, a
-  mod through engine events) and assert on what comes back out.
+  mod through engine events) and assert on what comes back out. A direct test of a pure function is kept when a
+  break of that function the review runs is caught by no boundary test, because some functions have more cases than
+  the entry point can reach economically.
 - **One test per decision.** Each distinct decision the code makes gets one test. A second test of the same decision
   is redundant.
 - **Fail-closed paths.** A test that proves a guard refuses when something goes wrong is always wanted and never
