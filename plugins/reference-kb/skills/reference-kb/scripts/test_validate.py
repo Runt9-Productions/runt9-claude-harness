@@ -48,9 +48,9 @@ class Repo:
         command = ["git", "-C", str(self.path), *identity, *args]
         return subprocess.run(command, env=env, capture_output=True, text=True, check=True).stdout.strip()
 
-    def commit(self, date: str) -> str:
+    def commit(self, date: str, message: str = "Example change") -> str:
         self.git("add", "-A")
-        self.git("commit", "-q", "-m", "Example change", date=date)
+        self.git("commit", "-q", "-m", message, date=date)
         return self.git("rev-parse", "HEAD")
 
     def validate(self, *args: str) -> subprocess.CompletedProcess[str]:
@@ -419,6 +419,35 @@ def test_a_merge_whose_resolution_is_the_only_source_change_is_not_counted(repo:
 
     assert gate.returncode == 0, gate.stdout
     assert "0 warnings" in stale.stdout, stale.stdout
+
+
+@pytest.mark.parametrize(
+    ("placement", "named", "status"),
+    [
+        ("on", "domains/example/topic.md", 0),
+        ("after", "domains/example/topic.md", 0),
+        ("before", "domains/example/topic.md", 1),
+        ("after", "domains/example/other.md", 1),
+    ],
+    ids=["on the change", "after the change", "before the change", "naming another note"],
+)
+def test_a_reverified_trailer_passes_the_gate_at_or_after_the_change_for_the_note_it_names(
+    repo: Repo, placement: str, named: str, status: int
+) -> None:
+    base = committed_note(repo, "2026-01-10T12:00:00+00:00")
+    reverified = f"Example change\n\nReverified: {ROOT.as_posix()}/{named}\n"
+    steps = [
+        ("before", "src/other.txt", "before\n"),
+        ("on", "src/example.txt", "two\n"),
+        ("after", "src/other.txt", "after\n"),
+    ]
+    for day, (step, rel, text) in enumerate(steps, start=11):
+        repo.write(rel, text)
+        repo.commit(f"2026-01-{day}T12:00:00+00:00", reverified if step == placement else "Example change")
+
+    result = repo.validate("--stale-in", f"{base}..HEAD")
+
+    assert result.returncode == status, result.stdout
 
 
 def test_the_gate_fails_an_untracked_source_as_unknown(repo: Repo) -> None:
