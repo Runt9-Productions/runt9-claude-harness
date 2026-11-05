@@ -705,13 +705,13 @@ test('a local settings file that does not hold a JSON object is left untouched, 
   expect(world.statuses.at(-1)).toBe('away')
 })
 
-test('on Linux without bwrap or without socat, going away leaves the file alone, holds nothing, and toasts what is missing', async ($, on) => {
+test('on Linux without bwrap or without socat, going away leaves the file alone, holds nothing, and toasts each one missing', async ($, on) => {
   const world = buildWorld(on)
   writeLocalSettings(world, OWN_SETTINGS)
   const ownText = world.files.get(LOCAL_SETTINGS)
-  world.installed.delete('bwrap')
+  world.installed.clear()
   await setMode($, world, 'away')
-  expect(world.toasts).toEqual(['The sandbox is off while away: bwrap not installed'])
+  expect(world.toasts).toEqual(['The sandbox is off while away: bwrap and socat not installed'])
   expect(world.store.has(HOLD_KEY)).toBe(false)
   expect(world.store.has(HELD_ROOT_KEY)).toBe(false)
   await setMode($, world, 'present')

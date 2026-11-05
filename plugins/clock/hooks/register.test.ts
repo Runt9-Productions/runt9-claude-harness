@@ -8,6 +8,8 @@ const START_MS = Date.UTC(2026, 0, 15, 12, 0)
 const NOTE = /^Local time: (\w+) (\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d) \(UTC([+-])(\d\d):(\d\d)\)\.(?: (.*))?$/
 
 const USER: PromptOrigin = { kind: 'composer' }
+const REMOTE: PromptOrigin = { kind: 'bridge' }
+const SDK: PromptOrigin = { kind: 'sdk' }
 const PEER: PromptOrigin = { kind: 'peer-send-message' }
 const TASK: PromptOrigin = { kind: 'task-notification' }
 
@@ -23,10 +25,16 @@ function engine(on: On): { dropNext: boolean } {
 }
 
 /** What the model reads beside a prompt sent at `minute` past the start, the clock moved there first. */
-async function submit($: Engine, clock: MockClock, minute: number, origin: PromptOrigin): Promise<readonly string[] | undefined> {
+async function submit(
+  $: Engine,
+  clock: MockClock,
+  minute: number,
+  origin: PromptOrigin,
+  context?: readonly string[],
+): Promise<readonly string[] | undefined> {
   await clock.set(START_MS + minute * MINUTE_MS)
   // The kit raises the event with the origin given here, which a plugin's own submission never has.
-  const prompt: PromptSubmitInput = { text: 'next step', origin, wait: false }
+  const prompt: PromptSubmitInput = { text: 'next step', origin, wait: false, context }
   const result = await $.prompt.submit(prompt)
   return result.drop === undefined ? result.context : undefined
 }
@@ -66,24 +74,37 @@ test('the first prompt carries the local date and time, and nothing else', async
   expect(note.rest).toBeUndefined()
 })
 
-test('the time comes again only 15 minutes after it last did, with the time since the user last wrote', async ($, on) => {
+test('the time joins the context other hooks attached, after it', async ($, on) => {
+  const clock = mock.clock(on, { now: START_MS })
+  engine(on)
+
+  const context = await submit($, clock, 0, USER, ['an earlier note'])
+
+  expect(context?.[0]).toBe('an earlier note')
+  expect(parseNote(context?.[1]).instantMs).toBe(START_MS)
+})
+
+test('the time comes again only 15 minutes after it last did, with the time since the user last wrote from any client', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   engine(on)
 
   await submit($, clock, 0, USER)
-  expect(await submit($, clock, 10, USER)).toBeUndefined()
+  expect(await submit($, clock, 10, REMOTE)).toBeUndefined()
   const context = await submit($, clock, 15, USER)
+  await submit($, clock, 29.5, USER)
+  const underAMinute = await submit($, clock, 30, USER)
 
   const note = parseNote(context?.[0])
   expect(note.instantMs).toBe(START_MS + 15 * MINUTE_MS)
   expect(note.rest).toBe("The user's previous message was 5 min ago.")
+  expect(parseNote(underAMinute?.[0]).rest).toBe("The user's previous message was less than 1 min ago.")
 })
 
-test('prompts from tasks and other sessions get the time but are not the user writing', async ($, on) => {
+test('prompts from tasks and other sessions get the time but are not the user writing, while an SDK host is', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   engine(on)
 
-  await submit($, clock, 0, USER)
+  await submit($, clock, 0, SDK)
   await submit($, clock, 20, PEER)
   const context = await submit($, clock, 85, TASK)
 

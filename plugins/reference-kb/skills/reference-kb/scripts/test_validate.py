@@ -421,21 +421,48 @@ def test_a_merge_whose_resolution_is_the_only_source_change_is_not_counted(repo:
     assert "0 warnings" in stale.stdout, stale.stdout
 
 
+TOPIC_TRAILER = f"Reverified: {ROOT.as_posix()}/domains/example/topic.md"
+OTHER_TRAILER = f"Reverified: {ROOT.as_posix()}/domains/example/other.md"
+GATE_FAILURE = "change its sources and no commit after them edits the note"
+STALE_WARNING = "1 commit(s) changed its sources after `verified`"
+
+
+def assert_reverified(repo: Repo, base: str, reverified: bool) -> None:
+    """Both modes agree: the gate passes and --stale is clean, or each reports the one source change."""
+    gate = repo.validate("--stale-in", f"{base}..HEAD")
+    stale = repo.validate("--stale")
+    if reverified:
+        assert gate.returncode == 0, gate.stdout
+        assert "0 warnings" in stale.stdout, stale.stdout
+    else:
+        assert gate.returncode == 1, gate.stdout
+        assert GATE_FAILURE in gate.stdout, gate.stdout
+        assert STALE_WARNING in stale.stdout, stale.stdout
+
+
 @pytest.mark.parametrize(
-    ("placement", "named", "reverified"),
+    ("placement", "trailers", "reverified"),
     [
-        ("on", "domains/example/topic.md", True),
-        ("after", "domains/example/topic.md", True),
-        ("before", "domains/example/topic.md", False),
-        ("after", "domains/example/other.md", False),
+        ("on", TOPIC_TRAILER, True),
+        ("after", TOPIC_TRAILER, True),
+        ("before", TOPIC_TRAILER, False),
+        ("after", OTHER_TRAILER, False),
+        ("on", f"{OTHER_TRAILER}\n{TOPIC_TRAILER}", True),
+        ("on", f"{TOPIC_TRAILER}\n\nA closing paragraph.", False),
     ],
-    ids=["on the change", "after the change", "before the change", "naming another note"],
+    ids=[
+        "on the change",
+        "after the change",
+        "before the change",
+        "naming another note",
+        "second of two trailers",
+        "outside the last paragraph",
+    ],
 )
 def test_a_reverified_trailer_clears_the_gate_and_stale_at_or_after_the_change_for_the_note_it_names(
-    repo: Repo, placement: str, named: str, reverified: bool
+    repo: Repo, placement: str, trailers: str, reverified: bool
 ) -> None:
     base = committed_note(repo, "2026-01-10T12:00:00+00:00")
-    trailer = f"Example change\n\nReverified: {ROOT.as_posix()}/{named}\n"
     steps = [
         ("before", "src/other.txt", "before\n"),
         ("on", "src/example.txt", "two\n"),
@@ -443,13 +470,26 @@ def test_a_reverified_trailer_clears_the_gate_and_stale_at_or_after_the_change_f
     ]
     for day, (step, rel, text) in enumerate(steps, start=11):
         repo.write(rel, text)
-        repo.commit(f"2026-01-{day}T12:00:00+00:00", trailer if step == placement else "Example change")
+        repo.commit(
+            f"2026-01-{day}T12:00:00+00:00",
+            f"Example change\n\n{trailers}\n" if step == placement else "Example change",
+        )
 
-    gate = repo.validate("--stale-in", f"{base}..HEAD")
-    stale = repo.validate("--stale")
+    assert_reverified(repo, base, reverified)
 
-    assert gate.returncode == (0 if reverified else 1), gate.stdout
-    assert ("0 warnings" in stale.stdout) == reverified, stale.stdout
+
+def test_a_reverified_trailer_on_a_merge_commit_is_not_counted(repo: Repo) -> None:
+    base = committed_note(repo, "2026-01-10T12:00:00+00:00")
+    repo.write("src/example.txt", "two\n")
+    repo.commit("2026-01-11T12:00:00+00:00")
+    repo.git("switch", "-q", "-c", "other")
+    repo.write("src/other.txt", "unrelated\n")
+    repo.commit("2026-01-12T12:00:00+00:00")
+    repo.git("switch", "-q", "main")
+    message = f"Merge the unrelated change\n\n{TOPIC_TRAILER}\n"
+    repo.git("merge", "-q", "--no-ff", "-m", message, "other", date="2026-01-13T12:00:00+00:00")
+
+    assert_reverified(repo, base, reverified=False)
 
 
 def test_the_gate_fails_an_untracked_source_as_unknown(repo: Repo) -> None:
