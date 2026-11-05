@@ -427,17 +427,14 @@ GATE_FAILURE = "change its sources and no commit after them edits the note"
 STALE_WARNING = "1 commit(s) changed its sources after `verified`"
 
 
-def assert_reverified(repo: Repo, base: str, reverified: bool) -> None:
-    """Both modes agree: the gate passes and --stale is clean, or each reports the one source change."""
+def assert_gate_passes(repo: Repo, base: str, passes: bool) -> None:
+    """The gate passes, or fails on the one source change."""
     gate = repo.validate("--stale-in", f"{base}..HEAD")
-    stale = repo.validate("--stale")
-    if reverified:
+    if passes:
         assert gate.returncode == 0, gate.stdout
-        assert "0 warnings" in stale.stdout, stale.stdout
     else:
         assert gate.returncode == 1, gate.stdout
         assert GATE_FAILURE in gate.stdout, gate.stdout
-        assert STALE_WARNING in stale.stdout, stale.stdout
 
 
 @pytest.mark.parametrize(
@@ -459,7 +456,7 @@ def assert_reverified(repo: Repo, base: str, reverified: bool) -> None:
         "outside the last paragraph",
     ],
 )
-def test_a_reverified_trailer_clears_the_gate_and_stale_at_or_after_the_change_for_the_note_it_names(
+def test_a_reverified_trailer_passes_only_the_gate_at_or_after_the_change_for_the_note_it_names(
     repo: Repo, placement: str, trailers: str, reverified: bool
 ) -> None:
     base = committed_note(repo, "2026-01-10T12:00:00+00:00")
@@ -475,10 +472,12 @@ def test_a_reverified_trailer_clears_the_gate_and_stale_at_or_after_the_change_f
             f"Example change\n\n{trailers}\n" if step == placement else "Example change",
         )
 
-    assert_reverified(repo, base, reverified)
+    assert_gate_passes(repo, base, reverified)
+    stale = repo.validate("--stale")
+    assert STALE_WARNING in stale.stdout, stale.stdout
 
 
-def test_a_reverified_trailer_on_a_merge_commit_is_not_counted(repo: Repo) -> None:
+def test_a_reverified_trailer_on_a_merge_commit_does_not_pass_the_gate(repo: Repo) -> None:
     base = committed_note(repo, "2026-01-10T12:00:00+00:00")
     repo.write("src/example.txt", "two\n")
     repo.commit("2026-01-11T12:00:00+00:00")
@@ -489,7 +488,7 @@ def test_a_reverified_trailer_on_a_merge_commit_is_not_counted(repo: Repo) -> No
     message = f"Merge the unrelated change\n\n{TOPIC_TRAILER}\n"
     repo.git("merge", "-q", "--no-ff", "-m", message, "other", date="2026-01-13T12:00:00+00:00")
 
-    assert_reverified(repo, base, reverified=False)
+    assert_gate_passes(repo, base, passes=False)
 
 
 def test_the_gate_fails_an_untracked_source_as_unknown(repo: Repo) -> None:

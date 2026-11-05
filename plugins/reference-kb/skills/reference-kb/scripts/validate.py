@@ -14,15 +14,16 @@ Both staleness modes leave merge commits out: a merge's changes are counted in t
 always the committer's own.
 
 --stale warns about each note whose sources changed in commits dated after its `verified` date. A commit on the same
-day as `verified` counts as covered, and so does one that carries the trailer `Reverified: <note path>` or has a later
-commit in its history that does. A source git does not track, or a git call that fails or times out, is reported as
-UNKNOWN.
+day as `verified` counts as covered. A source git does not track, or a git call that fails or times out, is reported
+as UNKNOWN.
 
 --stale-in A..B is the merge gate, and implies --stale. A note fails when a commit in A..B changes one of its sources
 and neither that commit nor a later one in its history edits the note leaving `verified` on or after the change's
 date, so a source change after the note's last edit fails even on the same day. A commit in A..B, merges left out,
 that is that commit or a later one in its history and carries the trailer `Reverified: <note path>`, with the path as
-the validator shows it, counts as such an edit. UNKNOWN fails, and staleness from before A never does.
+the validator shows it, counts as such an edit. The trailer satisfies the gate only: --stale keeps warning until
+`verified` moves, since a squash merge drops a branch's commit messages and the trailer with them. UNKNOWN fails, and
+staleness from before A never does.
 
 Exit status: 0 no errors, whatever the warnings; 1 at least one error; 2 nothing could be checked, because the root
 is missing or holds no notes, kb.toml is unreadable or invalid, the format file cannot be read, or the range does
@@ -208,11 +209,11 @@ class Git:
         frontmatter = parse_frontmatter(result.stdout) if result.returncode == 0 else None
         return as_date(frontmatter.get("verified")) if frontmatter else None
 
-    def reverifying(self, path: str, *args: str) -> list[str]:
-        """Commits from `git log`, merges left out, whose trailers include `Reverified: <path>`."""
+    def reverified_in(self, span: str, path: str) -> list[str]:
+        """Commits in the span, merges left out, whose trailers include `Reverified: <path>`."""
         trailers = f"%(trailers:key={REVERIFIED_TRAILER},valueonly,unfold,separator=%x09)"
         found = []
-        for line in self.output("log", "--no-merges", f"--format=%H%x09{trailers}", *args).splitlines():
+        for line in self.output("log", "--no-merges", f"--format=%H%x09{trailers}", span).splitlines():
             sha, *notes = line.split("\t")
             if path in notes:
                 found.append(sha)
@@ -741,25 +742,17 @@ def is_reverified(
     return any(git.is_ancestor(change, commit) for commit in covering)
 
 
-def find_stale(git: Git, path: str, sources: list[str], verified: datetime.date) -> str | None:
+def find_stale(git: Git, _path: str, sources: list[str], verified: datetime.date) -> str | None:
     later = [sha for sha, date in git.commits("HEAD", "--", *sources) if date > verified]
     if not later:
         return None
-    # A commit descending from one dated after `verified` is dated after it too, so never before midnight UTC that day.
-    trailers = git.reverifying(path, f"--since={verified}T00:00:00+00:00", "HEAD")
-    uncovered = []
-    for sha in later:
-        if not any(git.is_ancestor(sha, trailer) for trailer in trailers):
-            uncovered.append(sha)
-    if not uncovered:
-        return None
-    newest = uncovered[0][:12]
-    return f"{len(uncovered)} commit(s) changed its sources after `verified` {verified}, newest {newest}; re-verify"
+    newest = later[0][:12]
+    return f"{len(later)} commit(s) changed its sources after `verified` {verified}, newest {newest}; re-verify"
 
 
 def find_ungated(git: Git, path: str, sources: list[str], _verified: datetime.date, span: str) -> str | None:
     edits = note_edits(git, path, span)
-    trailers = git.reverifying(path, span)
+    trailers = git.reverified_in(span, path)
     uncovered = []
     for sha, date in git.commits(span, "--", *sources):
         if not is_reverified(git, sha, date, edits, trailers):
