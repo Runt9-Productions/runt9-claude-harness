@@ -1,0 +1,9 @@
+{
+  "name": "clock",
+  "version": "0.1.0",
+  "description": "Puts the local date and time beside a prompt, at most once every 15 minutes, with how long ago the user last wrote",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "types": "./types/index.d.ts"
+}
