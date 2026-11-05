@@ -4,7 +4,7 @@ import type { AgentInfo } from 'claude-code'
 
 import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, complete, drawEmptyBeneath, engine, mountPane, resultText, saved, step } from './test-support'
 
-for (const surface of ['terminal', 'desktop'] as const) {
+for (const surface of ['terminal', 'desktop', 'mobile'] as const) {
   test(`${surface}: pressing an option records the answer once`, async ($, on) => {
     const toasts: string[] = []
     const store = engine(on, { toasts })
@@ -225,15 +225,6 @@ test('options without a label are refused, on a post and a reword, so they never
   expect(resultText(reworded)).toContain('Nothing changed: a decision needs a label on every option.')
   const pane = await mountPane($)
   expect((await pane.find({ key: 'D1-option-0' }))?.props.label).toBe('Skip (recommended)')
-})
-
-test('on mobile, which draws no Input, the options still answer', async ($, on) => {
-  const store = engine(on)
-  await $.tool.call(ASK as never)
-  const pane = await mountPane($, 'mobile')
-  expect(await pane.find({ type: 'Input' })).toBeUndefined()
-  await pane.press({ key: 'D1-option-0' })
-  expect(saved(store)).toContain('"answer":"Skip"')
 })
 
 test('when the first decision is answered, the next one takes the hotkeys only after a pause', async ($, on) => {

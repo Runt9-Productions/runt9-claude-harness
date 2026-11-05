@@ -41,10 +41,97 @@ def merge_settings(settings: dict, fragment: dict, at: str = "") -> None:
             raise Stop(f"{path} in {SETTINGS_FILE} is not {kind}, as the fragment's is; fix it by hand")
 
 
+def updated_settings(settings: dict, old: dict, new: dict) -> dict:
+    """A copy of `settings` moved from the installed fragment `old` to HEAD's `new`: a value or list entry still equal
+    to `old`'s follows `new`, one that differs is the user's and stays, one `old` has and `settings` lacks stays
+    absent, and what only `new` has is merged as `merge_settings` merges it. Raises Stop where `merge_settings`
+    would."""
+    updated = copy.deepcopy(replaced_old_entries(settings, old, new))
+    merge_settings(updated, added_entries(settings, old, new))
+    return updated
+
+
+def added_entries(settings: dict, old: dict, new: dict) -> dict:
+    """The keys and list entries `new` has and `old` lacks, leaving out all of `new` under a key `old` has and
+    `settings` lacks, since the user removed that key."""
+    added = {}
+    for key, new_value in new.items():
+        if key not in old:
+            added[key] = new_value
+            continue
+        if key not in settings:
+            continue
+        old_value = old[key]
+        if isinstance(old_value, dict) and isinstance(new_value, dict):
+            present = settings[key]
+            present_object = present if isinstance(present, dict) else {}
+            entries = added_entries(present_object, old_value, new_value)
+        elif isinstance(old_value, list) and isinstance(new_value, list):
+            entries = [entry for entry in new_value if entry not in old_value]
+        else:
+            continue
+        if entries:
+            added[key] = entries
+    return added
+
+
+def replaced_old_entries(settings: dict, old: dict, new: dict) -> dict:
+    """A copy of `settings` in which each plain value equal to `old`'s takes `new`'s, or goes when `new` lacks its key,
+    and each entry of an `old` list that `new`'s lacks leaves the list. Values are shared with the arguments."""
+    replaced = {}
+    for key, present in settings.items():
+        if key not in old:
+            replaced[key] = present
+            continue
+        old_value = old[key]
+        new_value = new.get(key)
+        if isinstance(old_value, dict) and isinstance(present, dict):
+            new_object = new_value if isinstance(new_value, dict) else {}
+            remaining = replaced_old_entries(present, old_value, new_object)
+        elif isinstance(old_value, list) and isinstance(present, list):
+            new_list = new_value if isinstance(new_value, list) else []
+            remaining = [entry for entry in present if entry in new_list or entry not in old_value]
+        elif present != old_value:
+            replaced[key] = present
+            continue
+        else:
+            if key in new:
+                replaced[key] = new_value
+            continue
+        # An object or list the user had empty is theirs; one these removals emptied came from the old fragment.
+        emptied = bool(present) and not remaining
+        if not emptied:
+            replaced[key] = remaining
+    return replaced
+
+
 def json_indent(text: str) -> str:
     """The indentation of the first indented line in `text`, so a rewrite keeps the file's own."""
     match = re.search(r"\n([ \t]+)\S", text)
     return match[1] if match else DEFAULT_INDENT
+
+
+def settings_text(settings: dict, before: str) -> str:
+    """`settings` as the text of settings.json, keeping the indentation of `before`, the file's current text."""
+    return json.dumps(settings, indent=json_indent(before), ensure_ascii=False) + "\n"
+
+
+def holds_an_entry(settings: dict, fragment: dict) -> bool:
+    """Whether `settings` holds at least one of `fragment`'s plain values at its key or one of its list entries in its
+    list."""
+    for key, value in fragment.items():
+        if key not in settings:
+            continue
+        present = settings[key]
+        if isinstance(value, dict) and isinstance(present, dict):
+            held = holds_an_entry(present, value)
+        elif isinstance(value, list) and isinstance(present, list):
+            held = any(entry in present for entry in value)
+        else:
+            held = present == value
+        if held:
+            return True
+    return False
 
 
 def install_settings(name: str, run: Run) -> None:
@@ -63,8 +150,7 @@ def install_settings(name: str, run: Run) -> None:
     if merged == settings:
         print(f"settings:{name}: {SETTINGS_FILE} already has everything in {fragment_path}")
         return
-    after = json.dumps(merged, indent=json_indent(before), ensure_ascii=False) + "\n"
-    write_after_asking(target, before, after)
+    write_after_asking(target, before, settings_text(merged, before))
     print(f"settings:{name}: {target} has everything in {fragment_path}")
 
 

@@ -1,4 +1,4 @@
-from bootstrap.core import Component
+from bootstrap.core import Component, Stop
 from bootstrap.fragments import fragment_components
 from bootstrap.harness import check_checkout, install_harness
 from bootstrap.hooks_path import check_hooks_path, install_hooks_path
@@ -33,3 +33,7 @@ HARNESS_COMPONENTS = (
 
 def all_components() -> list[Component]:
     return [*HARNESS_COMPONENTS, *fragment_components(), *settings_components(), *plugin_components()]
+
+
+def unknown_components(names: list[str]) -> Stop:
+    return Stop(f"unknown component {', '.join(names)}; python3 bootstrap.py --list shows them")

@@ -19,13 +19,16 @@ nothing from an employer, a private project or a specific machine goes in, in co
 - `bootstrap.py`: installs `harness/` as a version under `~/.claude/harness/versions/` behind the
   `~/.claude/harness/current` link, links the skills into `~/.claude/skills/`, sets `core.hooksPath` in the
   repositories named, adds the import line of each fragment picked to a marked block in `~/.claude/CLAUDE.md`, merges
-  each settings fragment picked into `~/.claude/settings.json`, and installs plugins from the marketplace. The script
-  keeps the version check, the refusal to run inside a Claude Code session, the command line, the prompts and the
-  loop that checks and then installs each component picked; the `bootstrap/` package beside it holds one module per
-  component and the helpers they share. A new part under `harness/` that must be wired into `~/.claude` or a
-  repository registers a component in `HARNESS_COMPONENTS` in `bootstrap/registry.py`; a new file in
-  `harness/fragments/` or a new `.json` file in `harness/settings/` is a component without one. Its tests are
-  `test_bootstrap.py` beside it.
+  each settings fragment picked into `~/.claude/settings.json`, and installs plugins from the marketplace. With
+  `--update` it brings what is installed up to HEAD, finding each component where it already lives (the `current`
+  link, the skill links, the imports in `~/.claude/CLAUDE.md`, `settings.json` and `claude plugin list --json`), since
+  a manifest of its own would drift. The script keeps the version check, the refusal to run inside a Claude Code
+  session, the command line, the prompts and the loop that checks and then installs each component picked; the
+  `bootstrap/` package beside it holds one module per component, the helpers they share, and `update.py`, which runs
+  `--update`. A new part under `harness/` that must be wired into `~/.claude` or a repository registers a component in
+  `HARNESS_COMPONENTS` in `bootstrap/registry.py`, and needs a survey in `bootstrap/update.py` too, or `--update`
+  never finds it installed; a new file in `harness/fragments/` or a new `.json` file in `harness/settings/` needs
+  neither. Its tests are `test_bootstrap.py` beside it.
 - `scripts/`: scripts the owner runs by hand from a checkout, with their bats tests beside them; so far
   `prune-merged.sh`.
 - `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it
@@ -47,7 +50,7 @@ change only when they update and that version has risen; auto-update is off for 
 every PR that changes what a plugin ships raises its version, and CI fails it otherwise. Plugins with a contract
 between them bump together. Marketplace entries hold only a name, a description and `./plugins/<name>`. The harness
 works the same way with one version for all of `harness/`, in `harness/harness.json`: its rise is what tells a user
-to run `bootstrap.py harness` again.
+to run `bootstrap.py --update`.
 
 ## Issues and pull request text
 
@@ -73,7 +76,8 @@ A plugin reads machine-local data from `~/.claude/local/<plugin>/` and treats a 
 `harness/skills/` does the same from `~/.claude/local/<skill>/`. Examples,
 with synthetic content only, live in `plugins/<name>/local.example/`, or beside the file in `harness/`. After
 installing a plugin, `bootstrap.py` copies each file in its `local.example/` to `~/.claude/local/<plugin>/` as a
-`<file>.example` template, which no skill reads, and never overwrites one that exists. The user's own
+`<file>.example` template, which no skill reads, and never overwrites one that exists, except that `--update`
+rewrites one whose content differs from HEAD's; the filled copy without `.example` is never touched. The user's own
 machine-local rules go in `~/.claude/local/local.md`, which `harness/claude-md-template.md` imports; it is theirs to
 write, so no example ships.
 

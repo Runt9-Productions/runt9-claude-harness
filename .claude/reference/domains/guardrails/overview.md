@@ -3,7 +3,7 @@ title: Guardrails
 type: note
 permalink: guardrails/overview
 tags: [guardrails, auto-mode, sandbox, permissions, hooks, credentials, installs]
-verified: 2026-11-02
+verified: 2026-11-04
 coverage: partial
 measured_on: "Claude Code 2.1.314 and 2.1.316, Linux bubblewrap 0.9.0"
 sources:
@@ -11,6 +11,7 @@ sources:
   - "harness/settings/guardrails-sandbox.json"
   - "harness/settings/guardrails-stores.json"
   - "bootstrap/settings.py"
+  - "bootstrap/update.py"
 ---
 
 # Guardrails
@@ -26,10 +27,21 @@ sources:
 > subdirectories, one or two sessions per case, with no sandbox key in user or project settings. On 2026-10-31 the note
 > was re-checked against the auto-mode fragment's added `allow` entry (marking a pull request the session opened ready
 > for review): no claim rests on which entries that list holds, and every other claim was carried forward without a
-> re-check. On 2026-11-02 the settings-merge trap was re-checked against `merge_settings` in
-> `bootstrap/settings.py`, and every other claim was carried forward without a re-check. Not covered: macOS
-> and Windows sandboxing, the Read tool's path through auto mode (only the documentation's account), pushes over HTTPS
-> from inside the sandbox, and any JVM build run end to end in the sandbox.
+> re-check. On 2026-11-02 the settings-merge trap was re-checked against `merge_settings` in `bootstrap/settings.py`,
+> and every other claim was carried forward without a re-check. On 2026-11-04 the settings-merge lines were re-checked
+> against `merge_settings`, `updated_settings`, `added_entries`, `replaced_old_entries` and `holds_an_entry` in
+> `bootstrap/settings.py` and `survey_settings` and `confirmed_settings` in `bootstrap/update.py`, two of them measured
+> by calling those functions on synthetic fragments; the settings fragments were unchanged, and every other claim was
+> carried forward without a re-check. At 095a549, after a change elsewhere in `bootstrap/update.py` moved their lines,
+> `survey_settings` and `confirmed_settings` were read again, unchanged, and their two citations corrected; the
+> `#measured` lines on them were not re-run, and every other claim was carried forward without a re-check. At cc9aa99,
+> after `--update` came to offer settings fragments only in a run that moves the harness, `update`, `narrowed`,
+> `survey_harness`, `survey_settings` and `confirmed_settings` in `bootstrap/update.py` were read again with their citations, and the
+> two `#measured` settings lines were re-measured by calling `merge_settings`, `holds_an_entry` and `updated_settings`
+> on synthetic fragments (`bootstrap/settings.py` was unchanged); every other claim was carried forward without a
+> re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
+> (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build run end to end in
+> the sandbox.
 
 Read this before writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to
 stop a call.
@@ -61,9 +73,23 @@ stop a call.
   (`claude auto-mode defaults`). #measured
 - [fact] `claude auto-mode critique` prints at most about 4,000 characters, and it proposes wording without checking
   it against the documented order; run it on a few rules at a time and measure what it suggests. #measured
-- [trap] `bootstrap.py` (`merge_settings` in `bootstrap/settings.py`) merges list entries by exact text and never
-  removes one, so a reworded rule leaves its older text in the user's settings, where it still applies.
-  #silent-failure
+- [trap] Installing a settings fragment (`merge_settings`, `bootstrap/settings.py:23`) merges list entries by exact
+  text and never removes one, so installing it again after a rule was reworded leaves the older text in the user's
+  settings, where it still applies. #silent-failure
+- [fact] `bootstrap.py --update` removes that older text: `updated_settings` (`bootstrap/settings.py:44`) drops each
+  list entry of the installed harness's copy of the fragment that HEAD's copy lacks, adds HEAD's new entries and keeps
+  the user's own, after `confirmed_settings` (`bootstrap/update.py:314`) has shown the diff and asked about that
+  fragment. On a synthetic reworded `soft_deny` entry beside one of the user's, the old text went and the new came in.
+  #measured
+- [fact] `--update` asks about settings fragments only when the harness is current or the run's first question
+  moves it: with the harness behind and not moving, because it was declined or not named, `update` asks about none
+  and prints them after `Waiting for the harness:` (`bootstrap/update.py:97`), and naming only `settings:` fragments
+  then stops (`narrowed`, `bootstrap/update.py:158`)
+- [trap] `--update` learns the older text only from the installed harness's copy (`survey_settings`,
+  `bootstrap/update.py:263`), so once a plain `bootstrap.py harness` has replaced that copy with HEAD's, the older text
+  stays: a settings file holding only the old text no longer counts as having the fragment (`holds_an_entry`) and is
+  offered as available, and one holding other entries of it is reported current. A no to that fragment's own question
+  in an `--update` that moves the harness ends the same way. #measured #silent-failure
 
 ### Permission deny rules
 

@@ -1,11 +1,16 @@
-"""Install the parts of runt9-claude-harness that cannot be plugins, and the plugins you pick.
+"""Install or update the parts of runt9-claude-harness that cannot be plugins, and the plugins you pick.
 
     python3 bootstrap.py [component ...] [--repo <path> ...] [--list]
+    python3 bootstrap.py --update [component ...]
 
 Run it in your own shell, not in a Claude Code session. With components named it installs exactly those, in the order
---list shows; with none named it asks about each one. README.md says what each component does and what it refuses.
+--list shows; with none named it asks about each one. With --update it brings every installed component up to HEAD,
+or only those named, each of which must be installed: it prints what would change and asks before writing anything.
+Settings fragments update only in a run that moves the harness, and every changed one comes with it.
+README.md says what each component does, how each is found installed, and what it refuses.
 
-Exits 0 when everything picked installed, otherwise 1 with one line naming the reason and what installed before it.
+Exits 0 when everything picked installed, or on --update when nothing failed or was refused, whatever was declined.
+Otherwise it exits 1 with one line naming the reason and what installed or updated before it.
 """
 
 import argparse
@@ -23,7 +28,9 @@ if sys.version_info < (3, 12):  # noqa: UP036 (ruff assumes the target version, 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bootstrap.core import Component, Run, Stop, answered_yes
-from bootstrap.registry import all_components
+from bootstrap.plugins import print_templates
+from bootstrap.registry import all_components, unknown_components
+from bootstrap.update import update
 
 SESSION_VARIABLES = ("CLAUDE_CODE_SESSION_ID", "CLAUDECODE")
 
@@ -44,7 +51,7 @@ def pick(names: list[str], components: list[Component], run: Run) -> list[Compon
     known = {component.name for component in components}
     unknown = [name for name in names if name not in known]
     if unknown:
-        raise Stop(f"unknown component {', '.join(unknown)}; python3 bootstrap.py --list shows them")
+        raise unknown_components(unknown)
     if not names:
         return ask(components, run)
     picked = [component for component in components if component.name in names]
@@ -62,6 +69,11 @@ def bootstrap(args: argparse.Namespace) -> None:
         width = max(len(component.name) for component in components)
         for component in components:
             print(f"{component.name:<{width}}  {component.summary}")
+        return
+    if args.update:
+        if args.repo:
+            raise Stop("--update takes no --repo: hooks-path names the installed harness, which the update moves")
+        update(args.components)
         return
 
     run = Run(repos=[repo.resolve() for repo in args.repo])
@@ -82,19 +94,19 @@ def bootstrap(args: argparse.Namespace) -> None:
             raise Stop(f"{component.name} failed: {error}; installed before it: {installed}") from error
         run.installed.append(component.name)
     print(f"Installed {', '.join(run.installed)}.")
-    if run.templates:
-        print("Templates to fill in, saved without .example to take effect:")
-        for template in run.templates:
-            print(template)
+    print_templates(run)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="bootstrap.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("components", nargs="*", metavar="component", help="components to install, from --list")
+    parser.add_argument(
+        "components", nargs="*", metavar="component", help="components to install or update, from --list"
+    )
     parser.add_argument("--repo", action="append", default=[], type=Path, metavar="<path>", help="for hooks-path")
     parser.add_argument("--list", action="store_true", help="print the components and exit")
+    parser.add_argument("--update", action="store_true", help="update the installed components, or those named")
     args = parser.parse_args()
     try:
         bootstrap(args)
