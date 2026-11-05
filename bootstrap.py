@@ -1,12 +1,18 @@
 """Install or update the parts of runt9-claude-harness that cannot be plugins, and the plugins you pick.
 
-    python3 bootstrap.py [component ...] [--repo <path> ...] [--list]
+    python3 bootstrap.py [component ... | all] [--repo <path> ...] [--list]
     python3 bootstrap.py --update [component ...]
 
 Run it in your own shell, not in a Claude Code session. With components named it installs exactly those, in the order
---list shows; with none named it asks about each one. With --update it brings every installed component up to HEAD,
-or only those named, each of which must be installed: it prints what would change and asks before writing anything.
-Settings fragments update only in a run that moves the harness, and every changed one comes with it.
+--list shows, and all names every one (hooks-path only with --repo). With --update it brings every installed
+component up to HEAD, or only those named, each of which must be installed: it prints what would change and asks
+before writing anything. Settings fragments update only in a run that moves the harness, and every changed one comes
+with it.
+
+With no component named it opens a menu of every component, marked installed or behind as --update finds it. Up and
+Down move, Space ticks, a ticks every row, Right or ? shows the full description, Enter asks once before installing
+what is ticked, and q or Escape quits. The menu needs a terminal curses can drive; without one, name the components.
+
 README.md says what each component does, how each is found installed, and what it refuses.
 
 Exits 0 when everything picked installed, or on --update when nothing failed or was refused, whatever was declined.
@@ -121,7 +127,10 @@ def main() -> int:
         prog="bootstrap.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "components", nargs="*", metavar="component", help="components to install or update, from --list"
+        "components",
+        nargs="*",
+        metavar="component",
+        help="components to install or update, from --list; all installs every one",
     )
     parser.add_argument("--repo", action="append", default=[], type=Path, metavar="<path>", help="for hooks-path")
     parser.add_argument("--list", action="store_true", help="print the components and exit")

@@ -24,7 +24,22 @@ python3 bootstrap.py --list
 python3 bootstrap.py harness hooks-path skills --repo <path>
 ```
 
-With no component named it asks about each one. The components, in install order:
+`python3 bootstrap.py all` installs every component, in install order, leaving out `hooks-path` unless `--repo` is
+given; it takes no other name beside it. With no component named it opens a menu of every component, none ticked,
+each marked `installed` or `behind` as `--update` finds it (unmarked when it is not installed or cannot be read).
+Without `--repo`, `hooks-path` is marked `needs --repo` and cannot be ticked.
+
+- Up and Down, or `k` and `j`, move; Space ticks or clears a row; `a` ticks every row that can be ticked, or clears
+  them all when all are ticked.
+- Right or `?` shows the row's full description, read from the docs at HEAD: its row below for `harness`,
+  `hooks-path` and `skills`, the fragment's own text, its row in [the settings README](harness/settings/README.md),
+  or the first paragraph of the plugin's README. Up, Down, Page Up and Page Down scroll it, and any other key goes
+  back to the list.
+- Enter closes the menu and asks once, `Install <names>? [y/N]`; `q` or Escape closes it without asking. Quitting,
+  ticking nothing or answering no installs nothing. Each component picked then asks what it asks when named.
+
+The menu needs a terminal on stdin and stdout that curses can drive, so name the components where there is none.
+The components, in install order:
 
 | Component | Installs |
 |---|---|
@@ -40,11 +55,13 @@ gate's pass cache in `~/.claude/harness/state/` survives it. To change an instal
 `~/.claude/local/<name>/additions.md` ([how](harness/skills/README.md)); edits inside `~/.claude/harness/` are lost on
 the next version.
 
-What it refuses. The first two, and the `hooks-path` checks on `--repo`, stop the run before anything installs; the
-rest stop at that component:
+What it refuses. The first three, and the `hooks-path` checks on `--repo`, stop the run before anything installs;
+the rest stop at that component:
 
 - Running inside a Claude Code session. `--list` still works.
-- An unknown component, or `--repo` without `hooks-path`.
+- An unknown component, `all` beside another name, or `--repo` with components named but not `hooks-path`.
+- The menu, when stdin or stdout is not a terminal, when curses cannot drive the terminal `TERM` names, or when Python
+  was built without `curses`. Naming the components needs none of them.
 - `harness`: uncommitted changes to tracked files, and a symlink or submodule under `harness/`. It warns, and installs
   anyway, when HEAD is not on `origin/main` as of the last fetch.
 - `hooks-path`: no `--repo`, or a `--repo` that is not the top level of a git repository. It prints a different

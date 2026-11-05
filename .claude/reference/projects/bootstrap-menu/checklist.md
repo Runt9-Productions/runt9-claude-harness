@@ -31,7 +31,7 @@ tags:
 - [x] 03 The curses menu in `bootstrap/menu.py` replacing `ask`: installed and behind marks from the update survey,
   toggling, toggle all, expanding a description, scrolling, the terminal checks, and tests driven through a
   pseudo-terminal
-- [ ] 04 `README.md`'s install section, the script's docstring and help, `CLAUDE.md`'s bootstrap bullet, and the
+- [x] 04 `README.md`'s install section, the script's docstring and help, `CLAUDE.md`'s bootstrap bullet, and the
   `domains/bootstrap/overview.md` note re-verified against the changed modules
 
 ## Relations
