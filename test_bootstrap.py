@@ -315,7 +315,8 @@ def test_list_works_in_a_session(sandbox: Sandbox) -> None:
     result = sandbox.run("--list", env={"CLAUDE_CODE_SESSION_ID": "1", "CLAUDECODE": "1"})
 
     assert result.returncode == 0, result.stderr
-    names = [line.split()[0] for line in result.stdout.splitlines()]
+    lines = result.stdout.splitlines()
+    names = [line.split()[0] for line in lines]
     assert names == [
         "harness",
         "hooks-path",
@@ -325,7 +326,10 @@ def test_list_works_in_a_session(sandbox: Sandbox) -> None:
         "plugin:example-one",
         "plugin:example-two",
         "plugin:example-three",
+        "all",
     ]
+    widest = len("fragment:example-rules")
+    assert lines[-1] == f"{'all':<{widest}}  every component above, in this order; hooks-path only with --repo"
 
 
 def test_head_off_origin_main_warns_and_installs_head(sandbox: Sandbox) -> None:
@@ -738,8 +742,9 @@ def test_settings_update_removes_what_it_empties_and_keeps_what_the_user_had_emp
         (["harness", "example-unknown"], "unknown component example-unknown"),
         (["harness", "--repo", "{repo}"], "--repo is used only by hooks-path"),
         (["harness", "hooks-path"], "hooks-path needs --repo"),
+        (["all", "harness"], "all names every component; name no others with it"),
     ],
-    ids=["unknown-component", "repo-without-hooks-path", "hooks-path-without-repo"],
+    ids=["unknown-component", "repo-without-hooks-path", "hooks-path-without-repo", "all-beside-a-name"],
 )
 def test_usage_error_installs_nothing(sandbox: Sandbox, args: list[str], reason: str) -> None:
     repo = sandbox.new_repo("example-repo")
@@ -749,6 +754,34 @@ def test_usage_error_installs_nothing(sandbox: Sandbox, args: list[str], reason:
     assert result.returncode == 1
     assert reason in result.stderr
     assert not sandbox.install.exists()
+
+
+def test_all_without_repo_installs_every_other_component_in_order(sandbox: Sandbox) -> None:
+    # The fragment's import and the settings merge each ask before writing.
+    result = sandbox.run("all", stdin="y\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "Not offering hooks-path: run python3 bootstrap.py hooks-path --repo <path>\n" in result.stdout
+    assert (
+        "Installed harness, skills, fragment:example-rules, settings:example-deny, "
+        "plugin:example-one, plugin:example-two, plugin:example-three.\n"
+    ) in result.stdout
+    assert sandbox.claude_calls() == [
+        MARKETPLACE_ADD,
+        ["plugin", "install", "example-one@example-market"],
+        ["plugin", "install", "example-two@example-market"],
+        ["plugin", "install", "example-three@example-market"],
+    ]
+
+
+def test_all_with_repo_sets_hooks_path(sandbox: Sandbox) -> None:
+    repo = sandbox.new_repo("example-repo")
+
+    result = sandbox.run("all", "--repo", str(repo), stdin="y\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "Not offering" not in result.stdout
+    assert sandbox.hooks_path(repo) == str(sandbox.current / "githooks")
 
 
 def test_plugins_run_the_marketplace_commands_in_order(sandbox: Sandbox) -> None:

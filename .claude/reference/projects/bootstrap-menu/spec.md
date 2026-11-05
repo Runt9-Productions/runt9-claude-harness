@@ -45,6 +45,9 @@ a4e6976.
   (`bootstrap.py:42`) is printed instead (D6). The checks and installs then run as for named components.
 - `--list` (`bootstrap.py:68`) prints one more line after the components: `all` and `every component above, in this
   order; hooks-path only with --repo`, aligned with the rest.
+- A re-run of `all` on a machine with plugins installed is safe: `claude plugin install` for a plugin already
+  installed at that scope prints that it is and exits 0 (Claude Code's plugin commands reference, read 2026-11-04).
+- The `Not offering <name>` line has one home, `offered` in `bootstrap.py`, which both `all` and the menu use.
 - `--update all` is untouched: `narrowed` reports `all` as an unknown component (D9).
 - Tests: `all` without `--repo` installs every other component in order, says it left `hooks-path` out, and makes the
   same `claude` calls as naming each; `all` with `--repo` sets `core.hooksPath`; `all` beside a name stops before any

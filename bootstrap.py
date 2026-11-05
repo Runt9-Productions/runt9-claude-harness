@@ -33,14 +33,28 @@ from bootstrap.registry import all_components, unknown_components
 from bootstrap.update import update
 
 SESSION_VARIABLES = ("CLAUDE_CODE_SESSION_ID", "CLAUDECODE")
+EVERY_COMPONENT = "all"
 
 
-def ask(components: list[Component], run: Run) -> list[Component]:
-    picked = []
+def repo_users(components: list[Component]) -> str:
+    return ", ".join(component.name for component in components if component.needs_repos)
+
+
+def offered(components: list[Component], run: Run) -> list[Component]:
+    """`components` less those that act on --repo paths when none is given, each left out with a line saying how
+    to add it."""
+    kept = []
     for component in components:
         if component.needs_repos and not run.repos:
             print(f"Not offering {component.name}: run python3 bootstrap.py {component.name} --repo <path>")
             continue
+        kept.append(component)
+    return kept
+
+
+def ask(components: list[Component], run: Run) -> list[Component]:
+    picked = []
+    for component in offered(components, run):
         question = f"Install {component.name} ({component.summary})? [y/N] "
         if answered_yes(question, "no answer on stdin; name the components on the command line instead"):
             picked.append(component)
@@ -48,6 +62,10 @@ def ask(components: list[Component], run: Run) -> list[Component]:
 
 
 def pick(names: list[str], components: list[Component], run: Run) -> list[Component]:
+    if EVERY_COMPONENT in names:
+        if len(names) > 1:
+            raise Stop(f"{EVERY_COMPONENT} names every component; name no others with it")
+        return offered(components, run)
     known = {component.name for component in components}
     unknown = [name for name in names if name not in known]
     if unknown:
@@ -56,8 +74,7 @@ def pick(names: list[str], components: list[Component], run: Run) -> list[Compon
         return ask(components, run)
     picked = [component for component in components if component.name in names]
     if run.repos and not any(component.needs_repos for component in picked):
-        users = [component.name for component in components if component.needs_repos]
-        raise Stop(f"--repo is used only by {', '.join(users)}, and none is named")
+        raise Stop(f"--repo is used only by {repo_users(components)}, and none is named")
     return picked
 
 
@@ -69,6 +86,8 @@ def bootstrap(args: argparse.Namespace) -> None:
         width = max(len(component.name) for component in components)
         for component in components:
             print(f"{component.name:<{width}}  {component.summary}")
+        every = f"every component above, in this order; {repo_users(components)} only with --repo"
+        print(f"{EVERY_COMPONENT:<{width}}  {every}")
         return
     if args.update:
         if args.repo:
