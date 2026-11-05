@@ -24,6 +24,8 @@ class Component:
     name: str
     summary: str
     install: Callable[[Run], None]
+    # Reads the clone's docs at HEAD, so it is called only when the description is shown.
+    description: Callable[[], str]
     # Runs for every picked component before the first install, so a refusal installs nothing.
     check: Callable[[Run], None] | None = None
     # Acts on the --repo paths; prompt mode offers it only when --repo is given.

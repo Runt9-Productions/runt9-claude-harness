@@ -24,7 +24,7 @@ tags:
 
 ## Checklist
 
-- [ ] 01 `Component.description` and its readers: every component's full description read at HEAD from the docs
+- [x] 01 `Component.description` and its readers: every component's full description read at HEAD from the docs
   that hold it, with a test that every component of this repository has one
 - [ ] 02 `bootstrap.py all`: every component in install order, `hooks-path` only with `--repo`, refused beside other
   names, and documented in `--list`

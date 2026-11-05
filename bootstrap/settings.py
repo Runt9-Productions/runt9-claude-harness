@@ -4,10 +4,13 @@ import json
 import re
 
 from bootstrap.core import CLAUDE_DIR, Component, Run, Stop
+from bootstrap.docs import table_row
 from bootstrap.files import parse_json_object, read_json_object, write_after_asking
-from bootstrap.harness import require_installed, shipped_in_head
+from bootstrap.harness import HARNESS_SOURCE, require_installed, shipped_in_head
 
 SETTINGS = "settings"
+SETTINGS_README = f"{HARNESS_SOURCE}/{SETTINGS}/README.md"
+SETTINGS_COLUMN = "What it adds"
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
 DEFAULT_INDENT = "  "
 
@@ -162,6 +165,7 @@ def settings_components() -> list[Component]:
                 name=f"settings:{path.stem}",
                 summary=f"merge ~/.claude/harness/current/{SETTINGS}/{path.name} into ~/.claude/settings.json",
                 install=functools.partial(install_settings, path.stem),
+                description=functools.partial(table_row, SETTINGS_README, SETTINGS_COLUMN, path.stem),
                 check=functools.partial(check_settings, path.stem),
             )
         )

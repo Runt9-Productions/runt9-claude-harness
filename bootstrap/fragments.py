@@ -2,6 +2,7 @@ import functools
 from pathlib import Path
 
 from bootstrap.core import CLAUDE_DIR, Component, Run, Stop
+from bootstrap.docs import head_text
 from bootstrap.files import write_after_asking
 from bootstrap.harness import CURRENT, require_installed, shipped_in_head
 
@@ -80,6 +81,7 @@ def fragment_components() -> list[Component]:
                 name=f"fragment:{path.stem}",
                 summary=f"import ~/.claude/harness/current/{FRAGMENTS}/{path.name} in ~/.claude/CLAUDE.md",
                 install=functools.partial(install_fragment, path.stem),
+                description=functools.partial(head_text, str(path)),
                 check=functools.partial(check_fragment, path.stem),
             )
         )

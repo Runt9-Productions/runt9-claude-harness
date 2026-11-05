@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from bootstrap.registry import all_components
 from bootstrap.settings import updated_settings
 
 SCRIPT = Path(__file__).resolve().parent / "bootstrap.py"
@@ -880,6 +881,49 @@ def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -
     assert result.returncode == 1
     assert f"{settings} is not a JSON object" in result.stderr
     assert sandbox.claude_calls() == []
+
+
+DESCRIPTIONS = """
+import json
+from bootstrap.registry import all_components
+print(json.dumps({component.name: component.description() for component in all_components()}))
+"""
+
+
+def test_descriptions_come_from_the_docs_in_head_and_are_empty_where_a_doc_is_missing(sandbox: Sandbox) -> None:
+    sandbox.write(
+        "README.md",
+        b"# Example\n\n| Component | Example other column |\n|---|---|\n| `harness` | Example other text. |\n"
+        b"\n| Component | Installs |\n|---|---|\n| `harness` | Example text. |\n",
+    )
+    sandbox.write(
+        "plugins/example-one/README.md",
+        b"# example-one\n\nFirst example plugin,\nwrapped over two lines.\n\nA second paragraph.\n",
+    )
+    sandbox.commit("Example docs")
+    sandbox.write("README.md", b"| `harness` | Example uncommitted text. |\n")
+
+    result = subprocess.run(
+        [sys.executable, "-c", DESCRIPTIONS], cwd=sandbox.clone, env=sandbox.env, capture_output=True, text=True
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "harness": "Example text.",
+        "hooks-path": "",
+        "skills": "",
+        "fragment:example-rules": "example rules\n",
+        "settings:example-deny": "",
+        "plugin:example-one": "First example plugin, wrapped over two lines.",
+        "plugin:example-two": "",
+        "plugin:example-three": "",
+    }
+
+
+def test_every_component_of_this_repository_has_a_description() -> None:
+    # Empty when a doc row a component reads is renamed or dropped.
+    undescribed = [component.name for component in all_components() if not component.description()]
+    assert undescribed == []
 
 
 def test_prompt_installs_what_was_answered_yes(sandbox: Sandbox) -> None:

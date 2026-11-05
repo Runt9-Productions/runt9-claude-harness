@@ -15,20 +15,23 @@ a4e6976.
 
 ## Descriptions (task 01)
 
-- `Component` (`bootstrap/core.py:23`) gains `description: Callable[[], str]`, defaulting to one that returns `""`.
-  It is called only when the menu expands a row, so a run that names components reads no docs.
+- `Component` (`bootstrap/core.py:23`) gains a required `description: Callable[[], str]`, so a new component kind
+  left unwired fails at once. It is called only when the menu expands a row, so a run that names components reads no
+  docs. A file missing at HEAD gives `""`; any other git failure raises `Stop`, which the menu catches.
 - A new `bootstrap/docs.py` (imports `core` and `git` only) holds two readers over a file's text at HEAD,
   `git(CLONE, "show", "HEAD:<path>")`:
-  - `table_row(path, key)`: the second cell of the table row whose first cell is `` `key` ``, everything after the
-    first cell up to the trailing `|`; `""` when no row matches or the file is missing at HEAD.
+  - `table_row(path, column, key)`: everything after the first cell of the row whose first cell is `` `key` ``, up
+    to the trailing `|`, in the table whose header's second cell is `column`; `""` when no row matches or the file
+    is missing at HEAD. Naming the column keeps a second table keyed by component, such as `README.md`'s update
+    table, from answering.
   - `first_paragraph(path)`: the lines after the H1 up to the next blank line, joined; `""` when none.
 - Wiring, one source per kind (D3):
 
 | Component | Source at HEAD | Where |
 |---|---|---|
-| `harness`, `hooks-path`, `skills` | `table_row("README.md", name)` | `HARNESS_COMPONENTS`, `bootstrap/registry.py:11` |
+| `harness`, `hooks-path`, `skills` | `table_row("README.md", "Installs", name)` | `HARNESS_COMPONENTS`, `bootstrap/registry.py:11` |
 | `fragment:<name>` | the whole of `harness/fragments/<name>.md` | `fragment_components`, `bootstrap/fragments.py:75` |
-| `settings:<name>` | `table_row("harness/settings/README.md", name)` | `settings_components`, `bootstrap/settings.py:157` |
+| `settings:<name>` | `table_row("harness/settings/README.md", "What it adds", name)` | `settings_components`, `bootstrap/settings.py:157` |
 | `plugin:<name>` | `first_paragraph("plugins/<name>/README.md")` | `plugin_components`, `bootstrap/plugins.py:169` |
 
 - Tests: every component `all_components()` returns for this repository has a non-empty description (this catches a
@@ -66,7 +69,7 @@ a4e6976.
   ticked; Right or `?` opens the row's description; Enter returns the ticked rows (D8); `q` or Escape returns `[]`.
   After curses closes, `answered_yes` asks `Install <names>? [y/N] `; a no returns `[]` (D8a).
   The description view shows the name, the summary and the description wrapped to the width, or `no description
-  found` when it is `""`; Up, Down, Page Up and Page Down scroll it; any other key returns to the list.
+  found` when it is `""` or reading it raised `Stop` or `OSError`; Up, Down, Page Up and Page Down scroll it; any other key returns to the list.
 - The drawing is kept apart from a small state object (cursor, ticks, scroll offset) so the key handling reads
   plainly; tests still go through the command.
 - Tests, driven through a pseudo-terminal (`pty.openpty`, `TERM=xterm` in the run's environment, keys written to the

@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 
 from bootstrap.core import CLAUDE_DIR, CLONE, Component, Run, Stop, warn
+from bootstrap.docs import first_paragraph
 from bootstrap.files import parse_json_object, read_json_object, write_staged
 from bootstrap.git import git
 from bootstrap.harness import tree_files
@@ -176,6 +177,7 @@ def plugin_components() -> list[Component]:
                 name=f"plugin:{name}",
                 summary=plugin.get("description", ""),
                 install=functools.partial(install_plugin, name, marketplace_name),
+                description=functools.partial(first_paragraph, f"plugins/{name}/README.md"),
                 check=functools.partial(check_plugin, name),
             )
         )
