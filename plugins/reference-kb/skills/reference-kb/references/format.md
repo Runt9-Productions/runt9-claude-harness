@@ -288,4 +288,4 @@ python3 <skill>/scripts/validate.py --root .claude/reference [--warnings] [--sta
   comes at or after, so a change that breaks no claim passes without padding the note. The path is the note's from
   the repository's top, as the validator prints it; name each note in a trailer of its own. Git's own trailer rules
   apply: the trailer sits in the message's last paragraph, and a merge commit's trailers are left out like its
-  changes. `verified` does not move, so `--stale` still reports a change dated after it.
+  changes. `--stale` honours the trailer the same way, on any commit in the history, so `verified` need not move.
