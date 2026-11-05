@@ -43,7 +43,11 @@ type World = {
   system: string | undefined
   /** The commands besides `rm` and `uname` that $.process.run can start; any other is rejected as not found. */
   installed: Set<string>
+  /** Whether creating a user namespace fails, as under Ubuntu's AppArmor restriction, so a `bwrap --unshare-user` exits 1. */
+  isUserNamespaceDenied: boolean
 }
+
+const USER_NAMESPACE_DENIED = 'bwrap: setting up uid map: Permission denied'
 
 const ROOT = '/work/repo'
 
@@ -81,13 +85,17 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     commands: [],
     system: 'Linux',
     installed: new Set(['bwrap', 'socat']),
+    isUserNamespaceDenied: false,
   }
   on('session.root', () => ({ value: world.root }) as never)
   on('session.repo', () => ({ value: { root: world.repoRoot, remote: null, internal: false, repository: null } }) as never)
   on('settings.read', ($, e) => ({ value: world.sources[(e as { source: 'flag' | 'policy' }).source] }) as never)
   on('process.run', ($, e) => {
-    const [command, , path] = (e as { argv: string[] }).argv
-    const exited = (exitCode: number, stdout = '') => ({ value: { exitCode, stdout, stderr: '' } }) as never
+    const { argv } = e as { argv: string[] }
+    const [command, , path] = argv
+    const exited = (exitCode: number, stdout = '', stderr = '') => ({ value: { exitCode, stdout, stderr } }) as never
+    const isUserNamespaced = command === 'bwrap' && argv.includes('--unshare-user')
+    if (isUserNamespaced && world.isUserNamespaceDenied) return exited(1, '', `${USER_NAMESPACE_DENIED}\n`)
     if (command === 'uname') return world.system === undefined ? { deny: 'spawn uname ENOENT' } : exited(0, `${world.system}\n`)
     if (command === 'rm') {
       if (path === undefined || !world.files.has(path)) return exited(1)
@@ -722,6 +730,19 @@ test('on Linux without bwrap or without socat, going away leaves the file alone,
   await setMode($, world, 'present')
   expect(world.writes).toEqual([])
   expect(world.files.get(LOCAL_SETTINGS)).toBe(ownText)
+})
+
+test('on Linux with both installed but no user namespace allowed, going away leaves the file alone, holds nothing, and toasts bwrap\'s error', async ($, on) => {
+  const world = buildWorld(on)
+  writeLocalSettings(world, OWN_SETTINGS)
+  const ownText = world.files.get(LOCAL_SETTINGS)
+  world.isUserNamespaceDenied = true
+  await setMode($, world, 'away')
+  expect(world.toasts).toEqual([`The sandbox is off while away: a trial sandbox failed (${USER_NAMESPACE_DENIED})`])
+  expect(world.writes).toEqual([])
+  expect(world.files.get(LOCAL_SETTINGS)).toBe(ownText)
+  expect(world.store.has(HOLD_KEY)).toBe(false)
+  expect(world.store.has(HELD_ROOT_KEY)).toBe(false)
 })
 
 test('on macOS the sandbox turns on with neither dependency, and where the system cannot be checked or is another it stays off', async ($, on) => {

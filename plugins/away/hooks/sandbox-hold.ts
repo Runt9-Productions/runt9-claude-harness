@@ -20,6 +20,10 @@ const LINUX_DEPENDENCIES: readonly (readonly [string, string])[] = [
   ['socat', '-V'],
 ]
 
+// A sandbox that does nothing, in the user and network namespaces Claude Code's sandbox creates. Both tools can be
+// installed where creating them fails, as under Ubuntu's AppArmor restriction on unprivileged user namespaces or WSL1.
+const TRIAL_SANDBOX = ['bwrap', '--unshare-user', '--unshare-net', '--ro-bind', '/', '/', 'true']
+
 /** A value in a higher settings source that undoes one of AWAY_VALUES, and what it leaves running while away. */
 type Override = { key: keyof SandboxValues; value: boolean; consequence: string }
 
@@ -91,8 +95,8 @@ export async function holdSandbox($: EngineInterface, sessionId: string) {
 
 /**
  * Why the sandbox cannot run on this machine, or undefined where it can. The engine has no call that says, so this
- * checks the dependencies Claude Code names: none on macOS, which provides the sandbox, and LINUX_DEPENDENCIES on
- * Linux and WSL2. A check that cannot run counts as the sandbox unavailable.
+ * checks the dependencies Claude Code names: none on macOS, which provides the sandbox, and on Linux and WSL2
+ * LINUX_DEPENDENCIES, then TRIAL_SANDBOX. A check that cannot run counts as the sandbox unavailable.
  */
 async function whySandboxCannotRun($: EngineInterface): Promise<string | undefined> {
   let system: string
@@ -100,7 +104,7 @@ async function whySandboxCannotRun($: EngineInterface): Promise<string | undefin
     const { stdout } = await $.process.run(['uname', '-s'])
     system = stdout.trim()
   } catch (err) {
-    return `checking that the sandbox can run failed (${String(err)})`
+    return checkFailed(err)
   }
   if (system === 'Darwin') return undefined
   if (system !== 'Linux') return `the sandbox runs only on macOS, Linux and WSL2, not ${system}`
@@ -108,8 +112,26 @@ async function whySandboxCannotRun($: EngineInterface): Promise<string | undefin
   for (const argv of LINUX_DEPENDENCIES) {
     if (!(await canStart($, argv))) missing.push(argv[0])
   }
-  if (missing.length === 0) return undefined
-  return `${missing.join(' and ')} not installed`
+  if (missing.length > 0) return `${missing.join(' and ')} not installed`
+  return whyTrialSandboxFails($)
+}
+
+/** Why TRIAL_SANDBOX failed, from what bwrap wrote to standard error, or undefined where it ran. */
+async function whyTrialSandboxFails($: EngineInterface): Promise<string | undefined> {
+  let result: { exitCode: number; stderr: string }
+  try {
+    result = await $.process.run(TRIAL_SANDBOX)
+  } catch (err) {
+    return checkFailed(err)
+  }
+  if (result.exitCode === 0) return undefined
+  const stderr = result.stderr.trim()
+  const reason = stderr === '' ? `exit ${result.exitCode}` : stderr
+  return `a trial sandbox failed (${reason})`
+}
+
+function checkFailed(err: unknown): string {
+  return `checking that the sandbox can run failed (${String(err)})`
 }
 
 /** Whether the command starts, whatever it exits with. */

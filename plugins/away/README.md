@@ -119,9 +119,11 @@ from a clone of this repository with `python3 bootstrap.py harness settings:guar
 describes; it ships with `enabled: false`, so the sandbox stays off until away turns it on. Since auto-allow is off
 while away, a Bash command runs unattended only where an allow rule covers it, sandboxed or not.
 
-Going away first checks that the sandbox can run: on Linux and WSL2, that `bwrap` and `socat` are installed; on
-macOS, which provides the sandbox, nothing. Where it cannot run, or the check itself cannot (as on Windows), away
-leaves the local file alone, holds nothing, and a toast says the sandbox is off while away and why. The fragment sets
+Going away first checks that the sandbox can run: on Linux and WSL2, that `bwrap` and `socat` are installed and that
+`bwrap` can run a sandbox that does nothing in new user and network namespaces, which fails under Ubuntu's AppArmor
+restriction on unprivileged user namespaces and on WSL1; on macOS, which provides the sandbox, nothing. Where it
+cannot run, or the check itself cannot (as on Windows), away leaves the local file alone, holds nothing, and a toast
+says the sandbox is off while away and why, with `bwrap`'s error where that trial failed. The fragment sets
 `failIfUnavailable`, so a sandbox turned on where it cannot run would stop every session started in that checkout.
 
 ### What it does not cover
