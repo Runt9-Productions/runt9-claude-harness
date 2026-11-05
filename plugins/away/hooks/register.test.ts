@@ -39,6 +39,10 @@ type World = {
   /** What `--settings` and managed settings hold, as $.settings.read({ source }) answers. */
   sources: { flag: Record<string, unknown>; policy: Record<string, unknown> }
   commands: CommandSpec[]
+  /** What `uname -s` prints; undefined, as where `uname` cannot start, and `$.process.run` rejects it. */
+  system: string | undefined
+  /** The commands besides `rm` and `uname` that $.process.run can start; any other is rejected as not found. */
+  installed: Set<string>
 }
 
 const ROOT = '/work/repo'
@@ -75,15 +79,23 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     repoRoot: ROOT,
     sources: { flag: {}, policy: {} },
     commands: [],
+    system: 'Linux',
+    installed: new Set(['bwrap', 'socat']),
   }
   on('session.root', () => ({ value: world.root }) as never)
   on('session.repo', () => ({ value: { root: world.repoRoot, remote: null, internal: false, repository: null } }) as never)
   on('settings.read', ($, e) => ({ value: world.sources[(e as { source: 'flag' | 'policy' }).source] }) as never)
   on('process.run', ($, e) => {
     const [command, , path] = (e as { argv: string[] }).argv
-    if (command !== 'rm' || path === undefined || !world.files.has(path)) return { value: { exitCode: 1, stdout: '', stderr: 'no such file' } } as never
-    world.files.delete(path)
-    return { value: { exitCode: 0, stdout: '', stderr: '' } } as never
+    const exited = (exitCode: number, stdout = '') => ({ value: { exitCode, stdout, stderr: '' } }) as never
+    if (command === 'uname') return world.system === undefined ? { deny: 'spawn uname ENOENT' } : exited(0, `${world.system}\n`)
+    if (command === 'rm') {
+      if (path === undefined || !world.files.has(path)) return exited(1)
+      world.files.delete(path)
+      return exited(0)
+    }
+    if (command !== undefined && world.installed.has(command)) return exited(0)
+    return { deny: `spawn ${command} ENOENT` }
   })
   on('fs.exists', ($, e) => ({ value: world.files.has((e as { path: string }).path) }) as never)
   on('fs.read', ($, e) => {
@@ -691,6 +703,45 @@ test('a local settings file that does not hold a JSON object is left untouched, 
   expect(world.toasts).toContain(`The sandbox is off while away: ${LOCAL_SETTINGS} does not hold a JSON object`)
   expect(world.store.has(HOLD_KEY)).toBe(false)
   expect(world.statuses.at(-1)).toBe('away')
+})
+
+test('on Linux without bwrap or without socat, going away leaves the file alone, holds nothing, and toasts what is missing', async ($, on) => {
+  const world = buildWorld(on)
+  writeLocalSettings(world, OWN_SETTINGS)
+  const ownText = world.files.get(LOCAL_SETTINGS)
+  world.installed.delete('bwrap')
+  await setMode($, world, 'away')
+  expect(world.toasts).toEqual(['The sandbox is off while away: bwrap not installed'])
+  expect(world.store.has(HOLD_KEY)).toBe(false)
+  expect(world.store.has(HELD_ROOT_KEY)).toBe(false)
+  await setMode($, world, 'present')
+
+  world.installed = new Set(['bwrap'])
+  await setMode($, world, 'away')
+  expect(world.toasts.at(-1)).toBe('The sandbox is off while away: socat not installed')
+  await setMode($, world, 'present')
+  expect(world.writes).toEqual([])
+  expect(world.files.get(LOCAL_SETTINGS)).toBe(ownText)
+})
+
+test('on macOS the sandbox turns on with neither dependency, and where the system cannot be checked or is another it stays off', async ($, on) => {
+  const world = buildWorld(on)
+  world.system = 'Darwin'
+  world.installed.clear()
+  await setMode($, world, 'away')
+  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
+  await setMode($, world, 'present')
+
+  world.system = undefined
+  await setMode($, world, 'away')
+  expect(world.toasts.at(-1)).toMatch(/^The sandbox is off while away: checking that the sandbox can run failed/)
+  await setMode($, world, 'present')
+  world.system = 'FreeBSD'
+  await setMode($, world, 'away')
+  expect(world.toasts.at(-1)).toBe('The sandbox is off while away: the sandbox runs only on macOS, Linux and WSL2, not FreeBSD')
+  // The one write is macOS's.
+  expect(world.writes.length).toBe(1)
+  expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
 const WORKTREE_ROOT = '/work/worktree'

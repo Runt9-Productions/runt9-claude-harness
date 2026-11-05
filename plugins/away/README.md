@@ -37,7 +37,7 @@ restart or a resume of a session left that way restores its mode, with a "Restor
 | An auto mode denial | nothing | posted as a board decision | posted as a board decision |
 | Context past handoff's ceiling | handoff's button | handoff's button | handed off and compacted unattended |
 | Switching to present | nothing | nothing | a return report, if away since the last one |
-| The Bash sandbox | as your settings set it | as your settings set it | on, with auto-allow off |
+| The Bash sandbox | as your settings set it | as your settings set it | on, with auto-allow off, where it can run |
 
 The first three rows are what Claude is told; the rest are what the plugin does. In every mode, Claude is told to put
 a question to the board rather than to AskUserQuestion.
@@ -117,9 +117,12 @@ and a host outside the allowlist, which starts empty, is left to the permission 
 fragment closes these with credential denies, `allowUnsandboxedCommands: false` and a strict allowlist. Install it
 from a clone of this repository with `python3 bootstrap.py harness settings:guardrails-sandbox`, as the root README
 describes; it ships with `enabled: false`, so the sandbox stays off until away turns it on. Since auto-allow is off
-while away, a Bash command runs unattended only where an allow rule covers it, sandboxed or not. Away does not check
-that the sandbox can run on the machine; check that once with `/sandbox` while present, since it writes its choice
-into the same local file.
+while away, a Bash command runs unattended only where an allow rule covers it, sandboxed or not.
+
+Going away first checks that the sandbox can run: on Linux and WSL2, that `bwrap` and `socat` are installed; on
+macOS, which provides the sandbox, nothing. Where it cannot run, or the check itself cannot (as on Windows), away
+leaves the local file alone, holds nothing, and a toast says the sandbox is off while away and why. The fragment sets
+`failIfUnavailable`, so a sandbox turned on where it cannot run would stop every session started in that checkout.
 
 ### What it does not cover
 

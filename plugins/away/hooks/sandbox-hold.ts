@@ -12,6 +12,14 @@ const AWAY_VALUES: SandboxValues = { enabled: true, autoAllowBashIfSandboxed: fa
 
 const EMPTY_SETTINGS = renderLocalSettings({})
 
+const SANDBOX_OFF = 'The sandbox is off while away'
+
+// What Claude Code's sandbox needs on Linux and WSL2, each with an argument that only prints its version.
+const LINUX_DEPENDENCIES: readonly (readonly [string, string])[] = [
+  ['bwrap', '--version'],
+  ['socat', '-V'],
+]
+
 /** A value in a higher settings source that undoes one of AWAY_VALUES, and what it leaves running while away. */
 type Override = { key: keyof SandboxValues; value: boolean; consequence: string }
 
@@ -55,15 +63,22 @@ async function loadHeldRoot($: EngineInterface, sessionId: string): Promise<stri
 /**
  * Sets AWAY_VALUES in the session root's local settings, where a key overrides only that key, so the rest of the
  * sandbox config still comes from the user's settings. `sessionId` joins the holders, and the first holder records
- * what it found. A session that still holds another root gives that one up.
+ * what it found. A session that still holds another root gives that one up. Where the sandbox cannot run, nothing is
+ * written or recorded: with `failIfUnavailable` set, a sandbox turned on there stops every session that starts in
+ * the checkout.
  */
 export async function holdSandbox($: EngineInterface, sessionId: string) {
   const root = await $.session.root()
   const heldRoot = await loadHeldRoot($, sessionId)
   if (heldRoot !== undefined && heldRoot !== root) await releaseSandbox($, sessionId)
+  const unavailable = await whySandboxCannotRun($)
+  if (unavailable !== undefined) {
+    $.ui.toast(`${SANDBOX_OFF}: ${unavailable}`)
+    return
+  }
   const key = holdKey(root)
   const path = localSettingsPath(root)
-  const isHeld = await editLocalSettings($, path, 'The sandbox is off while away', async (settings, isMissing) => {
+  const isHeld = await editLocalSettings($, path, SANDBOX_OFF, async (settings, isMissing) => {
     const hold = (await loadHold($, key)) ?? { holders: [], earlier: sandboxValues(settings), isFileCreated: isMissing }
     const others = hold.holders.filter(holder => holder !== sessionId)
     // Recorded before the file changes: a file changed with no record would keep the sandbox on for good.
@@ -72,6 +87,39 @@ export async function holdSandbox($: EngineInterface, sessionId: string) {
     return withSandboxValues(settings, AWAY_VALUES)
   })
   if (isHeld) await toastOverrides($, path, root)
+}
+
+/**
+ * Why the sandbox cannot run on this machine, or undefined where it can. The engine has no call that says, so this
+ * checks the dependencies Claude Code names: none on macOS, which provides the sandbox, and LINUX_DEPENDENCIES on
+ * Linux and WSL2. A check that cannot run counts as the sandbox unavailable.
+ */
+async function whySandboxCannotRun($: EngineInterface): Promise<string | undefined> {
+  let system: string
+  try {
+    const { stdout } = await $.process.run(['uname', '-s'])
+    system = stdout.trim()
+  } catch (err) {
+    return `checking that the sandbox can run failed (${String(err)})`
+  }
+  if (system === 'Darwin') return undefined
+  if (system !== 'Linux') return `the sandbox runs only on macOS, Linux and WSL2, not ${system}`
+  const missing: string[] = []
+  for (const argv of LINUX_DEPENDENCIES) {
+    if (!(await canStart($, argv))) missing.push(argv[0])
+  }
+  if (missing.length === 0) return undefined
+  return `${missing.join(' and ')} not installed`
+}
+
+/** Whether the command starts, whatever it exits with. */
+async function canStart($: EngineInterface, argv: readonly string[]): Promise<boolean> {
+  try {
+    await $.process.run(argv)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Takes `sessionId` off the holders of the root it holds, and puts the earlier values back once none is left. */
