@@ -47,7 +47,8 @@ a4e6976.
   order; hooks-path only with --repo`, aligned with the rest.
 - A re-run of `all` on a machine with plugins installed is safe: `claude plugin install` for a plugin already
   installed at that scope prints that it is and exits 0 (Claude Code's plugin commands reference, read 2026-11-04).
-- The `Not offering <name>` line has one home, `offered` in `bootstrap.py`, which both `all` and the menu use.
+- The `Not offering <name>` line has one home, `offered` in `bootstrap.py`. Whether a component can be offered
+  without `--repo` is one predicate in `bootstrap/core.py`, which `offered` and the menu's `needs --repo` row share.
 - `--update all` is untouched: `narrowed` reports `all` as an unknown component (D9).
 - Tests: `all` without `--repo` installs every other component in order, says it left `hooks-path` out, and makes the
   same `claude` calls as naming each; `all` with `--repo` sets `core.hooksPath`; `all` beside a name stops before any
@@ -55,15 +56,17 @@ a4e6976.
 
 ## The menu (task 03)
 
-- `ask` (`bootstrap.py:38`) goes. `pick` with no names calls `bootstrap.menu.choose(components, run)`, which returns
-  the picked components in install order, or `[]` (then `Nothing picked.`).
+- `ask` goes. `pick` with no names imports `bootstrap.menu` there and calls `choose(components, run)`, which returns
+  the picked components in install order, or `[]` (then `Nothing picked.`). Importing it only there keeps runs that
+  name components free of curses; a Python without curses stops with a line saying so.
 - Before curses starts (D16): when `sys.stdin.isatty()` or `sys.stdout.isatty()` is false, `Stop("no answer on
   stdin; name the components on the command line instead")`, today's message. A `curses.error` from setup becomes
   `Stop("the menu needs a terminal curses can drive; check TERM, or name the components on the command line")`.
 - Marks (D4, D15): a new `component_states(run) -> dict[str, str]` in `bootstrap/update.py` builds a `Survey` and runs
   `survey_harness`, `survey_skills(survey, harness_moves=False)`, `survey_fragments`, `survey_settings` and
   `survey_plugins` (`bootstrap/update.py:191` to `:311`), each in its own `try` catching `Stop` and `OSError`, so one
-  failing step leaves only its rows unmarked. `survey_plugins` is skipped when `claude` is not on `PATH`. A `Found`
+  failing step leaves only its rows unmarked, including any it marked before raising. Without `claude` on `PATH`
+  the plugins step raises `Stop`, so its rows stay unmarked. A `Found`
   with a change is `behind`; one without is `installed`; anything else is unmarked. `hooks-path` is never found, so
   it is unmarked, and without `--repo` its row reads `needs --repo` and cannot be ticked.
 - Screen: one row per component, `[x]` or `[ ]`, the name, the mark, then the summary cut to the width. A footer
@@ -71,17 +74,22 @@ a4e6976.
 - Keys: Up and Down (and `k`, `j`) move; Space toggles; `a` ticks every pickable row, or clears them all when all are
   ticked; Right or `?` opens the row's description; Enter returns the ticked rows (D8); `q` or Escape returns `[]`.
   After curses closes, `answered_yes` asks `Install <names>? [y/N] `; a no returns `[]` (D8a).
-  The description view shows the name, the summary and the description wrapped to the width, or `no description
-  found` when it is `""` or reading it raised `Stop` or `OSError`; Up, Down, Page Up and Page Down scroll it; any other key returns to the list.
+  The description view shows the name, the summary and the description, or `no description found` when it is `""`
+  or reading it raised `Stop` or `OSError`. The docs are hard-wrapped Markdown, so each paragraph and list item is
+  joined to one line before it is wrapped to the width. Up, Down, Page Up and Page Down scroll it; any other key
+  returns to the list.
 - The drawing is kept apart from a small state object (cursor, ticks, scroll offset) so the key handling reads
   plainly; tests still go through the command.
 - Tests, driven through a pseudo-terminal (`pty.openpty`, `TERM=xterm` in the run's environment, keys written to the
-  master, output read until an expected string):
+  master, output read until an expected string). Curses repaints a changed row only in part, so a test matches only
+  text painted whole: a first paint, a new view, or a line printed after curses closes.
   - picking two components with Down, Space and Enter installs exactly those, in install order, and an installed
     harness shows as `installed` on the next run;
   - opening a fragment's description shows the fragment's text;
-  - `test_prompt_without_stdin_stops` (`test_bootstrap.py:896`) stays as it is, and `test_prompt_installs_what_was_answered_yes`
-    (`:885`) is replaced by the first test above.
+  - a survey step that raises still opens the menu, and a plugin with no README shows `no description found`;
+  - a `TERM` curses cannot drive stops with the line naming `TERM`;
+  - `test_prompt_without_stdin_stops` stays as it is, and `test_prompt_installs_what_was_answered_yes` is replaced by
+    the first test above.
 
 ## Docs (task 04)
 

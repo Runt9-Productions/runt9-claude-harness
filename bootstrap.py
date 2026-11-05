@@ -27,13 +27,15 @@ if sys.version_info < (3, 12):  # noqa: UP036 (ruff assumes the target version, 
 # through it.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bootstrap.core import Component, Run, Stop, answered_yes
+from bootstrap.core import Component, Run, Stop, lacks_repos
 from bootstrap.plugins import print_templates
 from bootstrap.registry import all_components, unknown_components
 from bootstrap.update import update
 
 SESSION_VARIABLES = ("CLAUDE_CODE_SESSION_ID", "CLAUDECODE")
 EVERY_COMPONENT = "all"
+CURSES_MODULES = ("curses", "_curses")
+NO_CURSES_MODULE = "the menu needs Python's curses module; name the components on the command line instead"
 
 
 def repo_users(components: list[Component]) -> str:
@@ -45,20 +47,11 @@ def offered(components: list[Component], run: Run) -> list[Component]:
     to add it."""
     kept = []
     for component in components:
-        if component.needs_repos and not run.repos:
+        if lacks_repos(component, run):
             print(f"Not offering {component.name}: run python3 bootstrap.py {component.name} --repo <path>")
             continue
         kept.append(component)
     return kept
-
-
-def ask(components: list[Component], run: Run) -> list[Component]:
-    picked = []
-    for component in offered(components, run):
-        question = f"Install {component.name} ({component.summary})? [y/N] "
-        if answered_yes(question, "no answer on stdin; name the components on the command line instead"):
-            picked.append(component)
-    return picked
 
 
 def pick(names: list[str], components: list[Component], run: Run) -> list[Component]:
@@ -71,7 +64,14 @@ def pick(names: list[str], components: list[Component], run: Run) -> list[Compon
     if unknown:
         raise unknown_components(unknown)
     if not names:
-        return ask(components, run)
+        # Imported here alone, so a run that names components works on a Python built without curses.
+        try:
+            from bootstrap.menu import choose
+        except ModuleNotFoundError as error:
+            if error.name not in CURSES_MODULES:
+                raise
+            raise Stop(NO_CURSES_MODULE) from error
+        return choose(components, run)
     picked = [component for component in components if component.name in names]
     if run.repos and not any(component.needs_repos for component in picked):
         raise Stop(f"--repo is used only by {repo_users(components)}, and none is named")

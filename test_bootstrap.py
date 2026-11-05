@@ -2,14 +2,22 @@
 claude on PATH that records each call, answers `plugin list --json` from a canned file, and moves a version there on
 `plugin update` only when told to. Every git call runs
 without the machine's global and system config. `updated_settings` is also called directly, since its cases are many
-and need no run. Needs git and pytest.
+and need no run. The menu runs on a pseudo-terminal as TERM=xterm. Needs git, pytest and the xterm terminfo entry.
 """
 
+import errno
+import fcntl
 import json
 import os
+import pty
+import re
+import select
 import shutil
+import struct
 import subprocess
 import sys
+import termios
+import time
 from pathlib import Path
 
 import pytest
@@ -39,6 +47,12 @@ SETTINGS_FRAGMENT = {
     "permissions": {"deny": ["Read(./example-secret)", "Read(./example-key)"], "defaultMode": "example-mode"},
     "model": "example-fragment-model",
 }
+TERMINAL_TIMEOUT = 15
+# An escape sequence (CSI, OSC, a character set choice or a two-byte one) or any other control character.
+TERMINAL_CODE = re.compile(r"\x1b(\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07|[()][0-9A-Za-z]|.)|[\x00-\x1f]")
+# What xterm sends for Down and Right once curses has switched its cursor keys to application mode.
+DOWN = b"\x1bOB"
+RIGHT = b"\x1bOC"
 STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
@@ -118,6 +132,21 @@ class Sandbox:
             text=True,
         )
 
+    def run_in_terminal(self, *args: str, rows: int = 24, env: dict[str, str] | None = None) -> "Terminal":
+        """Starts bootstrap.py with a pseudo-terminal of `rows` by 80 as its stdin, stdout and stderr."""
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, 80, 0, 0))
+        process = subprocess.Popen(
+            [sys.executable, str(self.clone / "bootstrap.py"), *args],
+            cwd=self.root,
+            env={**self.env, "TERM": "xterm", **(env or {})},
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+        )
+        os.close(slave)
+        return Terminal(process, master)
+
     def list_plugins(self, versions: dict[str, str]) -> None:
         """Sets what the stub's `plugin list --json` prints: each plugin in `versions` from the example marketplace,
         and one from another marketplace."""
@@ -148,6 +177,62 @@ class Sandbox:
         # git config --get exits 1 for an unset key; any other failure must not read as unset.
         assert result.returncode in (0, 1), result.stderr
         return result.stdout.strip() or None
+
+
+class Terminal:
+    """A run on a pseudo-terminal. What it prints is read as text with each escape sequence and control character
+    taken as a space and each run of spaces as one, so a row curses paints whole reads as it shows, while one it
+    repaints in part may not."""
+
+    def __init__(self, process: subprocess.Popen, master: int) -> None:
+        self.process = process
+        self.master = master
+        self.printed = b""
+        self.since_keys = 0
+
+    def __enter__(self) -> "Terminal":
+        return self
+
+    def __exit__(self, *exception: object) -> None:
+        if self.process.poll() is None:
+            self.process.kill()
+            self.process.wait()
+        os.close(self.master)
+
+    def text(self, start: int = 0) -> str:
+        spaced = TERMINAL_CODE.sub(" ", self.printed[start:].decode(errors="replace"))
+        return " ".join(spaced.split())
+
+    def read(self, deadline: float) -> bool:
+        """Adds what the run prints next to `printed`; False once the time is up or the run has closed its end."""
+        ready, _, _ = select.select([self.master], [], [], max(deadline - time.monotonic(), 0))
+        if not ready:
+            return False
+        try:
+            chunk = os.read(self.master, 65536)
+        except OSError as error:
+            # Linux reads the master of a terminal no process holds open any more as EIO.
+            if error.errno != errno.EIO:
+                raise
+            return False
+        self.printed += chunk
+        return bool(chunk)
+
+    def expect(self, text: str) -> None:
+        """Waits for `text` in what the run printed since the last keys were sent."""
+        deadline = time.monotonic() + TERMINAL_TIMEOUT
+        while text not in self.text(self.since_keys):
+            assert self.read(deadline), f"{text!r} never showed; the run printed {self.text()!r}"
+
+    def send(self, keys: bytes) -> None:
+        self.since_keys = len(self.printed)
+        os.write(self.master, keys)
+
+    def wait(self) -> int:
+        deadline = time.monotonic() + TERMINAL_TIMEOUT
+        while self.read(deadline):
+            pass
+        return self.process.wait(timeout=max(deadline - time.monotonic(), 0))
 
 
 @pytest.fixture
@@ -959,15 +1044,74 @@ def test_every_component_of_this_repository_has_a_description() -> None:
     assert undescribed == []
 
 
-def test_prompt_installs_what_was_answered_yes(sandbox: Sandbox) -> None:
-    # harness, skills, the fragment, the settings, then the three plugins; hooks-path is not offered without --repo.
-    result = sandbox.run(stdin="y\nn\nn\nn\nn\ny\nn\n")
+PLUGIN_LIST = ["plugin", "list", "--json"]
 
-    assert result.returncode == 0, result.stderr
-    assert "Install hooks-path" not in result.stdout
-    assert (sandbox.current / "githooks/pre-push").exists()
-    assert not sandbox.skills.exists()
-    assert sandbox.claude_calls() == [MARKETPLACE_ADD, ["plugin", "install", "example-two@example-market"]]
+
+def test_menu_installs_the_ticked_components_after_one_confirmation(sandbox: Sandbox) -> None:
+    # Five rows above the footer, so moving down to plugin:example-two scrolls the list.
+    with sandbox.run_in_terminal(rows=6) as terminal:
+        terminal.expect("hooks-path needs --repo")
+        # Ticks harness, then hooks-path, which cannot be ticked without --repo, then plugin:example-two.
+        terminal.send(b" " + DOWN + b" " + DOWN * 5 + b" \r")
+        terminal.expect("Install harness, plugin:example-two? [y/N]")
+        terminal.send(b"y\r")
+        installed = terminal.wait()
+        installed_text = terminal.text()
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Raise the example version")
+    sandbox.list_plugins({"example-two": "1.0.0"})
+    with sandbox.run_in_terminal() as terminal:
+        terminal.expect("harness behind")
+        terminal.expect("plugin:example-two installed")
+        terminal.send(b" \r")
+        terminal.expect("Install harness? [y/N]")
+        terminal.send(b"n\r")
+        declined = terminal.wait()
+        declined_text = terminal.text()
+
+    assert installed == 0, installed_text
+    assert "Installed harness, plugin:example-two." in installed_text
+    assert sandbox.claude_calls() == [
+        PLUGIN_LIST,
+        MARKETPLACE_ADD,
+        ["plugin", "install", "example-two@example-market"],
+        PLUGIN_LIST,
+    ]
+    assert declined == 0, declined_text
+    assert declined_text.endswith("Nothing picked.")
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+
+
+def test_menu_opens_whatever_the_survey_cannot_read_and_shows_full_descriptions(sandbox: Sandbox) -> None:
+    sandbox.write("harness/fragments/example-rules.md", b"## Example rules\n\nShown whole in the description view.\n")
+    sandbox.commit("Example fragment text")
+    # The settings and plugin steps of the survey both read it and stop.
+    settings = sandbox.home / ".claude/settings.json"
+    settings.parent.mkdir()
+    settings.write_text("[]")
+
+    with sandbox.run_in_terminal() as terminal:
+        terminal.expect("plugin:example-three")
+        terminal.send(DOWN * 3 + b"?")
+        terminal.expect("Shown whole in the description view.")
+        # Back to the list, then down to plugin:example-one, which has no README.
+        terminal.send(b"x" + DOWN * 2 + RIGHT)
+        terminal.expect("no description found")
+        terminal.send(b"xq")
+        quit_code = terminal.wait()
+        text = terminal.text()
+
+    assert quit_code == 0, text
+    assert text.endswith("Nothing picked.")
+
+
+def test_menu_stops_on_a_terminal_curses_cannot_drive(sandbox: Sandbox) -> None:
+    with sandbox.run_in_terminal(env={"TERM": "example-unknown"}) as terminal:
+        exit_code = terminal.wait()
+        text = terminal.text()
+
+    assert exit_code == 1
+    assert "the menu needs a terminal curses can drive; check TERM" in text
 
 
 def test_prompt_without_stdin_stops(sandbox: Sandbox) -> None:
@@ -977,9 +1121,6 @@ def test_prompt_without_stdin_stops(sandbox: Sandbox) -> None:
     assert "no answer on stdin; name the components on the command line" in result.stderr
     assert not sandbox.install.exists()
     assert sandbox.claude_calls() == []
-
-
-PLUGIN_LIST = ["plugin", "list", "--json"]
 
 
 def test_update_with_nothing_behind_reports_each_component_and_asks_nothing(sandbox: Sandbox) -> None:

@@ -28,8 +28,13 @@ class Component:
     description: Callable[[], str]
     # Runs for every picked component before the first install, so a refusal installs nothing.
     check: Callable[[Run], None] | None = None
-    # Acts on the --repo paths; prompt mode offers it only when --repo is given.
+    # Acts on the --repo paths; the menu and `all` offer it only when --repo is given.
     needs_repos: bool = False
+
+
+def lacks_repos(component: Component, run: Run) -> bool:
+    """Whether `component` acts on --repo paths and the run was given none."""
+    return component.needs_repos and not run.repos
 
 
 def warn(message: str) -> None:

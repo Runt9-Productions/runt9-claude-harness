@@ -28,7 +28,7 @@ tags:
   that hold it, with a test that every component of this repository has one
 - [x] 02 `bootstrap.py all`: every component in install order, `hooks-path` only with `--repo`, refused beside other
   names, and documented in `--list`
-- [ ] 03 The curses menu in `bootstrap/menu.py` replacing `ask`: installed and behind marks from the update survey,
+- [x] 03 The curses menu in `bootstrap/menu.py` replacing `ask`: installed and behind marks from the update survey,
   toggling, toggle all, expanding a description, scrolling, the terminal checks, and tests driven through a
   pseudo-terminal
 - [ ] 04 `README.md`'s install section, the script's docstring and help, `CLAUDE.md`'s bootstrap bullet, and the
