@@ -34,6 +34,12 @@ what `all` names.
 - [decision] D7: the build may write `bootstrap.py`, `bootstrap/` (new `docs.py` and `menu.py`), `test_bootstrap.py`,
   `README.md`, `CLAUDE.md` (one bullet naming the new modules), `.claude/reference/domains/bootstrap/overview.md`,
   this project and its line in `.claude/reference/README.md` (owner, 2026-11-04).
+- [decision] D18: the edit scope also takes `.claude/reference/domains/guardrails/overview.md`, re-verified here
+  because its sources include `bootstrap/settings.py` and `bootstrap/update.py` (owner, 2026-11-05): CI's
+  `--stale-in` check fails the branch otherwise.
+- [decision] D19: `CLAUDE.md` gets no clause saying a new component needs a doc row for its description (owner,
+  2026-11-05): `test_every_component_of_this_repository_has_a_description` fails, naming the component, when one is
+  missing.
 - [decision] D8: Enter closes the menu with the ticked components, and a `y/N` question naming them follows before
   anything installs; `q` or Escape leaves with `Nothing picked.` (owner, 2026-11-04).
 - [proposal] D8a: a no to that question ends the run with `Nothing picked.` and exit 0, rather than reopening the
