@@ -7,7 +7,7 @@ nothing from an employer, a private project or a specific machine goes in, in co
 
 - `plugins/<name>/`: one self-contained plugin each, listed in `.claude-plugin/marketplace.json`.
 - `harness/`: what a plugin cannot carry (status line, settings fragments, git hooks, `CLAUDE.md` template and
-  fragments, style-guide skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
+  fragments, skills). So far it holds `githooks/` (the bot authorship check in `pre-commit`,
   `pre-merge-commit` and `pre-push`, and the leak gate in `pre-push`), `leak-scan/` (the scan that gate and CI
   run, with its allowlist in `.leak-scan.toml`, and the `public-leak` review the gate and `review-text.sh` run),
   `fragments/` (always-on `CLAUDE.md` rules a user imports from `~/.claude/harness/current/fragments/`, so far

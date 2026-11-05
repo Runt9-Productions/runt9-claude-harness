@@ -59,7 +59,7 @@ step number, start there; see "Starting mid-process".
   find it.
 - **Decisions are recorded before they are asked.** A question goes into the spec location as an open `[question]`
   before it is posted to a decision tool, so a session lost in between leaves a question the next one asks again.
-  The answer goes in as a `[decision]` with the owner's ruling, and the question leaves the open questions. An
+  The answer goes in as a `[decision]` with the owner's ruling, naming the question it settles. An
   agent's own ruling, such as a scope call made mid-task, is a `[proposal]` with its status, never a `[decision]`. A
   proposal that changes behaviour or scope also goes to the owner as a decision when it is made, because owners skip
   knowledge base files in review and would never learn of it there.
