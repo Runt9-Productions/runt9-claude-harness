@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { AgentInfo } from 'claude-code'
 
-import { ASK, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, complete, drawEmptyBeneath, engine, mountPane, resultText, saved, step } from './test-support'
+import { ASK, KEEPER, KEPT_ANSWERS_KEY, OWNER_TASK, READ_BOARD, SCOUT, SESSION_KEY, SPAWN_SCOUT, WORKER, captureAppends, captureSends, complete, drawEmptyBeneath, engine, mountPane, resultText, saved, step } from './test-support'
 
 for (const surface of ['terminal', 'desktop', 'mobile'] as const) {
   test(`${surface}: pressing an option records the answer once`, async ($, on) => {
@@ -319,6 +319,53 @@ test('Send now starts the idle main session once for the answers waiting on it, 
   await pane.press({ key: 'send-now' })
   expect(submitted.length).toBe(2)
   expect(submitted[1]).toContain('about D3.')
+})
+
+test('a plugin that asks to keep its answers reads each one, the option apart from the note, and no loop is told', { plugins: [KEEPER] }, async ($, on) => {
+  const toasts: string[] = []
+  const store = engine(on, { toasts })
+  const appended = captureAppends(on)
+  const posted = await $.command.run({ command: 'post', args: 'kept' } as never)
+  expect(posted.text).toContain('Posted D1')
+  await $.command.run({ command: 'post', args: 'kept' } as never)
+  await $.command.run({ command: 'post', args: 'kept' } as never)
+
+  const pane = await mountPane($)
+  await pane.input({ key: 'D1-other', text: ' only the open one ', kind: 'change' })
+  await pane.press({ key: 'D1-option-1' })
+  await pane.press({ key: 'D2-dismiss-question' })
+  await pane.input({ key: 'D3-other', text: 'ask again tomorrow' })
+
+  expect(store.get(KEPT_ANSWERS_KEY)).toEqual([
+    { id: 'D1', answer: 'Draft it. Note: only the open one', chosenOption: 'Draft it', note: 'only the open one' },
+    { id: 'D2', answer: 'Dismissed without choosing an option', chosenOption: undefined, note: undefined },
+    { id: 'D3', answer: 'Other: ask again tomorrow', chosenOption: undefined, note: 'ask again tomorrow' },
+  ])
+  expect(appended()).toEqual([])
+  // Not listed as waiting to reach Claude, so Send now is not offered for it either.
+  expect(await pane.find({ type: 'Text', text: 'D1 →' })).toBeUndefined()
+  expect(toasts.at(-1)).toContain('D3 answered; the answer stays with keeper and Claude is not told')
+})
+
+test("only a plugin's own call that asks for it keeps an answer: from the model, or a plugin that does not ask, it reaches the main session", { plugins: [KEEPER] }, async ($, on) => {
+  engine(on)
+  const appended = captureAppends(on)
+  await $.tool.call({ ...ASK, isAnswerKept: true } as never)
+  await $.command.run({ command: 'post', args: '' } as never)
+  const pane = await mountPane($)
+  await pane.press({ key: 'D1-option-0' })
+  await pane.press({ key: 'D2-option-0' })
+  expect(appended()).toEqual([
+    { to: undefined, text: '[board] The owner answered D1 ("Draft an issue on the tracker?"): Skip' },
+    { to: undefined, text: '[board] The owner answered D2 ("Draft an issue on the tracker?"): Skip' },
+  ])
+})
+
+test("a plugin's own decision names that plugin as its asker on the pane", { plugins: [KEEPER] }, async ($, on) => {
+  engine(on)
+  await $.command.run({ command: 'post', args: '' } as never)
+  const pane = await mountPane($)
+  expect((await pane.find({ type: 'Text', text: 'Draft an issue' }))?.text).toContain('D1 (keeper asks)')
 })
 
 // Each brings the main session into a turn, whose next request carries the answers without a prompt.

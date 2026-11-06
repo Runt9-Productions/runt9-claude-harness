@@ -63,6 +63,37 @@ that has finished or been stopped is not, since a message would start it again: 
 not delivered, and "Dismiss (I told it)" clears it. A toast says whether an answer or a Done arrived; a tick or a
 Start has one only when it did not.
 
+A plugin may post a decision whose answer it keeps for itself, as the next section describes. That answer goes to no
+agent, and its toast names the plugin.
+
+## Keeping the answer to a plugin's own decision
+
+A plugin can post a decision and read the owner's answer itself, so that no model loop is told it.
+
+- **Posting.** From the plugin's own hook, call `$.tool.call({ tool: 'mcp__board__ask_decision', question, options,
+  ..., isAnswerKept: true })`. The field is not in the tool's schema, and a model that passes it is ignored: the board
+  takes the posting plugin from the call's origin, which the host sets. The result starts with `Posted D<n>`. A
+  decision's id is unique only within one session's board.
+- **Answering.** The board writes the answer into its `decisions` state and nowhere else: no `[board]` message, no
+  Send now, and no line under "Answered, not yet sent to Claude".
+- **Reading.** Declare `board` in the plugin's `dependencies` to get its types, then hook `state.set` on
+  `{ plugin: 'board', key: 'decisions' }`. Call `next(e)`, return what it answers unchanged, and act only when that
+  is `{ value: { isSet: true } }`, since the board retries a write that loses a race. A decision whose `plugin` is
+  your plugin's name is newly answered when `e.value` holds it with `answer` set and `e.previous` holds the same id
+  with no `answer`. A saved board being restored has no unanswered copy in `previous`, so this reads each answer
+  once. Never rewrite `e.value`: the board is the only writer of its state.
+- **Forms of the answer.** `answer` is the whole text as an agent would be told it; `chosenOption` and `note` hold its
+  parts.
+
+  | The owner | `chosenOption` | `note` | `answer` |
+  |---|---|---|---|
+  | presses an option | its label | the note typed before pressing it, trimmed; absent when there is none | `<label>`, or `<label>. Note: <note>` |
+  | presses Dismiss | absent | as for an option | `Dismissed without choosing an option`, with `. Note: <note>` when there is one |
+  | types a note and presses Enter | absent | the text, trimmed | `Other: <text>` |
+
+- **Changing it.** The main session can still reword or withdraw the decision, as it can any other. A withdrawn
+  decision leaves `decisions` with no answer.
+
 ## Nudges
 
 The board watches every tool call the model makes, and while a surface draws the pane it adds a `[board]` line to
@@ -91,7 +122,7 @@ change without it:
 - The result of a new decision starts with `Posted D<n>`.
 - `mcp__board__read_board` lists the decisions and the tasks waiting on you, each with its id and its question or
   title; `away`'s return report has Claude read them there.
-- A decision a plugin posts has no asking agent, so its answer goes to the main session.
+- A decision a plugin posts without `isAnswerKept` has no asking agent, so its answer goes to the main session.
 - A new decision flashes on the pane and in the line above the prompt; it is `away`'s only alert in its distracted
   mode.
 - An agent counts as ended when `$.agent.list()` lists it as `completed`, `failed` or `killed`; `away` keeps a copy

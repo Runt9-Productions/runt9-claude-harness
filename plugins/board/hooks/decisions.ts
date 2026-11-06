@@ -39,8 +39,11 @@ function optionsRefusal(options: readonly (BoardOption | string)[]): string | un
   return isEveryLabelled ? undefined : 'needs a label on every option'
 }
 
-/** Posts, rewords or withdraws a decision for the calling loop; `agentId` is absent for the main session. */
-export async function askDecision($: EngineInterface, agentId: string | undefined, input: AskDecisionInput): Promise<string> {
+/**
+ * Posts, rewords or withdraws a decision for the calling loop; `agentId` is absent for the main session, and `plugin`
+ * names the plugin whose own call this is, absent for a model's.
+ */
+export async function askDecision($: EngineInterface, agentId: string | undefined, plugin: string | undefined, input: AskDecisionInput): Promise<string> {
   await bind($)
   if (input.withdraw) return withdrawDecision($, agentId, input.id)
   if (input.id !== undefined) return rewordDecision($, agentId, input.id, input)
@@ -57,12 +60,15 @@ export async function askDecision($: EngineInterface, agentId: string | undefine
     recommended: input.recommended,
     agentId,
     askedBy: agentLabel(rows, agentId),
+    plugin,
+    isAnswerKept: plugin !== undefined && input.isAnswerKept === true,
   }
   await update($, decisions, all => [...all, decision])
   await save($)
   void openBoard($)
   await flash($, id)
-  // The away plugin reads the decision id from the start of this result.
+  // Plugins read the decision id from the start of this result.
+  if (decision.isAnswerKept) return `Posted ${id}. Its answer is kept in the board's decisions for ${plugin}; no loop is told it.`
   return `Posted ${id}. The answer will arrive as a message starting "[board]"; do not wait for it.`
 }
 
@@ -213,18 +219,31 @@ export async function resetFlashAndHotkeys($: EngineInterface) {
   await update($, areHotkeysHeld, () => false)
 }
 
-async function answer($: EngineInterface, id: string, text: string) {
+/** What the owner gave, as the decision records it once answered. */
+type OwnerAnswer = Required<Pick<BoardDecision, 'answer'>> & Pick<BoardDecision, 'chosenOption' | 'note'>
+
+/** A kept answer starts seen: nothing is delivered, so the pane never lists it as unsent and Send now skips it. */
+function answered(decision: BoardDecision, given: OwnerAnswer): BoardDecision {
+  const delivery = decision.isAnswerKept ? 'seen' : 'sending'
+  return { ...decision, ...given, delivery }
+}
+
+async function answer($: EngineInterface, id: string, given: OwnerAnswer) {
   await bind($)
   // Claimed inside the update, which retries on a conflicting write, so two quick presses answer once.
   let claimed: BoardDecision | undefined
   await update($, decisions, all => {
     claimed = all.find(d => d.id === id && d.answer === undefined)
-    return all.map(d => (d === claimed ? { ...d, answer: text, delivery: 'sending' as const } : d))
+    return all.map(d => (d === claimed ? answered(d, given) : d))
   })
   if (!claimed) return
   await holdHotkeys($)
   await save($)
-  await sendAnswer($, claimed, text)
+  if (claimed.isAnswerKept) {
+    $.ui.toast(`${id} answered; the answer stays with ${claimed.plugin} and Claude is not told`)
+    return
+  }
+  await sendAnswer($, claimed, given.answer)
 }
 
 export async function retry($: EngineInterface, id: string) {
@@ -311,12 +330,16 @@ export async function answerWithNote($: EngineInterface, id: string, label: stri
   // A press on a frame drawn before a reword can name an option the decision no longer offers.
   const isOffered = label === DISMISSED_ANSWER || (decision?.options.map(asOption).some(o => o.label === label) ?? false)
   if (!isOffered) return
-  const note = decision?.note?.trim()
-  await answer($, id, note ? `${label}. Note: ${note}` : label)
+  const chosenOption = label === DISMISSED_ANSWER ? undefined : label
+  const typed = decision?.note?.trim() ?? ''
+  const note = typed === '' ? undefined : typed
+  const text = note === undefined ? label : `${label}. Note: ${note}`
+  await answer($, id, { answer: text, chosenOption, note })
 }
 
 export async function answerOther($: EngineInterface, id: string, text: string) {
-  if (text.trim()) await answer($, id, `Other: ${text.trim()}`)
+  const typed = text.trim()
+  if (typed !== '') await answer($, id, { answer: `Other: ${typed}`, chosenOption: undefined, note: typed })
 }
 
 /** Marks every answer and owner's change sent to this loop as seen; called as one of its model requests goes out. */

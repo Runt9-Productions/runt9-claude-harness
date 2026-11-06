@@ -129,9 +129,11 @@ export const register: Register = on => {
 
   // The engine does not hold a call to its schema, and types written outside an interactive session carry none for
   // these tools, so each input is taken as its type unchecked.
-  on('tool.call', { tool: 'mcp__board__ask_decision' }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__board__ask_decision' }, async ($, e, next) => {
     const input = e as unknown as AskDecisionInput
-    return { result: await askDecision($, e.agentId, input) }
+    // The host sets the origin, so the model cannot pass itself off as a plugin to keep an answer from the session.
+    const plugin = next.origin.plugin === 'engine' ? undefined : next.origin.plugin
+    return { result: await askDecision($, e.agentId, plugin, input) }
   })
 
   on('tool.call', { tool: 'mcp__board__set_owner_task' }, async ($, e) => {
