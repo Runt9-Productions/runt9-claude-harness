@@ -2,11 +2,13 @@ import functools
 from pathlib import Path
 
 from bootstrap.core import CLAUDE_DIR, Component, Run, Stop
-from bootstrap.docs import head_text
+from bootstrap.docs import head_text, table_rows
 from bootstrap.files import write_after_asking
-from bootstrap.harness import CURRENT, require_installed, shipped_in_head
+from bootstrap.harness import CURRENT, HARNESS_SOURCE, require_installed, shipped_in_head
 
 FRAGMENTS = "fragments"
+FRAGMENTS_README = f"{HARNESS_SOURCE}/{FRAGMENTS}/README.md"
+FRAGMENTS_COLUMN = "What it adds"
 USER_CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
 # Inside the installed harness; a missing ~/.claude/CLAUDE.md starts from it. Not named CLAUDE.md, which Claude Code
 # would load as instructions for sessions working in harness/.
@@ -74,12 +76,13 @@ def install_fragment(name: str, run: Run) -> None:
 
 
 def fragment_components() -> list[Component]:
+    summaries = table_rows(FRAGMENTS_README, FRAGMENTS_COLUMN)
     components = []
     for path in shipped_in_head(FRAGMENTS, ".md"):
         components.append(
             Component(
                 name=f"fragment:{path.stem}",
-                summary=f"import ~/.claude/harness/current/{FRAGMENTS}/{path.name} in ~/.claude/CLAUDE.md",
+                summary=summaries.get(path.stem, ""),
                 install=functools.partial(install_fragment, path.stem),
                 description=functools.partial(head_text, str(path)),
                 check=functools.partial(check_fragment, path.stem),

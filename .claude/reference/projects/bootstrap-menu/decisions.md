@@ -40,6 +40,13 @@ what `all` names.
 - [decision] D19: `CLAUDE.md` gets no clause saying a new component needs a doc row for its description (owner,
   2026-11-05): `test_every_component_of_this_repository_has_a_description` fails, naming the component, when one is
   missing.
+- [decision] D20: every component's summary and description say what it is, fixed in #121 (owner, 2026-11-06,
+  after trying the menu): the old summaries said what bootstrap writes, and the harness and skills descriptions never
+  named their contents.
+- [decision] D21: harness, hooks-path and skills summaries are written in `bootstrap/registry.py`; a fragment's comes
+  from its row in `harness/fragments/README.md`, a settings fragment's from its settings README row; the harness
+  description is a "Part | What it is" table in `README.md`, hooks-path's the githooks README's first paragraph,
+  skills' the skills README's first paragraph and table, each followed by its Installs row (owner, 2026-11-06).
 - [decision] D8: Enter closes the menu with the ticked components, and a `y/N` question naming them follows before
   anything installs; `q` or Escape leaves with `Nothing picked.` (owner, 2026-11-04).
 - [proposal] D8a: a no to that question ends the run with `Nothing picked.` and exit 0, rather than reopening the

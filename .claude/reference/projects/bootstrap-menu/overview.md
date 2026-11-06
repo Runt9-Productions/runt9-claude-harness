@@ -18,7 +18,7 @@ tests at the command's boundary.
 
 ## Where it stands
 
-- [status] Complete: tasks 01 to 04 built in #121; the durable facts are in [[Bootstrap]].
+- [status] Complete: tasks 01 to 05 built in #121; the durable facts are in [[Bootstrap]].
 
 ## Goal
 

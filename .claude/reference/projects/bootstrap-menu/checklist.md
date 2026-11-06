@@ -12,13 +12,13 @@ tags:
 ## Status
 
 - **Live item:** none; built in #121
-- **How far along:** 01 to 04 built, verified and reviewed
+- **How far along:** 01 to 05 built, verified and reviewed
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-06
 
 ## Build Order
 
-01, 02, 03, 04
+01, 02, 03, 04, 05
 
 01 and 02 are independent; 03 needs 01's descriptions; 04 describes the finished command.
 
@@ -33,6 +33,8 @@ tags:
   pseudo-terminal
 - [x] 04 `README.md`'s install section, the script's docstring and help, `CLAUDE.md`'s bootstrap bullet, and the
   `domains/bootstrap/overview.md` note re-verified against the changed modules
+- [x] 05 What-it-is summaries and descriptions: harness, hooks-path and skills summaries, fragment and settings
+  summaries from their READMEs, and harness, hooks-path and skills descriptions that name their contents
 
 ## Relations
 

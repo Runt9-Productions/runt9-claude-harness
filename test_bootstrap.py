@@ -1020,18 +1020,38 @@ def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -
     assert sandbox.claude_calls() == []
 
 
-DESCRIPTIONS = """
+DOCS = """
 import json
 from bootstrap.registry import all_components
-print(json.dumps({component.name: component.description() for component in all_components()}))
+components = all_components()
+summaries = {component.name: component.summary for component in components}
+print(json.dumps([summaries, {component.name: component.description() for component in components}]))
 """
 
 
-def test_descriptions_come_from_the_docs_in_head_and_are_empty_where_a_doc_is_missing(sandbox: Sandbox) -> None:
+def test_summaries_and_descriptions_come_from_the_docs_in_head_and_a_missing_part_empties_a_description(
+    sandbox: Sandbox,
+) -> None:
     sandbox.write(
         "README.md",
         b"# Example\n\n| Component | Example other column |\n|---|---|\n| `harness` | Example other text. |\n"
-        b"\n| Component | Installs |\n|---|---|\n| `harness` | Example text. |\n",
+        b"\n| Part | What it is |\n|---|---|\n| `example-part` | Example part. |\n"
+        b"\n| Component | Installs |\n|---|---|\n| `harness` | Example harness install. |\n"
+        b"| `skills` | Example skills install. |\n| `settings:<name>` | Example settings install. |\n",
+    )
+    sandbox.write("harness/githooks/README.md", b"# Example hooks\n\nExample hooks paragraph.\n")
+    sandbox.write(
+        "harness/skills/README.md",
+        b"# Example skills\n\nExample skills,\nwrapped.\n\n| skill | covers |\n|---|---|\n"
+        b"| `example-alpha` | Example cover. |\n",
+    )
+    sandbox.write(
+        "harness/fragments/README.md",
+        b"| Fragment | What it adds |\n|---|---|\n| `example-rules` | Example rules row. |\n",
+    )
+    sandbox.write(
+        "harness/settings/README.md",
+        b"| Fragment | What it adds |\n|---|---|\n| `example-deny` | Example deny row. |\n",
     )
     sandbox.write(
         "plugins/example-one/README.md",
@@ -1041,25 +1061,34 @@ def test_descriptions_come_from_the_docs_in_head_and_are_empty_where_a_doc_is_mi
     sandbox.write("README.md", b"| `harness` | Example uncommitted text. |\n")
 
     result = subprocess.run(
-        [sys.executable, "-c", DESCRIPTIONS], cwd=sandbox.clone, env=sandbox.env, capture_output=True, text=True
+        [sys.executable, "-c", DOCS], cwd=sandbox.clone, env=sandbox.env, capture_output=True, text=True
     )
 
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {
-        "harness": "Example text.",
+    summaries, descriptions = json.loads(result.stdout)
+    assert summaries["fragment:example-rules"] == "Example rules row."
+    assert summaries["settings:example-deny"] == "Example deny row."
+    assert descriptions == {
+        "harness": "| Part | What it is |\n|---|---|\n| `example-part` | Example part. |"
+        "\n\nInstalls: Example harness install.",
+        # Its README has a first paragraph, but the components table has no row for it.
         "hooks-path": "",
-        "skills": "",
+        "skills": "Example skills, wrapped.\n\n| skill | covers |\n|---|---|\n| `example-alpha` | Example cover. |"
+        "\n\nInstalls: Example skills install.",
         "fragment:example-rules": "example rules\n",
-        "settings:example-deny": "",
+        "settings:example-deny": "Installs: Example settings install.",
         "plugin:example-one": "First example plugin, wrapped over two lines.",
         "plugin:example-two": "",
         "plugin:example-three": "",
     }
 
 
-def test_every_component_of_this_repository_has_a_description() -> None:
+def test_every_component_of_this_repository_has_a_summary_and_a_description() -> None:
     # Empty when a doc row a component reads is renamed or dropped.
-    undescribed = [component.name for component in all_components() if not component.description()]
+    components = all_components()
+    unsummarized = [component.name for component in components if not component.summary]
+    undescribed = [component.name for component in components if not component.description()]
+    assert unsummarized == []
     assert undescribed == []
 
 
@@ -1166,11 +1195,12 @@ def test_menu_scrolls_just_far_enough_to_show_the_cursor() -> None:
     assert state.top == 1
 
 
-def test_description_joins_hard_wrapped_markdown_and_indents_wrapped_list_items() -> None:
+def test_description_joins_hard_wrapped_markdown_and_shows_list_items_and_table_rows_with_a_hanging_indent() -> None:
     # Called directly: the terminal text reads the same however a paragraph is split across rows.
     text = (
         "## Example\n\nA paragraph wrapped\nover two lines.\n\n- An item wrapped\n  over two lines.\n- A second item.\n"
-        "\n| `example-a` | example |\n| `example-b` | example |\n\n### Example heading\nA line under it.\n"
+        "\n| Example | Example |\n|---|:---|\n| `example-a` | An example row that wraps. |\n| `example-b` | b |\n"
+        "\n### Example heading\nA line under it.\n"
     )
 
     lines = unwrapped(text)
@@ -1183,13 +1213,14 @@ def test_description_joins_hard_wrapped_markdown_and_indents_wrapped_list_items(
         "- An item wrapped over two lines.",
         "- A second item.",
         "",
-        "| `example-a` | example |",
-        "| `example-b` | example |",
+        "| `example-a` | An example row that wraps. |",
+        "| `example-b` | b |",
         "",
         "### Example heading",
         "A line under it.",
     ]
     assert wrapped(lines[4], 20) == ["- An item wrapped", "  over two lines."]
+    assert wrapped(lines[7], 30) == ["`example-a`: An example row", "             that wraps."]
 
 
 def test_menu_stops_on_a_terminal_curses_cannot_drive(sandbox: Sandbox) -> None:

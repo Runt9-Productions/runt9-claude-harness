@@ -17,6 +17,18 @@ install the plugins too. Run it in your own shell, not in a Claude Code session,
 writing the install. It needs Python 3.12 and git, and `claude` for plugin components; the hooks need what
 [their README](harness/githooks/README.md) lists.
 
+`harness/` holds these parts, which the `harness` component installs together as one version:
+
+| Part | What it is |
+|---|---|
+| `githooks` | Git hooks that check a commit or push comes from the bot identity, and gate each push on a leak scan. |
+| `leak-scan` | The scan the push gate and CI run, and the `public-leak` review the push gate and `review-text.sh` run. |
+| `fragments` | Always-on `CLAUDE.md` rules, one file each, that the `fragment:` components import. |
+| `settings` | Settings fragments the `settings:` components merge into `~/.claude/settings.json`. |
+| `statusline` | The status line script the `settings:statusline` fragment runs. |
+| `skills` | The skills the `skills` component links into `~/.claude/skills/`. |
+| `claude-md-template.md` | The `~/.claude/CLAUDE.md` a fragment install starts from when there is none. |
+
 ```
 git clone https://github.com/Runt9-Productions/runt9-claude-harness.git
 cd runt9-claude-harness
@@ -31,10 +43,13 @@ Without `--repo`, `hooks-path` is marked `needs --repo` and cannot be ticked.
 
 - Up and Down, or `k` and `j`, move; Space ticks or clears a row; `a` ticks every row that can be ticked, or clears
   them all when all are ticked.
-- Right or `?` shows the row's full description, read from the docs at HEAD: its row below for `harness`,
-  `hooks-path` and `skills`, the fragment's own text, its row in [the settings README](harness/settings/README.md),
-  or the first paragraph of the plugin's README. Up, Down, Page Up and Page Down scroll it, and any other key goes
-  back to the list.
+- Right or `?` shows the row's full description, read from the docs at HEAD. For `harness`, `hooks-path` and
+  `skills` it says what the component is (the table above, the first paragraph of
+  [the hooks README](harness/githooks/README.md), or the first paragraph and table of
+  [the skills README](harness/skills/README.md)), then its row below after `Installs:`. A settings fragment, whose
+  summary is its row in [the settings README](harness/settings/README.md), shows only its row below. A fragment
+  shows its own text, and a plugin the first paragraph of its README. Up, Down, Page Up and Page Down scroll it, and
+  any other key goes back to the list.
 - Enter closes the menu and asks once, `Install <names>? [y/N]`; `q` or Escape closes it without asking. Quitting,
   ticking nothing or answering no installs nothing. Each component picked then asks what it asks when named.
 

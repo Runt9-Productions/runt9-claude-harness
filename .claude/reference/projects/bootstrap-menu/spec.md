@@ -91,6 +91,20 @@ a4e6976.
   - `test_prompt_without_stdin_stops` stays as it is, and `test_prompt_installs_what_was_answered_yes` is replaced by
     the first test above.
 
+## What-it-is text (task 05)
+
+- Summaries (D20, D21): `harness`, `hooks-path` and `skills` get one-line summaries of what they are in
+  `bootstrap/registry.py`; `fragment:<name>` reads its row of the `Fragment | What it adds` table in a new
+  `harness/fragments/README.md` (not shipped, so no version rise, and not a fragment component); `settings:<name>`
+  reads its row of `harness/settings/README.md`. `--list` prints the new summaries.
+- Descriptions: what the component is, then `Installs:` and its row of `README.md`'s components table. `harness`
+  reads a `Part | What it is` table in `README.md`'s "Harness parts" section; `hooks-path` the first paragraph of
+  `harness/githooks/README.md`; `skills` the first paragraph and the skill table of `harness/skills/README.md`;
+  `settings:<name>` only `Installs:` and its row, since its settings README row is now its summary and the view
+  shows the summary above the description. Fragments and plugins keep what they had. The description view shows a
+  Markdown table without its header and separator rows, each body row as its first cell, a colon and the rest.
+- Test: every component of this repository has a non-empty summary and description.
+
 ## Docs (task 04)
 
 - `README.md`: the line "With no component named it asks about each one" becomes the menu and its keys, plus `all`;

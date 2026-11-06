@@ -8,6 +8,7 @@ import textwrap
 from dataclasses import dataclass, field
 
 from bootstrap.core import Component, Run, Stop, answered_yes, lacks_repos
+from bootstrap.docs import is_row, row_cells
 from bootstrap.update import component_states
 
 NO_TERMINAL = "no answer on stdin; name the components on the command line instead"
@@ -120,8 +121,8 @@ def put(screen: curses.window, line: int, text: str, attribute: int = curses.A_N
 def draw_list(screen: curses.window, state: MenuState) -> None:
     """Draws, for example:
 
-    [x] harness                     installed     install harness/ from HEAD as ~/.claude/har
-    [ ] hooks-path                  needs --repo  set core.hooksPath to ~/.claude/harness/cur
+    [x] harness                     installed     the harness itself: git hooks, leak scan, C
+    [ ] hooks-path                  needs --repo  runs the harness's git hooks (bot authorshi
     [ ] plugin:example-one          behind        first example
     1 ticked  Up/Down move  Space tick  a all  Right/? describe  Enter install  q quit
     """
@@ -155,11 +156,20 @@ def continues(previous: str, line: str) -> bool:
     return BLOCK_START.match(line) is None
 
 
+def is_separator(line: str) -> bool:
+    """Whether `line` is the row of dashes under a Markdown table's header."""
+    return is_row(line) and "-" in line and not line.strip().strip("|:- ")
+
+
 def unwrapped(text: str) -> list[str]:
-    """The lines of Markdown `text`, each paragraph and list item joined onto one line."""
+    """The lines of Markdown `text`, each paragraph and list item joined onto one line, and each table without its
+    header and separator rows."""
     lines: list[str] = []
     for line in text.splitlines():
-        if lines and continues(lines[-1], line):
+        if is_separator(line):
+            if lines and is_row(lines[-1]):
+                lines.pop()
+        elif lines and continues(lines[-1], line):
             lines[-1] = f"{lines[-1]} {line.strip()}"
         else:
             lines.append(line)
@@ -167,9 +177,14 @@ def unwrapped(text: str) -> list[str]:
 
 
 def wrapped(line: str, width: int) -> list[str]:
-    """`line` wrapped to `width`, its continuation lines indented under its text, past any Markdown list marker."""
+    """`line` wrapped to `width`, its continuation lines indented under its text. A Markdown list item wraps past its
+    marker; a table row shows as its first cell, a colon and the rest, and wraps past the colon."""
     if not line.strip():
         return [""]
+    if is_row(line):
+        first_cell, rest = row_cells(line)
+        term = f"{first_cell}: "
+        return textwrap.wrap(f"{term}{rest}", width, subsequent_indent=" " * len(term))
     item = LIST_ITEM.match(line)
     indent = item.end() if item else len(line) - len(line.lstrip())
     return textwrap.wrap(line, width, subsequent_indent=" " * indent)
