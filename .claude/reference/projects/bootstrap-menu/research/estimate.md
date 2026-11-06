@@ -40,6 +40,15 @@ new install path, and reuses `--update`'s survey for the marks.
 - Whether curses' alternate screen restores the terminal so the per-write diff prompts after the menu read normally
   on macOS's Terminal; on Linux xterm-compatible terminals it does.
 
+## Actual
+
+Built in #121, measured against `main`: production 9 files, +360/−18 (`bootstrap/menu.py` 208, `bootstrap/docs.py`
+57); tests 1 file, +349/−18; docs outside this project 5 files, +74/−37, the knowledge base's bootstrap and
+guardrails notes included. Production ran about 10% over the top of the range and tests about 40% over: the
+estimate missed the menu's Markdown joining before wrapping, a test without curses, and the test review's added
+cases, some of them for `--update` rules this change did not touch. `claude plugin install` exits 0 for a plugin
+already installed at that scope, so `all` needed no skip. The macOS Terminal point stays unverified.
+
 ## Relations
 
 - part_of [[Bootstrap Menu]]
