@@ -59,6 +59,11 @@
       "name": "session-context",
       "source": "./plugins/session-context",
       "description": "Puts the local time and the plan's usage beside a prompt, at most once every 15 minutes, warns once when a usage window passes 90%, and gives Claude a tool for the current usage"
+    },
+    {
+      "name": "chrome-devtools",
+      "source": "./plugins/chrome-devtools",
+      "description": "Starts the chrome-devtools-mcp browser server at a pinned version, headless, with a throwaway profile, no local files, redacted request headers and no data sent to outside services"
     }
   ]
 }
