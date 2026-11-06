@@ -45,7 +45,10 @@ sources:
 > `confirmed_settings` in `bootstrap/update.py` were read again, unchanged, with every citation into them corrected,
 > and the two `#measured` settings lines were re-measured by calling `merge_settings`, `holds_an_entry` and
 > `updated_settings` on synthetic fragments; the settings fragments were unchanged, and every other claim was carried
-> forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
+> forward without a re-check. Later in #121, after component summaries and descriptions moved to the docs (in
+> `bootstrap/settings.py` only its imports and `settings_components` changed; `bootstrap/update.py` did not change),
+> that diff was read and every citation into both files checked against its line, all unchanged; the `#measured`
+> lines were not re-run, and every other claim was carried forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
 > (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build run end to end in
 > the sandbox.
 

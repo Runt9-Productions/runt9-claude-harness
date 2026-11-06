@@ -38,8 +38,8 @@ what `all` names.
   because its sources include `bootstrap/settings.py` and `bootstrap/update.py` (owner, 2026-11-05): CI's
   `--stale-in` check fails the branch otherwise.
 - [decision] D19: `CLAUDE.md` gets no clause saying a new component needs a doc row for its description (owner,
-  2026-11-05): `test_every_component_of_this_repository_has_a_description` fails, naming the component, when one is
-  missing.
+  2026-11-05): `test_every_component_of_this_repository_has_a_summary_and_a_description` fails, naming the
+  component, when one is missing.
 - [decision] D20: every component's summary and description say what it is, fixed in #121 (owner, 2026-11-06,
   after trying the menu): the old summaries said what bootstrap writes, and the harness and skills descriptions never
   named their contents.
