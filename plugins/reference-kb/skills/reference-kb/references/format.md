@@ -284,3 +284,9 @@ python3 <skill>/scripts/validate.py --root .claude/reference [--warnings] [--sta
   after the change's date. `verified` need not move: a same-day edit that keeps the date counts. A source change after
   the note's last edit therefore fails even when its date matches `verified`. Moving a note counts as editing it.
   UNKNOWN fails here. Staleness from before the range never fails.
+- **A `Reverified: <note path>` trailer** on a commit in the range counts as that edit for every source change it
+  comes at or after, so a change that breaks no claim passes without padding the note. The path is the note's from
+  the repository's top, as the validator prints it; name each note in a trailer of its own. Git's own trailer rules
+  apply: the trailer sits in the message's last paragraph, and a merge commit's trailers are left out like its
+  changes. The trailer satisfies the gate only: `--stale` keeps warning until `verified` moves, since a squash merge
+  drops a branch's commit messages and the trailer with them.

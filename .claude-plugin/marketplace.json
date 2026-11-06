@@ -54,6 +54,11 @@
       "name": "no-progress-reminder",
       "source": "./plugins/no-progress-reminder",
       "description": "Leaves Claude Code's mid-turn \"say what you're doing, then continue\" reminder out of every request"
+    },
+    {
+      "name": "clock",
+      "source": "./plugins/clock",
+      "description": "Puts the local date and time beside a prompt, at most once every 15 minutes, with how long ago the user last wrote"
     }
   ]
 }

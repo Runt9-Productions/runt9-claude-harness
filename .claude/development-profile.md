@@ -55,7 +55,7 @@ a knowledge base note already answers a question, this file points there.
 - Notes are public: generic facts only, as `.claude/reference/README.md`, "Local conventions", sets out.
 - Validator: `python plugins/reference-kb/skills/reference-kb/scripts/validate.py --root .claude/reference`, and the
   same with `--stale-in origin/main..HEAD`. CI runs both; the second fails a note whose `sources` the branch changed
-  without moving its `verified` date.
+  unless a later commit edits the note with a current `verified` date or carries a `Reverified: <note path>` trailer.
 
 ## 5. Agents
 
