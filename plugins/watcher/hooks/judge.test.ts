@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import type { SessionAppendInput } from 'claude-code'
+import type { SessionAppendInput, ToolCallResult } from 'claude-code'
 
 import { HELPER, JUDGE_PROMPT, ROOT, SCOUT, bashResult, carried, checkFile, endTurn, engine, prompt, recordOf, reply } from './test-support'
 
@@ -42,12 +42,13 @@ test('where a surface draws the judgment waits for the hook to return, and a run
   expect(world.calls).toHaveLength(2)
 })
 
-test("an unstamped prompt is the person's only as the main session's own prompt in a run with no surface", async ($, on) => {
+test("an unstamped prompt is the person's only as the main session's own prompt in a run with no surface, and the goal is asked only of the person's", async ($, on) => {
   const world = engine(on, { alpha: checkFile('turn-end', 'prompts') }, [SCOUT])
   world.settings = '{ "judgeHeadless": true }'
   await prompt($, 'TERMINAL-ASK', undefined, 'unclassified')
   await endTurn($, world)
   expect(recordOf(world.calls[0])).toContain('[prompt from another agent]\nTERMINAL-ASK')
+  expect(world.calls[0]?.prompt).not.toContain('## Goal')
 
   world.surfaces = []
   const unstamped = (text: string): SessionAppendInput['message'] => ({ type: 'user', role: 'user', content: [{ type: 'text', text }] })
@@ -57,6 +58,7 @@ test("an unstamped prompt is the person's only as the main session's own prompt 
   await endTurn($, world)
   const record = recordOf(world.calls[1])
   expect(record).toContain('[prompt from person]\nOPERATOR-ASK')
+  expect(world.calls[1]?.prompt).toContain('## Goal')
   for (const other of ['META-NOTICE', 'MID-TURN-DELIVERY']) expect(record).toContain(`[prompt from another agent]\n${other}`)
 
   await prompt($, 'SCOUT-BRIEF', SCOUT.id, 'unclassified')
@@ -65,19 +67,34 @@ test("an unstamped prompt is the person's only as the main session's own prompt 
 })
 
 test("the record holds only what the batch's checks read, each item cut short, with a refused call's kind", async ($, on) => {
-  const world = engine(on, { kilo: checkFile('turn-end', 'prompts'), lima: checkFile('turn-end', 'exits') })
+  const world = engine(on, { kilo: checkFile('turn-end', 'prompts'), lima: checkFile('turn-end', 'calls'), mike: checkFile('turn-end', 'exits', 'all', 'sonnet') })
   world.verdicts.Write = { decision: 'deny', reason: 'synthetic deny', rule: 'Write(/etc/**)' }
   on('tool.call', { tool: 'Bash' }, bashResult({ isError: true, result: 'Exit code 1', text: 'Exit code 1\nRESULT-TEXT' }))
   await prompt($, `PROMPT-START ${'x'.repeat(50_000)} PROMPT-END`)
-  await $.tool.call({ tool: 'Bash', command: 'INPUT-TEXT' })
+  await $.tool.call({ tool: 'Bash', command: `INPUT-START ${'i'.repeat(50_000)} INPUT-END` })
   await $.tool.call({ tool: 'Write', file_path: '/etc/synthetic', content: 'y' })
   await reply($, 'REPLY-TEXT')
   await endTurn($, world)
+  expect(world.calls.map(carried)).toEqual([['kilo', 'lima'], ['mike']])
+  const [read, exits] = world.calls.map(recordOf)
+  // Calls read without their outcomes still show how one was refused.
+  for (const shown of ['PROMPT-START', 'PROMPT-END', '[call Bash] {"command":"INPUT-START', 'INPUT-END', '[call Write, refused by a permission rule]']) expect(read).toContain(shown)
+  for (const hidden of ['exit 1', 'RESULT-TEXT', 'REPLY-TEXT']) expect(read).not.toContain(hidden)
+  expect(read?.length).toBeLessThan(4000)
+  for (const shown of ['[call Bash, exit 1]', '[call Write, refused by a permission rule]']) expect(exits).toContain(shown)
+  for (const hidden of ['INPUT-START', 'PROMPT-START', 'RESULT-TEXT']) expect(exits).not.toContain(hidden)
+})
+
+test('an agent keeps at most 150 items between judgments, dropping its oldest call before any prompt', async ($, on) => {
+  const world = engine(on, { kilo: checkFile('turn-end', 'prompts, calls') })
+  on('tool.call', { tool: 'Bash' }, bashResult({ result: { stdout: '', stderr: '', interrupted: false }, text: 'ok' }))
+  await prompt($, 'FIRST-ASK')
+  await $.tool.call({ tool: 'Bash', command: 'OLDEST-CALL' })
+  for (let index = 1; index <= 149; index += 1) await prompt($, `ASK_${index}`)
+  await endTurn($, world)
   const record = recordOf(world.calls[0])
-  expect(world.calls).toHaveLength(1)
-  for (const shown of ['PROMPT-START', 'PROMPT-END', '[call Bash, exit 1]', '[call Write, refused by a permission rule]']) expect(record).toContain(shown)
-  for (const hidden of ['RESULT-TEXT', 'INPUT-TEXT', 'REPLY-TEXT']) expect(record).not.toContain(hidden)
-  expect(record.length).toBeLessThan(10_000)
+  for (const kept of ['FIRST-ASK', 'ASK_149']) expect(record).toContain(kept)
+  expect(record).not.toContain('OLDEST-CALL')
 })
 
 test('a record past its cap drops the oldest items, other calls before prompts, and says so', async ($, on) => {
@@ -94,7 +111,7 @@ test('a record past its cap drops the oldest items, other calls before prompts, 
   for (const dropped of ['OLDEST-CALL', 'LATEST-CALL', 'ASK_01']) expect(record).not.toContain(dropped)
 })
 
-test('the sections from outside the capture count toward the record cap, and the latest prompt is kept', async ($, on) => {
+test('the sections from outside the capture count toward the record cap, and the latest prompt is kept even past it', async ($, on) => {
   const world = engine(on, { kilo: checkFile('turn-end', 'prompts, plan') })
   world.settings = '{ "maxRecordChars": 4000 }'
   const checklist = `${ROOT}/docs/checklist.md`
@@ -106,6 +123,12 @@ test('the sections from outside the capture count toward the record cap, and the
   const record = recordOf(world.calls[0])
   expect(record.length).toBeLessThanOrEqual(4000 + '## Record\n\n'.length)
   for (const kept of ['CHECKLIST-START', 'ASK_10']) expect(record).toContain(kept)
+
+  // A latest prompt larger than the room the sections leave is kept all the same.
+  world.settings = '{ "maxRecordChars": 1000 }'
+  await prompt($, `LONE-ASK ${'x'.repeat(3000)}`)
+  await endTurn($, world)
+  expect(recordOf(world.calls[1])).toContain('LONE-ASK')
 })
 
 test('each trigger judges from where it last did, never twice over nothing, and with the checks in force then', async ($, on) => {
@@ -131,6 +154,23 @@ test('each trigger judges from where it last did, never twice over nothing, and 
   expect(recordOf(world.calls[2])).not.toContain('FIRST-ASK')
 })
 
+test('a push that happened judges the commit checks, and a git command that failed does not', async ($, on) => {
+  const world = engine(on, { november: checkFile('commit', 'calls') })
+  const done = { stdout: '', stderr: '', interrupted: false }
+  const results: Record<string, ToolCallResult> = {
+    'git commit -m synthetic': { isError: true, result: 'Exit code 1', text: 'Exit code 1\nnothing to commit' },
+    'git push': { result: { ...done, gitOperation: { push: { branch: 'synthetic-branch' } } }, text: 'pushed' },
+  }
+  on('tool.call', { tool: 'Bash' }, (_, e) => results[e.command] ?? { result: done, text: '' })
+  await $.tool.call({ tool: 'Bash', command: 'git commit -m synthetic' })
+  await world.clock.advance(10)
+  expect(world.calls).toEqual([])
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  await world.clock.advance(10)
+  expect(world.calls.map(carried)).toEqual([['november']])
+  expect(recordOf(world.calls[0])).toContain('git push')
+})
+
 test('a raised verdict is logged with its summary, and an answer that cannot be read is logged once and dropped', async ($, on) => {
   const world = engine(on, { papa: checkFile('turn-end', 'prompts'), quebec: checkFile('turn-end', 'prompts') })
   const entries = [
@@ -151,7 +191,7 @@ test('a raised verdict is logged with its summary, and an answer that cannot be 
   expect(world.logs.filter(line => line.includes('NOT-JSON'))).toHaveLength(1)
 })
 
-test('a teammate is judged on its own record with the roster, and a subagent that is not one is never judged', async ($, on) => {
+test('a teammate is judged on its own record with the roster, and when idle also by its name alone, and a subagent that is not one is never judged', async ($, on) => {
   const world = engine(
     on,
     {
@@ -175,7 +215,8 @@ test('a teammate is judged on its own record with the roster, and a subagent tha
   expect(record).not.toContain('MAIN-ASK')
 
   await prompt($, 'SCOUT-FOLLOW-UP', SCOUT.id, 'unclassified')
-  await $.classic.TeammateIdle({ teammate_name: 'scout', team_name: 'crew', agent_id: SCOUT.id })
+  // The hook input's agent_id is optional, so the teammate is found by its name.
+  await $.classic.TeammateIdle({ teammate_name: 'scout', team_name: 'crew' })
   await world.clock.advance(10)
   expect(world.calls.map(carried)).toEqual([['romeo'], ['tango']])
 

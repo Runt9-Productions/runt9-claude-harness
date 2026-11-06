@@ -43,29 +43,29 @@ function engine(on: On, files: Record<string, string>): World {
     world.checks = e.value
     return next(e)
   })
-  on('session.root', () => ({ value: ROOT }) as never)
-  on('env.get', (_, e) => ({ value: (e as { name: string }).name === 'HOME' ? HOME : undefined }) as never)
+  on('session.root', () => ({ value: ROOT }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : undefined }))
   on('fs.exists', (_, e) => {
-    const directory = `${keyed((e as { path: string }).path)}/`
-    return { value: paths.some(path => path.startsWith(directory)) } as never
+    const directory = `${keyed(e.path)}/`
+    return { value: paths.some(path => path.startsWith(directory)) }
   })
   on('fs.list', (_, e) => {
-    const directory = `${keyed((e as { path: string }).path)}/`
+    const directory = `${keyed(e.path)}/`
     const entries: FsEntry[] = paths
       .filter(path => path.startsWith(directory))
       .map(path => ({ name: path.slice(directory.length), kind: 'file', size: 1, mtimeMs: 1, isLink: false }))
     if (entries.length === 0) throw new Error(`ENOENT: ${directory}`)
-    return { value: entries } as never
+    return { value: entries }
   })
   on('fs.read', (_, e) => {
-    const path = keyed((e as { path: string }).path)
+    const path = keyed(e.path)
     const text = files[path]
     if (text === undefined) throw new Error(`ENOENT: ${path}`)
-    return { value: text } as never
+    return { value: text }
   })
   on('ui.toast', (_, e) => {
-    world.toasts.push((e as { text: string }).text)
-    return { value: undefined } as never
+    world.toasts.push(e.text)
+    return { value: undefined }
   })
   return world
 }

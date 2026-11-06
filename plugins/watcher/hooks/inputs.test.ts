@@ -7,7 +7,7 @@ const REFERENCE = `${ROOT}/.claude/reference`
 /** A note whose frontmatter lists `sources` as given, a body of `body`. */
 const note = (sources: string, body: string) => `---\ntitle: Synthetic\nsources:${sources}\nverified: 2026-01-01\n---\n${body}\n`
 
-test("a turn that edited a note's source shows that note, and a check reading notes is left out of a turn that edited none", async ($, on) => {
+test("a turn that edited a note's source shows up to 4 such notes, and a check reading notes is left out of a turn that edited none", async ($, on) => {
   const world = engine(on, { lima: checkFile('turn-end', 'calls, notes'), mike: checkFile('turn-end', 'prompts') })
   world.files = {
     [`${REFERENCE}/domains/parser.md`]: note('\n  - src/lexer.ts\n  - src/parser.ts', 'NOTE-INDENTED'),
@@ -15,6 +15,8 @@ test("a turn that edited a note's source shows that note, and a check reading no
     [`${REFERENCE}/inline.md`]: note(' [src/parser.ts]', 'NOTE-INLINE'),
     [`${REFERENCE}/domains/other.md`]: note('\n  - src/other.ts', 'NOTE-OTHER'),
     [`${ROOT}/docs/outside.md`]: note('\n  - src/parser.ts', 'NOTE-OUTSIDE'),
+    [`${REFERENCE}/archive/one.md`]: note('\n  - src/parser.ts', 'NOTE-ARCHIVE-ONE'),
+    [`${REFERENCE}/archive/two.md`]: note('\n  - src/parser.ts', 'NOTE-ARCHIVE-TWO'),
   }
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'edited', text: 'The file was edited.' }))
   await prompt($, 'FIRST-ASK')
@@ -24,6 +26,7 @@ test("a turn that edited a note's source shows that note, and a check reading no
   const record = recordOf(world.calls[0])
   for (const shown of ['NOTE-INDENTED', 'NOTE-FLAT', 'NOTE-INLINE']) expect(record).toContain(shown)
   for (const hidden of ['NOTE-OTHER', 'NOTE-OUTSIDE']) expect(record).not.toContain(hidden)
+  expect(record.match(/^\[note /gm)).toHaveLength(4)
 
   await prompt($, 'SECOND-ASK')
   await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/src/unlisted.ts`, old_string: 'a', new_string: 'b' })
@@ -31,10 +34,11 @@ test("a turn that edited a note's source shows that note, and a check reading no
   expect(world.calls.map(carried)).toEqual([['lima', 'mike'], ['mike']])
 })
 
-test('the plan is each checklist, spec or handoff the agent has read, as it stands now, and a check reading the plan waits for one', async ($, on) => {
+test('the plan is the latest 3 checklists, specs or handoffs the agent has read, as they stand now, and a check reading the plan waits for one', async ($, on) => {
   const world = engine(on, { november: checkFile('turn-end', 'calls, plan'), oscar: checkFile('turn-end', 'prompts') })
   const spec = `${ROOT}/docs/spec.md`
-  world.files = { [spec]: 'SPEC-AS-READ', [`${ROOT}/docs/notes.md`]: 'NOT-A-PLAN' }
+  const later = [`${ROOT}/docs/checklist.md`, `${ROOT}/docs/handoff.md`, `${ROOT}/next/spec.md`]
+  world.files = { [spec]: 'SPEC-AS-READ', [`${ROOT}/docs/notes.md`]: 'NOT-A-PLAN', ...Object.fromEntries(later.map((path, index) => [path, `LATER_PLAN_${index}`])) }
   on('tool.call', { tool: 'Read' }, () => ({ result: 'read', text: 'The file was read.' }))
   await prompt($, 'FIRST-ASK')
   await $.tool.call({ tool: 'Read', file_path: `${ROOT}/docs/notes.md` })
@@ -51,6 +55,12 @@ test('the plan is each checklist, spec or handoff the agent has read, as it stan
   expect(world.calls.map(carried)).toEqual([['oscar'], ['november', 'oscar'], ['november', 'oscar']])
   expect(recordOf(world.calls[2])).toContain('SPEC-AS-CHANGED')
   expect(recordOf(world.calls[2])).not.toContain('NOT-A-PLAN')
+
+  await prompt($, 'FOURTH-ASK')
+  for (const path of later) await $.tool.call({ tool: 'Read', file_path: path })
+  await endTurn($, world)
+  for (const shown of ['LATER_PLAN_0', 'LATER_PLAN_1', 'LATER_PLAN_2']) expect(recordOf(world.calls[3])).toContain(shown)
+  expect(recordOf(world.calls[3])).not.toContain('SPEC-AS-CHANGED')
 })
 
 test('a result matching a secret pattern is judged at once on that call alone, the secret redacted wherever the judge reads it', async ($, on) => {
@@ -58,8 +68,11 @@ test('a result matching a secret pattern is judged at once on that call alone, t
   // Built here so no secret scan of this file sees a whole token; both are fake.
   const githubToken = `ghp_${'Zq7'.repeat(12)}`
   const awsKey = `AKIA${'Q'.repeat(16)}`
+  const inputKey = `AKIA${'W'.repeat(16)}`
   const results: Record<string, string> = {
     ls: 'HARMLESS-OUTPUT',
+    // A secret in a call's input is redacted too, and judges nothing at once.
+    [`aws configure set key ${inputKey}`]: 'configured',
     'cat deploy.env': `key ${githubToken} from the vault ${'y'.repeat(2000)}`,
     'cat cloud.env': `${'x'.repeat(1000)} id ${awsKey} in the middle ${'y'.repeat(1000)}`,
   }
@@ -76,6 +89,6 @@ test('a result matching a secret pattern is judged at once on that call alone, t
 
   await endTurn($, world)
   const turn = recordOf(world.calls[2])
-  expect(turn).toContain('[redacted GitHub token')
-  expect(turn).not.toContain(githubToken)
+  for (const shown of ['[redacted GitHub token', 'aws configure set key [redacted AWS access key']) expect(turn).toContain(shown)
+  for (const hidden of [githubToken, inputKey]) expect(turn).not.toContain(hidden)
 })

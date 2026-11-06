@@ -235,7 +235,8 @@ export const bashResult = (result: ToolCallResult) => () => result
 /**
  * A stand-in for board, as its README describes it to a plugin keeping its answers: `ask_decision` from a plugin
  * records the decision with that plugin's name, and the `answer` command, with args `<id>|<option>|<note>`, writes the
- * owner's answer into `decisions`. An inline plugin's hooks close over nothing of this file, so each spells its values.
+ * owner's answer into `decisions`; an empty option is Dismiss, which board records with no `chosenOption`. An inline
+ * plugin's hooks close over nothing of this file, so each spells its values.
  */
 export const BOARD: Plugin = {
   name: 'board',
@@ -250,10 +251,12 @@ export const BOARD: Plugin = {
       return { result: `Posted ${id}. Its answer is kept in the board's decisions for ${plugin ?? 'nobody'}; no loop is told it.` }
     })
     on('command.run', { command: 'answer' }, async ($, e) => {
-      const [id, option, note] = e.args.split('|')
+      const [id, option = '', note] = e.args.split('|')
       const { value = [] } = await $.state.get({ plugin: 'board', key: 'decisions' } as const)
-      const answer = note === undefined ? `${option}` : `${option}. Note: ${note}`
-      const answered = value.map(d => (d.id === id ? { ...d, answer, chosenOption: option, note, delivery: 'seen' as const } : d))
+      const chosenOption = option === '' ? undefined : option
+      const label = chosenOption ?? 'Dismissed without choosing an option'
+      const answer = note === undefined ? label : `${label}. Note: ${note}`
+      const answered = value.map(d => (d.id === id ? { ...d, answer, chosenOption, note, delivery: 'seen' as const } : d))
       await $.state.set({ plugin: 'board', key: 'decisions' } as const, answered)
       return { text: 'answered' }
     })
