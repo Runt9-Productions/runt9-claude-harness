@@ -1,19 +1,31 @@
 """Runs bootstrap.py as a user does: from outside a synthetic clone, with HOME in a temporary directory and a stub
 claude on PATH that records each call, answers `plugin list --json` from a canned file, and moves a version there on
-`plugin update` only when told to. Every git call runs
-without the machine's global and system config. `updated_settings` is also called directly, since its cases are many
-and need no run. Needs git and pytest.
+`plugin update` only when told to. Every git call runs without the machine's global and system config.
+`updated_settings` is also called directly, since its cases are many and need no run, and so are the menu's scroll
+and its Markdown unwrapping, which the terminal text cannot show. The menu runs on a pseudo-terminal as TERM=xterm.
+Needs git, pytest and the xterm terminfo entry.
 """
 
+import errno
+import fcntl
 import json
 import os
+import pty
+import re
+import select
 import shutil
+import struct
 import subprocess
 import sys
+import termios
+import time
 from pathlib import Path
 
 import pytest
 
+from bootstrap.core import Component
+from bootstrap.menu import MenuState, Row, unwrapped, wrapped
+from bootstrap.registry import all_components
 from bootstrap.settings import updated_settings
 
 SCRIPT = Path(__file__).resolve().parent / "bootstrap.py"
@@ -38,6 +50,12 @@ SETTINGS_FRAGMENT = {
     "permissions": {"deny": ["Read(./example-secret)", "Read(./example-key)"], "defaultMode": "example-mode"},
     "model": "example-fragment-model",
 }
+TERMINAL_TIMEOUT = 15
+# An escape sequence (CSI, OSC, a character set choice or a two-byte one) or any other control character.
+TERMINAL_CODE = re.compile(r"\x1b(\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07|[()][0-9A-Za-z]|.)|[\x00-\x1f]")
+# What xterm sends for Down and Right once curses has switched its cursor keys to application mode.
+DOWN = b"\x1bOB"
+RIGHT = b"\x1bOC"
 STUB = """#!{python}
 import json, os, sys
 with open({log!r}, "a") as log:
@@ -117,6 +135,21 @@ class Sandbox:
             text=True,
         )
 
+    def run_in_terminal(self, *args: str, rows: int = 24, env: dict[str, str] | None = None) -> "Terminal":
+        """Starts bootstrap.py with a pseudo-terminal of `rows` by 80 as its stdin, stdout and stderr."""
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, 80, 0, 0))
+        process = subprocess.Popen(
+            [sys.executable, str(self.clone / "bootstrap.py"), *args],
+            cwd=self.root,
+            env={**self.env, "TERM": "xterm", **(env or {})},
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+        )
+        os.close(slave)
+        return Terminal(process, master)
+
     def list_plugins(self, versions: dict[str, str]) -> None:
         """Sets what the stub's `plugin list --json` prints: each plugin in `versions` from the example marketplace,
         and one from another marketplace."""
@@ -147,6 +180,62 @@ class Sandbox:
         # git config --get exits 1 for an unset key; any other failure must not read as unset.
         assert result.returncode in (0, 1), result.stderr
         return result.stdout.strip() or None
+
+
+class Terminal:
+    """A run on a pseudo-terminal. What it prints is read as text with each escape sequence and control character
+    taken as a space and each run of spaces as one, so a row curses paints whole reads as it shows, while one it
+    repaints in part may not."""
+
+    def __init__(self, process: subprocess.Popen, master: int) -> None:
+        self.process = process
+        self.master = master
+        self.printed = b""
+        self.since_keys = 0
+
+    def __enter__(self) -> "Terminal":
+        return self
+
+    def __exit__(self, *exception: object) -> None:
+        if self.process.poll() is None:
+            self.process.kill()
+            self.process.wait()
+        os.close(self.master)
+
+    def text(self, start: int = 0) -> str:
+        spaced = TERMINAL_CODE.sub(" ", self.printed[start:].decode(errors="replace"))
+        return " ".join(spaced.split())
+
+    def read(self, deadline: float) -> bool:
+        """Adds what the run prints next to `printed`; False once the time is up or the run has closed its end."""
+        ready, _, _ = select.select([self.master], [], [], max(deadline - time.monotonic(), 0))
+        if not ready:
+            return False
+        try:
+            chunk = os.read(self.master, 65536)
+        except OSError as error:
+            # Linux reads the master of a terminal no process holds open any more as EIO.
+            if error.errno != errno.EIO:
+                raise
+            return False
+        self.printed += chunk
+        return bool(chunk)
+
+    def expect(self, text: str) -> None:
+        """Waits for `text` in what the run printed since the last keys were sent."""
+        deadline = time.monotonic() + TERMINAL_TIMEOUT
+        while text not in self.text(self.since_keys):
+            assert self.read(deadline), f"{text!r} never showed; the run printed {self.text()!r}"
+
+    def send(self, keys: bytes) -> None:
+        self.since_keys = len(self.printed)
+        os.write(self.master, keys)
+
+    def wait(self) -> int:
+        deadline = time.monotonic() + TERMINAL_TIMEOUT
+        while self.read(deadline):
+            pass
+        return self.process.wait(timeout=max(deadline - time.monotonic(), 0))
 
 
 @pytest.fixture
@@ -300,6 +389,22 @@ def test_runs_with_the_script_directory_off_sys_path(sandbox: Sandbox) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_python_without_curses_installs_named_components_and_stops_at_the_menu(sandbox: Sandbox) -> None:
+    # None in sys.modules makes `import curses` raise as it does on a Python built without it.
+    without_curses = (
+        "import runpy, sys; sys.modules['_curses'] = None; sys.argv = sys.argv[1:];"
+        " runpy.run_path(sys.argv[0], run_name='__main__')"
+    )
+
+    named = sandbox.run("harness", flags=("-c", without_curses))
+    menu = sandbox.run(flags=("-c", without_curses))
+
+    assert named.returncode == 0, named.stderr
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+    assert menu.returncode == 1
+    assert "the menu needs Python's curses module" in menu.stderr
+
+
 @pytest.mark.parametrize("variable", ["CLAUDE_CODE_SESSION_ID", "CLAUDECODE"])
 def test_session_refuses(sandbox: Sandbox, variable: str) -> None:
     result = sandbox.run("harness", "plugin:example-one", env={variable: "1"})
@@ -314,7 +419,8 @@ def test_list_works_in_a_session(sandbox: Sandbox) -> None:
     result = sandbox.run("--list", env={"CLAUDE_CODE_SESSION_ID": "1", "CLAUDECODE": "1"})
 
     assert result.returncode == 0, result.stderr
-    names = [line.split()[0] for line in result.stdout.splitlines()]
+    lines = result.stdout.splitlines()
+    names = [line.split()[0] for line in lines]
     assert names == [
         "harness",
         "hooks-path",
@@ -324,7 +430,10 @@ def test_list_works_in_a_session(sandbox: Sandbox) -> None:
         "plugin:example-one",
         "plugin:example-two",
         "plugin:example-three",
+        "all",
     ]
+    widest = len("fragment:example-rules")
+    assert lines[-1] == f"{'all':<{widest}}  every component above, in this order; hooks-path only with --repo"
 
 
 def test_head_off_origin_main_warns_and_installs_head(sandbox: Sandbox) -> None:
@@ -737,8 +846,9 @@ def test_settings_update_removes_what_it_empties_and_keeps_what_the_user_had_emp
         (["harness", "example-unknown"], "unknown component example-unknown"),
         (["harness", "--repo", "{repo}"], "--repo is used only by hooks-path"),
         (["harness", "hooks-path"], "hooks-path needs --repo"),
+        (["all", "harness"], "all names every component; name no others with it"),
     ],
-    ids=["unknown-component", "repo-without-hooks-path", "hooks-path-without-repo"],
+    ids=["unknown-component", "repo-without-hooks-path", "hooks-path-without-repo", "all-beside-a-name"],
 )
 def test_usage_error_installs_nothing(sandbox: Sandbox, args: list[str], reason: str) -> None:
     repo = sandbox.new_repo("example-repo")
@@ -748,6 +858,34 @@ def test_usage_error_installs_nothing(sandbox: Sandbox, args: list[str], reason:
     assert result.returncode == 1
     assert reason in result.stderr
     assert not sandbox.install.exists()
+
+
+def test_all_without_repo_installs_every_other_component_in_order(sandbox: Sandbox) -> None:
+    # The fragment's import and the settings merge each ask before writing.
+    result = sandbox.run("all", stdin="y\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "Not offering hooks-path: run python3 bootstrap.py hooks-path --repo <path>\n" in result.stdout
+    assert (
+        "Installed harness, skills, fragment:example-rules, settings:example-deny, "
+        "plugin:example-one, plugin:example-two, plugin:example-three.\n"
+    ) in result.stdout
+    assert sandbox.claude_calls() == [
+        MARKETPLACE_ADD,
+        ["plugin", "install", "example-one@example-market"],
+        ["plugin", "install", "example-two@example-market"],
+        ["plugin", "install", "example-three@example-market"],
+    ]
+
+
+def test_all_with_repo_sets_hooks_path(sandbox: Sandbox) -> None:
+    repo = sandbox.new_repo("example-repo")
+
+    result = sandbox.run("all", "--repo", str(repo), stdin="y\ny\n")
+
+    assert result.returncode == 0, result.stderr
+    assert "Not offering" not in result.stdout
+    assert sandbox.hooks_path(repo) == str(sandbox.current / "githooks")
 
 
 def test_plugins_run_the_marketplace_commands_in_order(sandbox: Sandbox) -> None:
@@ -882,15 +1020,216 @@ def test_settings_not_an_object_stops_before_any_claude_call(sandbox: Sandbox) -
     assert sandbox.claude_calls() == []
 
 
-def test_prompt_installs_what_was_answered_yes(sandbox: Sandbox) -> None:
-    # harness, skills, the fragment, the settings, then the three plugins; hooks-path is not offered without --repo.
-    result = sandbox.run(stdin="y\nn\nn\nn\nn\ny\nn\n")
+DOCS = """
+import json
+from bootstrap.registry import all_components
+components = all_components()
+summaries = {component.name: component.summary for component in components}
+print(json.dumps([summaries, {component.name: component.description() for component in components}]))
+"""
+
+
+def test_summaries_and_descriptions_come_from_the_docs_in_head_and_a_missing_part_empties_a_description(
+    sandbox: Sandbox,
+) -> None:
+    sandbox.write(
+        "README.md",
+        b"# Example\n\n| Component | Example other column |\n|---|---|\n| `harness` | Example other text. |\n"
+        b"\n| Part | What it is |\n|---|---|\n| `example-part` | Example part. |\n"
+        b"\n| Component | Installs |\n|---|---|\n| `harness` | Example harness install. |\n"
+        b"| `skills` | Example skills install. |\n| `settings:<name>` | Example settings install. |\n",
+    )
+    sandbox.write("harness/githooks/README.md", b"# Example hooks\n\nExample hooks paragraph.\n")
+    sandbox.write(
+        "harness/skills/README.md",
+        b"# Example skills\n\nExample skills,\nwrapped.\n\n| skill | covers |\n|---|---|\n"
+        b"| `example-alpha` | Example cover. |\n",
+    )
+    sandbox.write(
+        "harness/fragments/README.md",
+        b"| Fragment | What it adds |\n|---|---|\n| `example-rules` | Example rules row. |\n",
+    )
+    sandbox.write(
+        "harness/settings/README.md",
+        b"| Fragment | What it adds |\n|---|---|\n| `example-deny` | Example deny row. |\n",
+    )
+    sandbox.write(
+        "plugins/example-one/README.md",
+        b"# example-one\n\nFirst example plugin,\nwrapped over two lines.\n\nA second paragraph.\n",
+    )
+    sandbox.commit("Example docs")
+    sandbox.write("README.md", b"| `harness` | Example uncommitted text. |\n")
+
+    result = subprocess.run(
+        [sys.executable, "-c", DOCS], cwd=sandbox.clone, env=sandbox.env, capture_output=True, text=True
+    )
 
     assert result.returncode == 0, result.stderr
-    assert "Install hooks-path" not in result.stdout
-    assert (sandbox.current / "githooks/pre-push").exists()
-    assert not sandbox.skills.exists()
-    assert sandbox.claude_calls() == [MARKETPLACE_ADD, ["plugin", "install", "example-two@example-market"]]
+    summaries, descriptions = json.loads(result.stdout)
+    assert summaries["fragment:example-rules"] == "Example rules row."
+    assert summaries["settings:example-deny"] == "Example deny row."
+    assert descriptions == {
+        "harness": "| Part | What it is |\n|---|---|\n| `example-part` | Example part. |"
+        "\n\nInstalls: Example harness install.",
+        # Its README has a first paragraph, but the components table has no row for it.
+        "hooks-path": "",
+        "skills": "Example skills, wrapped.\n\n| skill | covers |\n|---|---|\n| `example-alpha` | Example cover. |"
+        "\n\nInstalls: Example skills install.",
+        "fragment:example-rules": "example rules\n",
+        "settings:example-deny": "Installs: Example settings install.",
+        "plugin:example-one": "First example plugin, wrapped over two lines.",
+        "plugin:example-two": "",
+        "plugin:example-three": "",
+    }
+
+
+def test_every_component_of_this_repository_has_a_summary_and_a_description() -> None:
+    # Empty when a doc row a component reads is renamed or dropped.
+    components = all_components()
+    unsummarized = [component.name for component in components if not component.summary]
+    undescribed = [component.name for component in components if not component.description()]
+    assert unsummarized == []
+    assert undescribed == []
+
+
+PLUGIN_LIST = ["plugin", "list", "--json"]
+
+
+def test_menu_installs_the_ticked_components_after_one_confirmation(sandbox: Sandbox) -> None:
+    # Five rows above the footer, so moving down to plugin:example-two scrolls the list.
+    with sandbox.run_in_terminal(rows=6) as terminal:
+        terminal.expect("hooks-path needs --repo")
+        # a twice ticks every row and clears them again. Then Space ticks harness, then hooks-path, which cannot be
+        # ticked without --repo, then skills, then plugin:example-two.
+        terminal.send(b"aa" + b" " + DOWN + b" " + DOWN + b" " + DOWN * 4 + b" \r")
+        terminal.expect("Install harness, skills, plugin:example-two? [y/N]")
+        terminal.send(b"y\r")
+        installed = terminal.wait()
+        installed_text = terminal.text()
+    # A skill only HEAD has leaves the skills current: they follow the installed harness, not HEAD.
+    sandbox.write("harness/skills/example-gamma/SKILL.md", b"example gamma skill\n")
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Raise the example version and add an example skill")
+    sandbox.list_plugins({"example-two": "1.0.0"})
+    with sandbox.run_in_terminal() as terminal:
+        terminal.expect("harness behind")
+        terminal.expect("skills installed")
+        terminal.expect("plugin:example-two installed")
+        # a ticks every row but hooks-path, then Space unticks harness.
+        terminal.send(b"a \r")
+        terminal.expect(
+            "Install skills, fragment:example-rules, settings:example-deny, plugin:example-one, plugin:example-two,"
+            " plugin:example-three? [y/N]"
+        )
+        terminal.send(b"n\r")
+        declined = terminal.wait()
+        declined_text = terminal.text()
+
+    assert installed == 0, installed_text
+    assert "Installed harness, skills, plugin:example-two." in installed_text
+    assert sandbox.claude_calls() == [
+        PLUGIN_LIST,
+        MARKETPLACE_ADD,
+        ["plugin", "install", "example-two@example-market"],
+        PLUGIN_LIST,
+    ]
+    assert declined == 0, declined_text
+    assert declined_text.endswith("Nothing picked.")
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+
+
+def test_menu_opens_whatever_the_survey_cannot_read_and_shows_full_descriptions(sandbox: Sandbox) -> None:
+    # Taller than the terminal, so its last item shows only once the view scrolls.
+    items = "".join(f"- Example item {number} of 30\n" for number in range(1, 31))
+    fragment = f"## Example rules\n\nShown whole in the description view.\n\n{items}"
+    sandbox.write("harness/fragments/example-rules.md", fragment.encode())
+    # The plugins step marks plugin:example-one, then stops at example-two's manifest, which has no version.
+    sandbox.write("plugins/example-two/.claude-plugin/plugin.json", b'{"name": "example-two"}')
+    sandbox.commit("Example fragment text and an example manifest without a version")
+    sandbox.list_plugins({"example-one": "1.0.0", "example-two": "1.0.0"})
+
+    with sandbox.run_in_terminal() as terminal:
+        terminal.expect("plugin:example-three")
+        # Unmarked, like every row of the step that stopped.
+        terminal.expect("plugin:example-one first example")
+        terminal.send(DOWN * 3 + b"?")
+        terminal.expect("Shown whole in the description view.")
+        terminal.send(DOWN * 20)
+        terminal.expect("Example item 30 of 30")
+        # Back to the list, then down to plugin:example-one, which has no README.
+        terminal.send(b"x" + DOWN * 2 + RIGHT)
+        terminal.expect("no description found")
+        terminal.send(b"xq")
+        quit_code = terminal.wait()
+        text = terminal.text()
+
+    assert quit_code == 0, text
+    assert text.endswith("Nothing picked.")
+
+
+def test_menu_warns_of_plugin_dirs_after_it_closes(sandbox: Sandbox) -> None:
+    with sandbox.run_in_terminal(env={"CLAUDE_CODE_PLUGIN_DIRS": "example-plugin-dirs"}) as terminal:
+        terminal.expect("plugin:example-one")
+        terminal.send(DOWN * 5 + b" \r")
+        terminal.expect("Install plugin:example-one? [y/N]")
+        terminal.send(b"y\r")
+        terminal.expect("CLAUDE_CODE_PLUGIN_DIRS is example-plugin-dirs")
+        exit_code = terminal.wait()
+        text = terminal.text()
+
+    assert exit_code == 0, text
+    assert "Installed plugin:example-one." in text
+
+
+def test_menu_scrolls_just_far_enough_to_show_the_cursor() -> None:
+    # Called directly: the terminal text cannot tell which rows a scroll left on screen.
+    component = Component("example", "example summary", install=lambda run: None, description=lambda: "")
+    state = MenuState(rows=[Row(component, "", pickable=True)] * 7)
+    state.move(6)
+    state.scroll(5)
+    scrolled_down = state.top
+    state.move(-5)
+    state.scroll(5)
+
+    assert scrolled_down == 2
+    assert state.top == 1
+
+
+def test_description_joins_hard_wrapped_markdown_and_shows_list_items_and_table_rows_with_a_hanging_indent() -> None:
+    # Called directly: the terminal text reads the same however a paragraph is split across rows.
+    text = (
+        "## Example\n\nA paragraph wrapped\nover two lines.\n\n- An item wrapped\n  over two lines.\n- A second item.\n"
+        "\n| Example | Example |\n|---|:---|\n| `example-a` | An example row that wraps. |\n| `example-b` | b |\n"
+        "\n### Example heading\nA line under it.\n"
+    )
+
+    lines = unwrapped(text)
+
+    assert lines == [
+        "## Example",
+        "",
+        "A paragraph wrapped over two lines.",
+        "",
+        "- An item wrapped over two lines.",
+        "- A second item.",
+        "",
+        "| `example-a` | An example row that wraps. |",
+        "| `example-b` | b |",
+        "",
+        "### Example heading",
+        "A line under it.",
+    ]
+    assert wrapped(lines[4], 20) == ["- An item wrapped", "  over two lines."]
+    assert wrapped(lines[7], 30) == ["`example-a`: An example row", "             that wraps."]
+
+
+def test_menu_stops_on_a_terminal_curses_cannot_drive(sandbox: Sandbox) -> None:
+    with sandbox.run_in_terminal(env={"TERM": "example-unknown"}) as terminal:
+        exit_code = terminal.wait()
+        text = terminal.text()
+
+    assert exit_code == 1
+    assert "the menu needs a terminal curses can drive; check TERM" in text
 
 
 def test_prompt_without_stdin_stops(sandbox: Sandbox) -> None:
@@ -900,9 +1239,6 @@ def test_prompt_without_stdin_stops(sandbox: Sandbox) -> None:
     assert "no answer on stdin; name the components on the command line" in result.stderr
     assert not sandbox.install.exists()
     assert sandbox.claude_calls() == []
-
-
-PLUGIN_LIST = ["plugin", "list", "--json"]
 
 
 def test_update_with_nothing_behind_reports_each_component_and_asks_nothing(sandbox: Sandbox) -> None:
@@ -1007,14 +1343,16 @@ def test_update_updates_a_newer_plugin_and_rewrites_its_changed_template(sandbox
     sandbox.write("plugins/example-one/local.example/example-rules.md", b"example reworded template\n")
     sandbox.set_plugin_version("example-one", "1.1.0")
     sandbox.commit("Reword the example template")
-    sandbox.list_plugins({"example-one": "1.0.0"})
+    # Installed in two scopes, one of them already at HEAD's version.
+    listed = [{"id": "example-one@example-market", "version": version} for version in ("1.0.0", "1.1.0")]
+    sandbox.plugins.write_text(json.dumps(listed))
     sandbox.move_on_update({"example-one": "1.1.0"})
     sandbox.log.unlink()
 
     result = sandbox.run("--update", stdin="y\n")
 
     assert result.returncode == 0, result.stderr
-    assert "plugin:example-one: 1.0.0 to 1.1.0\n" in result.stdout
+    assert "plugin:example-one: 1.0.0, 1.1.0 to 1.1.0\n" in result.stdout
     assert sandbox.claude_calls() == [
         PLUGIN_LIST,
         ["plugin", "marketplace", "update", "example-market"],
@@ -1062,7 +1400,8 @@ def test_update_declining_the_harness_holds_back_its_settings_and_reports_what_v
     assert sandbox.run(*installs, stdin="y\ny\n").returncode == 0
     settings = sandbox.home / ".claude/settings.json"
     installed = json.loads(settings.read_text())
-    sandbox.claude_md.write_text(f"{EXAMPLE_IMPORT}\n")
+    # The second import is the user's own file, outside the harness, so it is no fragment and never vanishes.
+    sandbox.claude_md.write_text(f"{EXAMPLE_IMPORT}\n@~/example-notes/example-own.md\n")
     sandbox.write(
         "harness/settings/example-ask.json", json.dumps({"permissions": {"ask": ["Bash(example-new)"]}}).encode()
     )
@@ -1256,6 +1595,29 @@ def test_update_failure_names_the_component_and_what_updated_before_it(sandbox: 
         " updated before it: harness, settings:example-deny"
     ) in result.stderr
     assert sandbox.current.readlink() == Path("versions/0.2.0")
+
+
+@pytest.mark.parametrize(
+    ("env", "uncommitted", "reason"),
+    [
+        ({"CLAUDECODE": "1"}, False, "refusing to run inside a Claude Code session"),
+        ({}, True, "has uncommitted changes to tracked files"),
+    ],
+    ids=["session", "uncommitted-change"],
+)
+def test_update_refusal_updates_nothing(sandbox: Sandbox, env: dict[str, str], uncommitted: bool, reason: str) -> None:
+    assert sandbox.run("harness").returncode == 0
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Raise the example version")
+    if uncommitted:
+        (sandbox.clone / "harness/githooks/README.md").write_text("example edit\n")
+
+    result = sandbox.run("--update", stdin="y\n", env=env)
+
+    assert result.returncode == 1
+    assert reason in result.stderr
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+    assert sandbox.claude_calls() == []
 
 
 def test_update_without_an_answer_stops_before_writing(sandbox: Sandbox) -> None:

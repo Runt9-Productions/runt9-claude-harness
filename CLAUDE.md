@@ -24,12 +24,13 @@ nothing from an employer, a private project or a specific machine goes in, in co
   `--update` it brings what is installed up to HEAD, finding each component where it already lives (the `current`
   link, the skill links, the imports in `~/.claude/CLAUDE.md`, `settings.json` and `claude plugin list --json`), since
   a manifest of its own would drift. The script keeps the version check, the refusal to run inside a Claude Code
-  session, the command line, the prompts and the loop that checks and then installs each component picked; the
-  `bootstrap/` package beside it holds one module per component, the helpers they share, and `update.py`, which runs
-  `--update`. A new part under `harness/` that must be wired into `~/.claude` or a repository registers a component in
-  `HARNESS_COMPONENTS` in `bootstrap/registry.py`, and needs a survey in `bootstrap/update.py` too, or `--update`
-  never finds it installed; a new file in `harness/fragments/` or a new `.json` file in `harness/settings/` needs
-  neither. Its tests are `test_bootstrap.py` beside it.
+  session, the command line and the loop that checks and then installs each component picked; the `bootstrap/`
+  package beside it holds one module per component, the helpers they share, `menu.py`, the menu a run with no
+  component named opens, `docs.py`, which reads each component's description from the docs at HEAD, and `update.py`,
+  which runs `--update`. A new part under `harness/` that must be wired into `~/.claude` or a repository registers a
+  component in `HARNESS_COMPONENTS` in `bootstrap/registry.py`, and needs a survey in `bootstrap/update.py` too, or
+  `--update` never finds it installed; a new file in `harness/fragments/` or a new `.json` file in `harness/settings/`
+  needs neither. Its tests are `test_bootstrap.py` beside it.
 - `scripts/`: scripts the owner runs by hand from a checkout, with their bats tests beside them; so far
   `prune-merged.sh`.
 - `requirements-dev.txt`: the pinned Python tools CI runs (ruff, with `ruff.toml`, and pytest with every package it

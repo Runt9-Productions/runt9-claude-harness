@@ -1,12 +1,18 @@
 """Install or update the parts of runt9-claude-harness that cannot be plugins, and the plugins you pick.
 
-    python3 bootstrap.py [component ...] [--repo <path> ...] [--list]
+    python3 bootstrap.py [component ... | all] [--repo <path> ...] [--list]
     python3 bootstrap.py --update [component ...]
 
 Run it in your own shell, not in a Claude Code session. With components named it installs exactly those, in the order
---list shows; with none named it asks about each one. With --update it brings every installed component up to HEAD,
-or only those named, each of which must be installed: it prints what would change and asks before writing anything.
-Settings fragments update only in a run that moves the harness, and every changed one comes with it.
+--list shows, and all names every one (hooks-path only with --repo). With --update it brings every installed
+component up to HEAD, or only those named, each of which must be installed: it prints what would change and asks
+before writing anything. Settings fragments update only in a run that moves the harness, and every changed one comes
+with it.
+
+With no component named it opens a menu of every component, marked installed or behind as --update finds it. Up and
+Down move, Space ticks, a ticks every row, Right or ? shows the full description, Enter asks once before installing
+what is ticked, and q or Escape quits. The menu needs a terminal curses can drive; without one, name the components.
+
 README.md says what each component does, how each is found installed, and what it refuses.
 
 Exits 0 when everything picked installed, or on --update when nothing failed or was refused, whatever was declined.
@@ -27,37 +33,54 @@ if sys.version_info < (3, 12):  # noqa: UP036 (ruff assumes the target version, 
 # through it.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bootstrap.core import Component, Run, Stop, answered_yes
+from bootstrap.core import Component, Run, Stop, lacks_repos
 from bootstrap.plugins import print_templates
 from bootstrap.registry import all_components, unknown_components
 from bootstrap.update import update
 
 SESSION_VARIABLES = ("CLAUDE_CODE_SESSION_ID", "CLAUDECODE")
+EVERY_COMPONENT = "all"
+CURSES_MODULES = ("curses", "_curses")
+NO_CURSES_MODULE = "the menu needs Python's curses module; name the components on the command line instead"
 
 
-def ask(components: list[Component], run: Run) -> list[Component]:
-    picked = []
+def repo_users(components: list[Component]) -> str:
+    return ", ".join(component.name for component in components if component.needs_repos)
+
+
+def offered(components: list[Component], run: Run) -> list[Component]:
+    """`components` less those that act on --repo paths when none is given, each left out with a line saying how
+    to add it."""
+    kept = []
     for component in components:
-        if component.needs_repos and not run.repos:
+        if lacks_repos(component, run):
             print(f"Not offering {component.name}: run python3 bootstrap.py {component.name} --repo <path>")
             continue
-        question = f"Install {component.name} ({component.summary})? [y/N] "
-        if answered_yes(question, "no answer on stdin; name the components on the command line instead"):
-            picked.append(component)
-    return picked
+        kept.append(component)
+    return kept
 
 
 def pick(names: list[str], components: list[Component], run: Run) -> list[Component]:
+    if EVERY_COMPONENT in names:
+        if len(names) > 1:
+            raise Stop(f"{EVERY_COMPONENT} names every component; name no others with it")
+        return offered(components, run)
     known = {component.name for component in components}
     unknown = [name for name in names if name not in known]
     if unknown:
         raise unknown_components(unknown)
     if not names:
-        return ask(components, run)
+        # Imported here alone, so a run that names components works on a Python built without curses.
+        try:
+            from bootstrap.menu import choose
+        except ModuleNotFoundError as error:
+            if error.name not in CURSES_MODULES:
+                raise
+            raise Stop(NO_CURSES_MODULE) from error
+        return choose(components, run)
     picked = [component for component in components if component.name in names]
     if run.repos and not any(component.needs_repos for component in picked):
-        users = [component.name for component in components if component.needs_repos]
-        raise Stop(f"--repo is used only by {', '.join(users)}, and none is named")
+        raise Stop(f"--repo is used only by {repo_users(components)}, and none is named")
     return picked
 
 
@@ -69,6 +92,8 @@ def bootstrap(args: argparse.Namespace) -> None:
         width = max(len(component.name) for component in components)
         for component in components:
             print(f"{component.name:<{width}}  {component.summary}")
+        every = f"every component above, in this order; {repo_users(components)} only with --repo"
+        print(f"{EVERY_COMPONENT:<{width}}  {every}")
         return
     if args.update:
         if args.repo:
@@ -102,7 +127,10 @@ def main() -> int:
         prog="bootstrap.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "components", nargs="*", metavar="component", help="components to install or update, from --list"
+        "components",
+        nargs="*",
+        metavar="component",
+        help="components to install or update, from --list; all installs every one",
     )
     parser.add_argument("--repo", action="append", default=[], type=Path, metavar="<path>", help="for hooks-path")
     parser.add_argument("--list", action="store_true", help="print the components and exit")

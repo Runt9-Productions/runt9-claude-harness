@@ -24,6 +24,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Bootstrap Split](projects/bootstrap-split/overview.md) | reading the rulings and the module map behind the `bootstrap/` package (issue #14) |
 | [Plugin Templates](projects/plugin-templates/overview.md) | reading the rulings and the designs ruled out behind the template copy (issue #37) |
 | [Bootstrap Update](projects/bootstrap-update/overview.md) | reading the rulings and the designs ruled out behind `bootstrap.py --update` (issue #41) |
+| [Bootstrap Menu](projects/bootstrap-menu/overview.md) | reading the rulings and the designs ruled out behind the `bootstrap.py` selection menu and `all` (#121) |
 
 ## Local conventions
 

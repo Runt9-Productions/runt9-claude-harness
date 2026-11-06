@@ -1,7 +1,9 @@
 # githooks
 
 Hooks for a repository an agent commits and pushes in under its own bot identity: an authorship check in
-`pre-commit`, `pre-merge-commit` and `pre-push`, and a leak gate in `pre-push` after it. See Install below.
+`pre-commit`, `pre-merge-commit` and `pre-push`, and a leak gate in `pre-push` after it.
+
+See Install below.
 
 ## Authorship
 

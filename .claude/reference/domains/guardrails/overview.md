@@ -46,7 +46,17 @@ sources:
 > prompt asked for the one command in a file, so the user's message named no target, and a force push run that way was
 > still denied. Each case had one to three runs, with and without the four rules. Instance Metadata Requests was not
 > measured, and a delete of a sibling directory under the per-user temp directory was left out, since that location
-> reads as scratch. Every other claim was carried forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
+> reads as scratch. Every other claim was carried forward without a re-check.
+> In #121, which added descriptions and `component_states` to `bootstrap/settings.py`
+> and `bootstrap/update.py`, `merge_settings`, `updated_settings`, `added_entries`, `replaced_old_entries` and
+> `holds_an_entry` in `bootstrap/settings.py` and `update`, `narrowed`, `survey_harness`, `survey_settings` and
+> `confirmed_settings` in `bootstrap/update.py` were read again, unchanged, with every citation into them corrected,
+> and the two `#measured` settings lines were re-measured by calling `merge_settings`, `holds_an_entry` and
+> `updated_settings` on synthetic fragments; the settings fragments were unchanged, and every other claim was carried
+> forward without a re-check. Later in #121, after component summaries and descriptions moved to the docs (in
+> `bootstrap/settings.py` only its imports and `settings_components` changed; `bootstrap/update.py` did not change),
+> that diff was read and every citation into both files checked against its line, all unchanged; the `#measured`
+> lines were not re-run, and every other claim was carried forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
 > (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build run end to end in
 > the sandbox.
 
@@ -93,20 +103,20 @@ stop a call.
   (`claude auto-mode defaults`). #measured
 - [fact] `claude auto-mode critique` prints at most about 4,000 characters, and it proposes wording without checking
   it against the documented order; run it on a few rules at a time and measure what it suggests. #measured
-- [trap] Installing a settings fragment (`merge_settings`, `bootstrap/settings.py:23`) merges list entries by exact
+- [trap] Installing a settings fragment (`merge_settings`, `bootstrap/settings.py:26`) merges list entries by exact
   text and never removes one, so installing it again after a rule was reworded leaves the older text in the user's
   settings, where it still applies. #silent-failure
-- [fact] `bootstrap.py --update` removes that older text: `updated_settings` (`bootstrap/settings.py:44`) drops each
+- [fact] `bootstrap.py --update` removes that older text: `updated_settings` (`bootstrap/settings.py:47`) drops each
   list entry of the installed harness's copy of the fragment that HEAD's copy lacks, adds HEAD's new entries and keeps
-  the user's own, after `confirmed_settings` (`bootstrap/update.py:314`) has shown the diff and asked about that
+  the user's own, after `confirmed_settings` (`bootstrap/update.py:339`) has shown the diff and asked about that
   fragment. On a synthetic reworded `soft_deny` entry beside one of the user's, the old text went and the new came in.
   #measured
 - [fact] `--update` asks about settings fragments only when the harness is current or the run's first question
   moves it: with the harness behind and not moving, because it was declined or not named, `update` asks about none
-  and prints them after `Waiting for the harness:` (`bootstrap/update.py:97`), and naming only `settings:` fragments
-  then stops (`narrowed`, `bootstrap/update.py:158`)
+  and prints them after `Waiting for the harness:` (`bootstrap/update.py:99`), and naming only `settings:` fragments
+  then stops (`narrowed`, `bootstrap/update.py:183`)
 - [trap] `--update` learns the older text only from the installed harness's copy (`survey_settings`,
-  `bootstrap/update.py:263`), so once a plain `bootstrap.py harness` has replaced that copy with HEAD's, the older text
+  `bootstrap/update.py:288`), so once a plain `bootstrap.py harness` has replaced that copy with HEAD's, the older text
   stays: a settings file holding only the old text no longer counts as having the fragment (`holds_an_entry`) and is
   offered as available, and one holding other entries of it is reported current. A no to that fragment's own question
   in an `--update` that moves the harness ends the same way. #measured #silent-failure

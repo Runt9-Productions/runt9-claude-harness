@@ -39,6 +39,8 @@ SETTINGS_PREFIX = f"{SETTINGS}:"
 # Never found installed: core.hooksPath names the `current` link, so the hooks follow the harness.
 HOOKS_PATH = "hooks-path"
 IMPORT_PREFIX = "@~/"
+INSTALLED = "installed"
+BEHIND = "behind"
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,29 @@ def surveyed(names: set[str], run: Run) -> Survey:
     if not names or any(name.startswith(PLUGIN) for name in names):
         survey_plugins(survey, run)
     return survey
+
+
+def component_states(run: Run) -> dict[str, str]:
+    """`INSTALLED` or `BEHIND` for each component the survey finds installed, by name, for the menu to mark. A survey
+    step that raises, as the plugins step does when claude is not on PATH, leaves out every component it covers: the
+    marks only inform, and each install runs its own checks."""
+    survey = Survey()
+    steps = (
+        survey_harness,
+        functools.partial(survey_skills, harness_moves=False),
+        survey_fragments,
+        survey_settings,
+        functools.partial(survey_plugins, run=run),
+    )
+    for step in steps:
+        found_before = len(survey.found)
+        try:
+            step(survey)
+        except (Stop, OSError):
+            del survey.found[found_before:]
+    # The menu draws over what the survey printed, so the install's checks must print the plugin warning again.
+    check_plugin_setup.cache_clear()
+    return {found.name: BEHIND if found.change else INSTALLED for found in survey.found}
 
 
 def narrowed(survey: Survey, names: list[str]) -> Survey:

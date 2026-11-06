@@ -17,6 +17,18 @@ install the plugins too. Run it in your own shell, not in a Claude Code session,
 writing the install. It needs Python 3.12 and git, and `claude` for plugin components; the hooks need what
 [their README](harness/githooks/README.md) lists.
 
+`harness/` holds these parts, which the `harness` component installs together as one version:
+
+| Part | What it is |
+|---|---|
+| `githooks` | Git hooks that check a commit or push comes from the bot identity, and gate each push on a leak scan. |
+| `leak-scan` | The scan the push gate and CI run, and the `public-leak` review the push gate and `review-text.sh` run. |
+| `fragments` | Always-on `CLAUDE.md` rules, one file each, that the `fragment:` components import. |
+| `settings` | Settings fragments the `settings:` components merge into `~/.claude/settings.json`. |
+| `statusline` | The status line script the `settings:statusline` fragment runs. |
+| `skills` | The skills the `skills` component links into `~/.claude/skills/`. |
+| `claude-md-template.md` | The `~/.claude/CLAUDE.md` a fragment install starts from when there is none. |
+
 ```
 git clone https://github.com/Runt9-Productions/runt9-claude-harness.git
 cd runt9-claude-harness
@@ -24,7 +36,25 @@ python3 bootstrap.py --list
 python3 bootstrap.py harness hooks-path skills --repo <path>
 ```
 
-With no component named it asks about each one. The components, in install order:
+`python3 bootstrap.py all` installs every component, in install order, leaving out `hooks-path` unless `--repo` is
+given; it takes no other name beside it. With no component named it opens a menu of every component, none ticked,
+each marked `installed` or `behind` as `--update` finds it (unmarked when it is not installed or cannot be read).
+Without `--repo`, `hooks-path` is marked `needs --repo` and cannot be ticked.
+
+- Up and Down, or `k` and `j`, move; Space ticks or clears a row; `a` ticks every row that can be ticked, or clears
+  them all when all are ticked.
+- Right or `?` shows the row's full description, read from the docs at HEAD. For `harness`, `hooks-path` and
+  `skills` it says what the component is (the table above, the first paragraph of
+  [the hooks README](harness/githooks/README.md), or the first paragraph and table of
+  [the skills README](harness/skills/README.md)), then its row below after `Installs:`. A settings fragment, whose
+  summary is its row in [the settings README](harness/settings/README.md), shows only its row below. A fragment
+  shows its own text, and a plugin the first paragraph of its README. Up, Down, Page Up and Page Down scroll it, and
+  any other key goes back to the list.
+- Enter closes the menu and asks once, `Install <names>? [y/N]`; `q` or Escape closes it without asking. Quitting,
+  ticking nothing or answering no installs nothing. Each component picked then asks what it asks when named.
+
+The menu needs a terminal on stdin and stdout that curses can drive, so name the components where there is none.
+The components, in install order:
 
 | Component | Installs |
 |---|---|
@@ -40,11 +70,13 @@ gate's pass cache in `~/.claude/harness/state/` survives it. To change an instal
 `~/.claude/local/<name>/additions.md` ([how](harness/skills/README.md)); edits inside `~/.claude/harness/` are lost on
 the next version.
 
-What it refuses. The first two, and the `hooks-path` checks on `--repo`, stop the run before anything installs; the
-rest stop at that component:
+What it refuses. The first three, and the `hooks-path` checks on `--repo`, stop the run before anything installs;
+the rest stop at that component:
 
 - Running inside a Claude Code session. `--list` still works.
-- An unknown component, or `--repo` without `hooks-path`.
+- An unknown component, `all` beside another name, or `--repo` with components named but not `hooks-path`.
+- The menu, when stdin or stdout is not a terminal, when curses cannot drive the terminal `TERM` names, or when Python
+  was built without `curses`. Naming the components needs none of them.
 - `harness`: uncommitted changes to tracked files, and a symlink or submodule under `harness/`. It warns, and installs
   anyway, when HEAD is not on `origin/main` as of the last fetch.
 - `hooks-path`: no `--repo`, or a `--repo` that is not the top level of a git repository. It prints a different
