@@ -1,0 +1,7 @@
+{
+  "minConfidence": "high",
+  "nudgesPerHour": 3,
+  "flagsPerHour": 3,
+  "maxRecordChars": 40000,
+  "judgeHeadless": false
+}
