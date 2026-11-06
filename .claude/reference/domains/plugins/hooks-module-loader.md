@@ -3,7 +3,7 @@ title: Hooks Module Loader
 type: note
 permalink: plugins/hooks-module-loader
 tags: [plugins, mods, hooks-module, atoms, loader]
-verified: 2026-10-31
+verified: 2026-11-06
 coverage: partial
 measured_on: "Claude Code 2.1.316"
 sources:
@@ -13,7 +13,7 @@ sources:
 
 # Hooks Module Loader
 
-> **Scope.** What the loader accepts when a mod's hooks module is split across files: passing `$` and `on` to imported functions, atoms shared between files, matcher values, and the `modules` list. Every `#measured` line was measured on Claude Code 2.1.316 with synthetic probe plugins, each run through `claude plugin validate --strict` and a `claude plugin test` kit test, with a refused variant beside each accepted one. The board plugin's `register` (`plugins/board/hooks/register.tsx:49`) and `updateCounter` (`plugins/board/hooks/persistence.ts:189`) were read as the live example, and the "Create a mod" page of Claude Code's docs was read for its rules on passing `$`. Not covered: `memberOf` and `derive`, which the refusal text names but no probe used; default exports and re-exports; a function declaration nested inside another function, which the docs say fails but no probe tried; and whether a live session dispatches a matcher the loader lists as `?` the way the kit does, since only the kit was run and its `$.ui.mount` answered "no implementation for ui.render" for every probe pane, including one with a literal id.
+> **Scope.** What the loader accepts when a mod's hooks module is split across files: passing `$` and `on` to imported functions, atoms shared between files, matcher values, and the `modules` list. Every `#measured` line was measured on Claude Code 2.1.316 with synthetic probe plugins, each run through `claude plugin validate --strict` and a `claude plugin test` kit test, with a refused variant beside each accepted one. The board plugin's `register` (`plugins/board/hooks/register.tsx:49`) and `updateCounter` (`plugins/board/hooks/persistence.ts:189`) were read as the live example, and the "Create a mod" page of Claude Code's docs was read for its rules on passing `$`. On 2026-11-06 the board's two source files were re-read after its `mcp__board__ask_decision` hook began passing the call's origin to `askDecision`; the `#measured` lines and the `[vendor]` line were carried forward without re-measuring or re-fetching. Not covered: `memberOf` and `derive`, which the refusal text names but no probe used; default exports and re-exports; a function declaration nested inside another function, which the docs say fails but no probe tried; and whether a live session dispatches a matcher the loader lists as `?` the way the kit does, since only the kit was run and its `$.ui.mount` answered "no implementation for ui.render" for every probe pane, including one with a literal id.
 
 Read this before splitting a mod's hooks module into files, or before moving a function, an atom or a matcher
 value from one file to another. Every refusal here fails `claude plugin validate`. The two types-contract refusals
