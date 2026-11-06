@@ -1,0 +1,8 @@
+{
+  "name": "chrome-devtools",
+  "version": "0.1.0",
+  "description": "Starts the chrome-devtools-mcp browser server at a pinned version, headless, with a throwaway profile, no local files, redacted request headers and no data sent to outside services",
+  "author": {
+    "name": "Runt9 Productions"
+  }
+}

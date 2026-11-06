@@ -56,9 +56,14 @@
       "description": "Leaves Claude Code's mid-turn \"say what you're doing, then continue\" reminder out of every request"
     },
     {
-      "name": "clock",
-      "source": "./plugins/clock",
-      "description": "Puts the local date and time beside a prompt, at most once every 15 minutes, with how long ago the user last wrote"
+      "name": "session-context",
+      "source": "./plugins/session-context",
+      "description": "Puts the local time and the plan's usage beside a prompt, at most once every 15 minutes, warns once when a usage window passes 90%, and gives Claude a tool for the current usage"
+    },
+    {
+      "name": "chrome-devtools",
+      "source": "./plugins/chrome-devtools",
+      "description": "Starts the chrome-devtools-mcp browser server at a pinned version, headless, with a throwaway profile, no local files, redacted request headers and no data sent to outside services"
     }
   ]
 }
