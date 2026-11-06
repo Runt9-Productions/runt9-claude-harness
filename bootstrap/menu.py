@@ -149,8 +149,8 @@ def continues(previous: str, line: str) -> bool:
     """Whether `line` carries on the paragraph or list item of `previous` in Markdown hard-wrapped to some width."""
     if not previous.strip() or not line.strip():
         return False
-    # A table row is one line, whatever follows it.
-    if previous.lstrip().startswith("|"):
+    # A heading or a table row is one line, whatever follows it.
+    if previous.lstrip().startswith(("#", "|")):
         return False
     return BLOCK_START.match(line) is None
 

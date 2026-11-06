@@ -1,8 +1,9 @@
 """Runs bootstrap.py as a user does: from outside a synthetic clone, with HOME in a temporary directory and a stub
 claude on PATH that records each call, answers `plugin list --json` from a canned file, and moves a version there on
-`plugin update` only when told to. Every git call runs
-without the machine's global and system config. `updated_settings` is also called directly, since its cases are many
-and need no run. The menu runs on a pseudo-terminal as TERM=xterm. Needs git, pytest and the xterm terminfo entry.
+`plugin update` only when told to. Every git call runs without the machine's global and system config.
+`updated_settings` is also called directly, since its cases are many and need no run, and so are the menu's scroll
+and its Markdown unwrapping, which the terminal text cannot show. The menu runs on a pseudo-terminal as TERM=xterm.
+Needs git, pytest and the xterm terminfo entry.
 """
 
 import errno
@@ -22,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from bootstrap.menu import MenuState, unwrapped, wrapped
 from bootstrap.registry import all_components
 from bootstrap.settings import updated_settings
 
@@ -1051,26 +1053,34 @@ def test_menu_installs_the_ticked_components_after_one_confirmation(sandbox: San
     # Five rows above the footer, so moving down to plugin:example-two scrolls the list.
     with sandbox.run_in_terminal(rows=6) as terminal:
         terminal.expect("hooks-path needs --repo")
-        # Ticks harness, then hooks-path, which cannot be ticked without --repo, then plugin:example-two.
-        terminal.send(b" " + DOWN + b" " + DOWN * 5 + b" \r")
-        terminal.expect("Install harness, plugin:example-two? [y/N]")
+        # a twice ticks every row and clears them again. Then Space ticks harness, then hooks-path, which cannot be
+        # ticked without --repo, then skills, then plugin:example-two.
+        terminal.send(b"aa" + b" " + DOWN + b" " + DOWN + b" " + DOWN * 4 + b" \r")
+        terminal.expect("Install harness, skills, plugin:example-two? [y/N]")
         terminal.send(b"y\r")
         installed = terminal.wait()
         installed_text = terminal.text()
+    # A skill only HEAD has leaves the skills current: they follow the installed harness, not HEAD.
+    sandbox.write("harness/skills/example-gamma/SKILL.md", b"example gamma skill\n")
     sandbox.set_version("0.2.0")
-    sandbox.commit("Raise the example version")
+    sandbox.commit("Raise the example version and add an example skill")
     sandbox.list_plugins({"example-two": "1.0.0"})
     with sandbox.run_in_terminal() as terminal:
         terminal.expect("harness behind")
+        terminal.expect("skills installed")
         terminal.expect("plugin:example-two installed")
-        terminal.send(b" \r")
-        terminal.expect("Install harness? [y/N]")
+        # a ticks every row but hooks-path, then Space unticks harness.
+        terminal.send(b"a \r")
+        terminal.expect(
+            "Install skills, fragment:example-rules, settings:example-deny, plugin:example-one, plugin:example-two,"
+            " plugin:example-three? [y/N]"
+        )
         terminal.send(b"n\r")
         declined = terminal.wait()
         declined_text = terminal.text()
 
     assert installed == 0, installed_text
-    assert "Installed harness, plugin:example-two." in installed_text
+    assert "Installed harness, skills, plugin:example-two." in installed_text
     assert sandbox.claude_calls() == [
         PLUGIN_LIST,
         MARKETPLACE_ADD,
@@ -1083,17 +1093,23 @@ def test_menu_installs_the_ticked_components_after_one_confirmation(sandbox: San
 
 
 def test_menu_opens_whatever_the_survey_cannot_read_and_shows_full_descriptions(sandbox: Sandbox) -> None:
-    sandbox.write("harness/fragments/example-rules.md", b"## Example rules\n\nShown whole in the description view.\n")
-    sandbox.commit("Example fragment text")
-    # The settings and plugin steps of the survey both read it and stop.
-    settings = sandbox.home / ".claude/settings.json"
-    settings.parent.mkdir()
-    settings.write_text("[]")
+    # Taller than the terminal, so its last item shows only once the view scrolls.
+    items = "".join(f"- Example item {number} of 30\n" for number in range(1, 31))
+    fragment = f"## Example rules\n\nShown whole in the description view.\n\n{items}"
+    sandbox.write("harness/fragments/example-rules.md", fragment.encode())
+    # The plugins step marks plugin:example-one, then stops at example-two's manifest, which has no version.
+    sandbox.write("plugins/example-two/.claude-plugin/plugin.json", b'{"name": "example-two"}')
+    sandbox.commit("Example fragment text and an example manifest without a version")
+    sandbox.list_plugins({"example-one": "1.0.0", "example-two": "1.0.0"})
 
     with sandbox.run_in_terminal() as terminal:
         terminal.expect("plugin:example-three")
+        # Unmarked, like every row of the step that stopped.
+        terminal.expect("plugin:example-one first example")
         terminal.send(DOWN * 3 + b"?")
         terminal.expect("Shown whole in the description view.")
+        terminal.send(DOWN * 20)
+        terminal.expect("Example item 30 of 30")
         # Back to the list, then down to plugin:example-one, which has no README.
         terminal.send(b"x" + DOWN * 2 + RIGHT)
         terminal.expect("no description found")
@@ -1103,6 +1119,45 @@ def test_menu_opens_whatever_the_survey_cannot_read_and_shows_full_descriptions(
 
     assert quit_code == 0, text
     assert text.endswith("Nothing picked.")
+
+
+def test_menu_scrolls_just_far_enough_to_show_the_cursor() -> None:
+    # Called directly: the terminal text cannot tell which rows a scroll left on screen.
+    state = MenuState(rows=[])
+    state.cursor = 6
+    state.scroll(5)
+    scrolled_down = state.top
+    state.cursor = 1
+    state.scroll(5)
+
+    assert scrolled_down == 2
+    assert state.top == 1
+
+
+def test_description_joins_hard_wrapped_markdown_and_indents_wrapped_list_items() -> None:
+    # Called directly: the terminal text reads the same however a paragraph is split across rows.
+    text = (
+        "## Example\n\nA paragraph wrapped\nover two lines.\n\n- An item wrapped\n  over two lines.\n- A second item.\n"
+        "\n| `example-a` | example |\n| `example-b` | example |\n\n### Example heading\nA line under it.\n"
+    )
+
+    lines = unwrapped(text)
+
+    assert lines == [
+        "## Example",
+        "",
+        "A paragraph wrapped over two lines.",
+        "",
+        "- An item wrapped over two lines.",
+        "- A second item.",
+        "",
+        "| `example-a` | example |",
+        "| `example-b` | example |",
+        "",
+        "### Example heading",
+        "A line under it.",
+    ]
+    assert wrapped(lines[4], 20) == ["- An item wrapped", "  over two lines."]
 
 
 def test_menu_stops_on_a_terminal_curses_cannot_drive(sandbox: Sandbox) -> None:
@@ -1225,14 +1280,16 @@ def test_update_updates_a_newer_plugin_and_rewrites_its_changed_template(sandbox
     sandbox.write("plugins/example-one/local.example/example-rules.md", b"example reworded template\n")
     sandbox.set_plugin_version("example-one", "1.1.0")
     sandbox.commit("Reword the example template")
-    sandbox.list_plugins({"example-one": "1.0.0"})
+    # Installed in two scopes, one of them already at HEAD's version.
+    listed = [{"id": "example-one@example-market", "version": version} for version in ("1.0.0", "1.1.0")]
+    sandbox.plugins.write_text(json.dumps(listed))
     sandbox.move_on_update({"example-one": "1.1.0"})
     sandbox.log.unlink()
 
     result = sandbox.run("--update", stdin="y\n")
 
     assert result.returncode == 0, result.stderr
-    assert "plugin:example-one: 1.0.0 to 1.1.0\n" in result.stdout
+    assert "plugin:example-one: 1.0.0, 1.1.0 to 1.1.0\n" in result.stdout
     assert sandbox.claude_calls() == [
         PLUGIN_LIST,
         ["plugin", "marketplace", "update", "example-market"],
@@ -1280,7 +1337,8 @@ def test_update_declining_the_harness_holds_back_its_settings_and_reports_what_v
     assert sandbox.run(*installs, stdin="y\ny\n").returncode == 0
     settings = sandbox.home / ".claude/settings.json"
     installed = json.loads(settings.read_text())
-    sandbox.claude_md.write_text(f"{EXAMPLE_IMPORT}\n")
+    # The second import is the user's own file, outside the harness, so it is no fragment and never vanishes.
+    sandbox.claude_md.write_text(f"{EXAMPLE_IMPORT}\n@~/example-notes/example-own.md\n")
     sandbox.write(
         "harness/settings/example-ask.json", json.dumps({"permissions": {"ask": ["Bash(example-new)"]}}).encode()
     )
@@ -1474,6 +1532,29 @@ def test_update_failure_names_the_component_and_what_updated_before_it(sandbox: 
         " updated before it: harness, settings:example-deny"
     ) in result.stderr
     assert sandbox.current.readlink() == Path("versions/0.2.0")
+
+
+@pytest.mark.parametrize(
+    ("env", "uncommitted", "reason"),
+    [
+        ({"CLAUDECODE": "1"}, False, "refusing to run inside a Claude Code session"),
+        ({}, True, "has uncommitted changes to tracked files"),
+    ],
+    ids=["session", "uncommitted-change"],
+)
+def test_update_refusal_updates_nothing(sandbox: Sandbox, env: dict[str, str], uncommitted: bool, reason: str) -> None:
+    assert sandbox.run("harness").returncode == 0
+    sandbox.set_version("0.2.0")
+    sandbox.commit("Raise the example version")
+    if uncommitted:
+        (sandbox.clone / "harness/githooks/README.md").write_text("example edit\n")
+
+    result = sandbox.run("--update", stdin="y\n", env=env)
+
+    assert result.returncode == 1
+    assert reason in result.stderr
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+    assert sandbox.claude_calls() == []
 
 
 def test_update_without_an_answer_stops_before_writing(sandbox: Sandbox) -> None:
