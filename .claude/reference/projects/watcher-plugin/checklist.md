@@ -11,8 +11,8 @@ tags:
 
 ## Status
 
-- **Live item:** 06
-- **How far along:** 01 to 05 built
+- **Live item:** none
+- **How far along:** 01 to 06 built; verification next
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-06
 
@@ -38,7 +38,7 @@ tags:
 - [x] 05 Shared state and the inputs that need more than the digest: per-session summary, files and findings in the
   store, other sessions' entries for the overlap check, knowledge base notes for edited sources, plan files, and the
   secret pattern match, with kit tests
-- [ ] 06 README, the watcher's contract row, `local.example/` with a sample check, and the platform facts the project
+- [x] 06 README, the watcher's contract row, `local.example/` with a sample check, and the platform facts the project
   measured moved into [[Plugin Platform]]
 
 ## Relations
