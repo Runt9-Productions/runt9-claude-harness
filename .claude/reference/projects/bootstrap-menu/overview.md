@@ -6,7 +6,7 @@ tags:
 - bootstrap
 - menu
 - curses
-status: research
+status: complete
 opened: '2026-11-04'
 ---
 
@@ -18,7 +18,7 @@ tests at the command's boundary.
 
 ## Where it stands
 
-- [status] Research: design settled, spec written, waiting on setup.
+- [status] Complete: tasks 01 to 04 built in #121; the durable facts are in [[Bootstrap]].
 
 ## Goal
 

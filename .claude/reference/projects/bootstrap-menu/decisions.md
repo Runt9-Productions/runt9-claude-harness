@@ -43,21 +43,21 @@ what `all` names.
 - [decision] D8: Enter closes the menu with the ticked components, and a `y/N` question naming them follows before
   anything installs; `q` or Escape leaves with `Nothing picked.` (owner, 2026-11-04).
 - [proposal] D8a: a no to that question ends the run with `Nothing picked.` and exit 0, rather than reopening the
-  menu (open): the same as today's run where every answer is no.
+  menu (lead, 2026-11-04; acted on, no objection): the same as today's run where every answer is no.
 - [decision] D9: `all` beside any other component name stops as a usage error, and `--update all` is not added
   (owner, 2026-11-04): `all` names everything, and `--update` with no names already covers everything installed.
 - [decision] D10, D11: issues #39 and #40 are rewritten to the text in [[Bootstrap Menu Spec]] (owner, 2026-11-04).
 - [proposal] D15: a survey step that raises leaves its components unmarked rather than stopping the menu, and
-  `plugin:` rows are unmarked when `claude` is not on `PATH` (open): the marks inform; the install's own checks
-  still refuse.
+  `plugin:` rows are unmarked when `claude` is not on `PATH` (lead, 2026-11-04; acted on, no objection): the marks
+  inform; the install's own checks still refuse.
 - [proposal] D16: a run whose stdin or stdout is not a terminal stops with today's message before curses starts, and
-  a terminal curses cannot set up stops with one line naming `TERM` (open).
-- [proposal] D17: both the list and the description view scroll (open): the repository has 24 components, more than
-  a 24-line terminal shows, and a fragment runs past one screen.
+  a terminal curses cannot set up stops with one line naming `TERM` (lead, 2026-11-04; acted on, no objection).
+- [proposal] D17: both the list and the description view scroll (lead, 2026-11-04; acted on, no objection): the
+  repository has more components than a 24-line terminal shows, and a fragment runs past one screen.
 
 ## Open Questions
 
-None. Proposals D8a and D15 to D17 are acted on as written unless the owner objects.
+None.
 
 ## Relations
 

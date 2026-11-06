@@ -158,6 +158,8 @@ def component_states(run: Run) -> dict[str, str]:
             step(survey)
         except (Stop, OSError):
             del survey.found[found_before:]
+    # The menu draws over what the survey printed, so the install's checks must print the plugin warning again.
+    check_plugin_setup.cache_clear()
     return {found.name: BEHIND if found.change else INSTALLED for found in survey.found}
 
 

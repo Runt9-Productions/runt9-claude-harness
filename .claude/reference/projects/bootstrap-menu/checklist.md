@@ -11,10 +11,10 @@ tags:
 
 ## Status
 
-- **Live item:** none; waiting on setup
-- **How far along:** spec written
-- **Blocked on:** setup
-- **Last moved:** 2026-11-04
+- **Live item:** none; built in #121
+- **How far along:** 01 to 04 built, verified and reviewed
+- **Blocked on:** nothing
+- **Last moved:** 2026-11-06
 
 ## Build Order
 

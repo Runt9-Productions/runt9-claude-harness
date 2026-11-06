@@ -3,7 +3,7 @@ title: Guardrails
 type: note
 permalink: guardrails/overview
 tags: [guardrails, auto-mode, sandbox, permissions, hooks, credentials, installs]
-verified: 2026-11-05
+verified: 2026-11-06
 coverage: partial
 measured_on: "Claude Code 2.1.314 and 2.1.316, Linux bubblewrap 0.9.0"
 sources:
@@ -84,15 +84,15 @@ stop a call.
   settings, where it still applies. #silent-failure
 - [fact] `bootstrap.py --update` removes that older text: `updated_settings` (`bootstrap/settings.py:47`) drops each
   list entry of the installed harness's copy of the fragment that HEAD's copy lacks, adds HEAD's new entries and keeps
-  the user's own, after `confirmed_settings` (`bootstrap/update.py:337`) has shown the diff and asked about that
+  the user's own, after `confirmed_settings` (`bootstrap/update.py:339`) has shown the diff and asked about that
   fragment. On a synthetic reworded `soft_deny` entry beside one of the user's, the old text went and the new came in.
   #measured
 - [fact] `--update` asks about settings fragments only when the harness is current or the run's first question
   moves it: with the harness behind and not moving, because it was declined or not named, `update` asks about none
   and prints them after `Waiting for the harness:` (`bootstrap/update.py:99`), and naming only `settings:` fragments
-  then stops (`narrowed`, `bootstrap/update.py:181`)
+  then stops (`narrowed`, `bootstrap/update.py:183`)
 - [trap] `--update` learns the older text only from the installed harness's copy (`survey_settings`,
-  `bootstrap/update.py:286`), so once a plain `bootstrap.py harness` has replaced that copy with HEAD's, the older text
+  `bootstrap/update.py:288`), so once a plain `bootstrap.py harness` has replaced that copy with HEAD's, the older text
   stays: a settings file holding only the old text no longer counts as having the fragment (`holds_an_entry`) and is
   offered as available, and one holding other entries of it is reported current. A no to that fragment's own question
   in an `--update` that moves the harness ends the same way. #measured #silent-failure

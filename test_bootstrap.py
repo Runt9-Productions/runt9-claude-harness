@@ -23,7 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from bootstrap.menu import MenuState, unwrapped, wrapped
+from bootstrap.core import Component
+from bootstrap.menu import MenuState, Row, unwrapped, wrapped
 from bootstrap.registry import all_components
 from bootstrap.settings import updated_settings
 
@@ -386,6 +387,22 @@ def test_runs_with_the_script_directory_off_sys_path(sandbox: Sandbox) -> None:
     result = sandbox.run("--list", flags=("-P",))
 
     assert result.returncode == 0, result.stderr
+
+
+def test_python_without_curses_installs_named_components_and_stops_at_the_menu(sandbox: Sandbox) -> None:
+    # None in sys.modules makes `import curses` raise as it does on a Python built without it.
+    without_curses = (
+        "import runpy, sys; sys.modules['_curses'] = None; sys.argv = sys.argv[1:];"
+        " runpy.run_path(sys.argv[0], run_name='__main__')"
+    )
+
+    named = sandbox.run("harness", flags=("-c", without_curses))
+    menu = sandbox.run(flags=("-c", without_curses))
+
+    assert named.returncode == 0, named.stderr
+    assert sandbox.current.readlink() == Path("versions/0.1.0")
+    assert menu.returncode == 1
+    assert "the menu needs Python's curses module" in menu.stderr
 
 
 @pytest.mark.parametrize("variable", ["CLAUDE_CODE_SESSION_ID", "CLAUDECODE"])
@@ -1121,13 +1138,28 @@ def test_menu_opens_whatever_the_survey_cannot_read_and_shows_full_descriptions(
     assert text.endswith("Nothing picked.")
 
 
+def test_menu_warns_of_plugin_dirs_after_it_closes(sandbox: Sandbox) -> None:
+    with sandbox.run_in_terminal(env={"CLAUDE_CODE_PLUGIN_DIRS": "example-plugin-dirs"}) as terminal:
+        terminal.expect("plugin:example-one")
+        terminal.send(DOWN * 5 + b" \r")
+        terminal.expect("Install plugin:example-one? [y/N]")
+        terminal.send(b"y\r")
+        terminal.expect("CLAUDE_CODE_PLUGIN_DIRS is example-plugin-dirs")
+        exit_code = terminal.wait()
+        text = terminal.text()
+
+    assert exit_code == 0, text
+    assert "Installed plugin:example-one." in text
+
+
 def test_menu_scrolls_just_far_enough_to_show_the_cursor() -> None:
     # Called directly: the terminal text cannot tell which rows a scroll left on screen.
-    state = MenuState(rows=[])
-    state.cursor = 6
+    component = Component("example", "example summary", install=lambda run: None, description=lambda: "")
+    state = MenuState(rows=[Row(component, "", pickable=True)] * 7)
+    state.move(6)
     state.scroll(5)
     scrolled_down = state.top
-    state.cursor = 1
+    state.move(-5)
     state.scroll(5)
 
     assert scrolled_down == 2
