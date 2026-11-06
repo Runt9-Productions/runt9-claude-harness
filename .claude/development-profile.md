@@ -86,7 +86,8 @@ a knowledge base note already answers a question, this file points there.
 - Never run locally: none is barred. The version guard reads CI's merge checkout, so check the version rise by hand.
 - Pre-push: the installed `pre-push` hook runs on every push. It checks authorship and the branch prefix, then the
   leak scan, then a `public-leak` review through `claude -p` costing about $0.10 to $0.50. Any finding above Normal,
-  or any open question, refuses the push. It reads commit messages too. What CI fails that is cheapest to catch first:
+  or any open question, refuses the push. It reads commit messages too, and scans each commit on its own, so a hit
+  is cleared only by replacing the commit that holds it, not by a fix commit on top. What CI fails that is cheapest to catch first:
   a missing version rise, `ruff format`, and a note left unverified after its sources changed.
 - CI watch: with `GH_TOKEN` set (section 1) and `sha` the pushed commit,
 
@@ -179,7 +180,8 @@ pre-push gate trusts it, so a build never writes to it.
   `claude.botEmail`. Commit with
   `TZ=UTC git -c user.name="$(git config claude.botName)" -c user.email="$(git config claude.botEmail)" commit`;
   `TZ=UTC` keeps the machine's UTC offset out of the commit dates. `pre-commit` refuses any other author or
-  committer.
+  committer. Every command that writes a commit takes the same `-c` pair, `cherry-pick`, `revert` and `rebase`
+  included: they record the local identity as committer, which `pre-commit` does not see and `pre-push` refuses.
 - Messages and trailers: the trailer lines the harness supplies. A message states the change and its rule-level
   reason, with no decision ids and nothing from a private source; the pre-push review reads it.
 - Remote: `bot`, the HTTPS remote the bot pushes through. `origin` is SSH and the owner's. A push that
