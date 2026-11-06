@@ -178,6 +178,8 @@ jobs:
   plugins:
     needs: zizmor
     runs-on: ubuntu-24.04
+    # A process left running holds the runner in its orphan cleanup until GitHub's own limit.
+    timeout-minutes: 15
 
     defaults:
       run:
@@ -247,6 +249,21 @@ jobs:
             echo "::endgroup::"
           done
           exit "$status"
+
+      # A `claude` run can leave a process behind, which keeps the runner waiting in its orphan cleanup. The user's
+      # processes are listed first, so the log names a leftover this pattern misses, then Claude Code's are stopped.
+      - name: Stop what Claude Code left running
+        if: always()
+        run: |
+          ps -u "$(id -u)" -o pid,ppid,etime,args --forest
+          pids=$(pgrep -f -- "$RUNNER_TEMP/claude/" || true)
+          [[ -n $pids ]] || exit 0
+          ps -o pid,ppid,etime,args -p "${pids//$'\n'/,}"
+          # shellcheck disable=SC2086
+          kill $pids 2> /dev/null || true
+          sleep 2
+          # shellcheck disable=SC2086
+          kill -9 $pids 2> /dev/null || true
 
   # Runs even when a job it needs failed: with a plain `needs` this job would be skipped, and GitHub passes a
   # skipped required check.
