@@ -5,9 +5,8 @@ import type { On, PromptOrigin, PromptSubmitInput, SessionMessage, SessionRateLi
 const MINUTE_MS = 60_000
 // 2026-01-15 12:00 UTC, on a minute boundary so the note's minutes name the instant exactly.
 const START_MS = Date.UTC(2026, 0, 15, 12, 0)
-// Thirty minutes after START_MS falls on START_MS's local date in every zone; three days after never does.
+// Thirty minutes after START_MS falls on START_MS's local date in every zone.
 const SOON_MS = START_MS + 30 * MINUTE_MS
-const IN_THREE_DAYS_MS = START_MS + 3 * 24 * 60 * MINUTE_MS
 const NOTE = /^Local time: (\w+) (\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d) \(UTC([+-])(\d\d):(\d\d)\)\.(?: (.*))?$/
 
 const USER: PromptOrigin = { kind: 'composer' }
@@ -22,14 +21,14 @@ const PLUGIN_AS_USER: PromptOrigin = { kind: 'plugin', name: 'dictation', asUser
 const PROMPT_MESSAGE: SessionMessage = { role: 'user', text: 'next step', toolUses: [] }
 const SUMMARY_MESSAGE: SessionMessage = { role: 'user', text: 'a summary of the session so far', toolUses: [] }
 
-type World = { dropNext: boolean; windows: SessionRateLimit[]; registeredTools: string[] }
+type World = { dropNext: boolean; skipCompaction: boolean; windows: SessionRateLimit[]; registeredTools: string[] }
 
 /**
  * Stands for the engine: a prompt enters with the context it arrived with, unless `dropNext` is set, a compaction
- * leaves only its summary, and the usage windows are whatever `windows` holds.
+ * leaves only its summary, unless `skipCompaction` is set, and the usage windows are whatever `windows` holds.
  */
 function engine(on: On): World {
-  const world: World = { dropNext: false, windows: [], registeredTools: [] }
+  const world: World = { dropNext: false, skipCompaction: false, windows: [], registeredTools: [] }
   on('session.usage', () => ({ value: { startedAt: START_MS, context: { window: 200_000 }, rateLimits: world.windows } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('tool.register', (_, e) => {
@@ -41,7 +40,7 @@ function engine(on: On): World {
     world.dropNext = false
     return { drop: 'blocked by a settings hook' }
   })
-  on('session.compact', () => ({ messages: [SUMMARY_MESSAGE] }))
+  on('session.compact', () => (world.skipCompaction ? { skip: 'blocked by a PreCompact hook' } : { messages: [SUMMARY_MESSAGE] }))
   return world
 }
 
@@ -71,6 +70,13 @@ function resetLabel(resetMs: number, nowMs: number): string {
   const time = reset.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
   if (reset.toLocaleDateString('en-CA') === new Date(nowMs).toLocaleDateString('en-CA')) return time
   return `${reset.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`
+}
+
+/** The first local midnight after `ms`, in the zone the test runs in. */
+function nextLocalMidnight(ms: number): number {
+  const date = new Date(ms)
+  date.setHours(24, 0, 0, 0)
+  return date.getTime()
 }
 
 /**
@@ -108,6 +114,19 @@ test('the first prompt carries the local date and time, and with no usage window
   expect(note.rest).toBeUndefined()
 })
 
+// Either side of local midnight, so one of the two falls on another UTC date in any zone but UTC.
+test('the date and weekday are the local ones on either side of local midnight', async ($, on) => {
+  const clock = mock.clock(on, { now: START_MS })
+  engine(on)
+  const midnightMinute = (nextLocalMidnight(START_MS) - START_MS) / MINUTE_MS
+
+  const beforeMidnight = await submit($, clock, midnightMinute - 30, USER)
+  const afterMidnight = await submit($, clock, midnightMinute + 30, USER)
+
+  expect(parseNote(beforeMidnight?.[0]).instantMs).toBe(START_MS + (midnightMinute - 30) * MINUTE_MS)
+  expect(parseNote(afterMidnight?.[0]).instantMs).toBe(START_MS + (midnightMinute + 30) * MINUTE_MS)
+})
+
 test('the time joins the context other hooks attached, after it', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   engine(on)
@@ -139,11 +158,14 @@ test('prompts from other sessions, tasks and plugins get the time but are not th
   engine(on)
 
   await submit($, clock, 0, SDK)
-  await submit($, clock, 20, PEER)
-  await submit($, clock, 40, TASK)
-  await submit($, clock, 60, PLUGIN)
+  const fromPeer = await submit($, clock, 20, PEER)
+  const fromTask = await submit($, clock, 40, TASK)
+  const fromPlugin = await submit($, clock, 60, PLUGIN)
   const context = await submit($, clock, 85, PEER)
 
+  expect(parseNote(fromPeer?.[0]).instantMs).toBe(START_MS + 20 * MINUTE_MS)
+  expect(parseNote(fromTask?.[0]).instantMs).toBe(START_MS + 40 * MINUTE_MS)
+  expect(parseNote(fromPlugin?.[0]).instantMs).toBe(START_MS + 60 * MINUTE_MS)
   expect(parseNote(context?.[0]).rest).toBe("The user's previous message was 1 h 25 min ago.")
 })
 
@@ -170,6 +192,24 @@ test('the first prompt after a compaction carries the time, however soon it come
   expect(parseNote(context?.[0]).rest).toBe("The user's previous message was 5 min ago.")
 })
 
+test('a compaction of a subagent, one computed ahead of time, or one a hook skipped leaves the time where it was', async ($, on) => {
+  const clock = mock.clock(on, { now: START_MS })
+  const world = engine(on)
+
+  await submit($, clock, 0, USER)
+  await $.session.compact({ trigger: 'auto', agentId: 'agent-1', messages: [PROMPT_MESSAGE] })
+  const afterSubagent = await submit($, clock, 1, USER)
+  await $.session.compact({ trigger: 'precompute', messages: [PROMPT_MESSAGE] })
+  const afterPrecompute = await submit($, clock, 2, USER)
+  world.skipCompaction = true
+  await $.session.compact({ trigger: 'manual', messages: [PROMPT_MESSAGE] })
+  const afterSkipped = await submit($, clock, 3, USER)
+
+  expect(afterSubagent).toBeUndefined()
+  expect(afterPrecompute).toBeUndefined()
+  expect(afterSkipped).toBeUndefined()
+})
+
 test('a prompt that never entered does not hold back the time from the next one', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   const world = engine(on)
@@ -181,21 +221,26 @@ test('a prompt that never entered does not hold back the time from the next one'
   expect(parseNote(context?.[0]).rest).toBeUndefined()
 })
 
+// Resets either side of local midnight, so one falls on another UTC date than its local one in any zone but UTC.
 test('the time line carries each usage window, with its reset time when it has one', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   const world = engine(on)
+  const midnightMs = nextLocalMidnight(START_MS)
+  const tomorrowMs = midnightMs + MINUTE_MS
   world.windows = [
-    usageWindow('five_hour', 52, SOON_MS),
-    usageWindow('seven_day', 31.5, IN_THREE_DAYS_MS),
+    usageWindow('five_hour', 52, midnightMs - MINUTE_MS),
+    usageWindow('seven_day', 31.5, tomorrowMs),
     usageWindow('spend_limit', 104),
+    usageWindow('example_window', 7),
   ]
 
   const context = await submit($, clock, 0, USER)
 
   expect(context).toHaveLength(1)
-  const soon = resetLabel(SOON_MS, START_MS)
-  const inThreeDays = resetLabel(IN_THREE_DAYS_MS, START_MS)
-  expect(parseNote(context?.[0]).rest).toBe(`Plan usage: 5h 52% (resets ${soon}), 1wk 31.5% (resets ${inThreeDays}), spend 104%.`)
+  const tomorrow = new Date(tomorrowMs).toLocaleDateString('en-US', { weekday: 'short' })
+  expect(parseNote(context?.[0]).rest).toBe(
+    `Plan usage: 5h 52% (resets 23:59), 1wk 31.5% (resets ${tomorrow} 00:01), spend 104%, example_window 7%.`,
+  )
 })
 
 test('a time line sent before any usage figures comes again once they arrive, and one with figures waits its 15 minutes', async ($, on) => {
@@ -221,16 +266,19 @@ test('a window passing 90% adds one line to the next prompt that enters, and aga
   const world = engine(on)
   const nextPeriodMs = SOON_MS + 5 * 60 * MINUTE_MS
 
-  world.windows = [usageWindow('five_hour', 40, SOON_MS)]
+  // The seven-day window is past 90% throughout, so only the time line shows it.
+  const weekly = usageWindow('seven_day', 95, nextPeriodMs)
+
+  world.windows = [usageWindow('five_hour', 40, SOON_MS), weekly]
   await submit($, clock, 0, USER)
-  world.windows = [usageWindow('five_hour', 91, SOON_MS)]
+  world.windows = [usageWindow('five_hour', 91, SOON_MS), weekly]
   world.dropNext = true
   await submit($, clock, 1, USER)
   const crossed = await submit($, clock, 2, USER)
-  world.windows = [usageWindow('five_hour', 97, SOON_MS)]
+  world.windows = [usageWindow('five_hour', 97, SOON_MS), weekly]
   const samePeriod = await submit($, clock, 3, USER)
   // The session sat idle across the reset while other sessions spent the new window.
-  world.windows = [usageWindow('five_hour', 92, nextPeriodMs)]
+  world.windows = [usageWindow('five_hour', 92, nextPeriodMs), weekly]
   const nextPeriod = await submit($, clock, 4, USER)
 
   const startMinute = (minute: number) => START_MS + minute * MINUTE_MS
@@ -270,15 +318,20 @@ test('a window past 90% on a prompt that carries the time gets no line of its ow
   expect(after).toBeUndefined()
 })
 
-test('the tool the session registers answers with the local time and each window', async ($, on) => {
+test('the tool the session registers answers with the local time and each window, or that there are no figures yet', async ($, on) => {
   mock.clock(on, { now: START_MS })
   const world = engine(on)
-  world.windows = [usageWindow('five_hour', 52, SOON_MS)]
 
   await $.session.start({ cwd: '/work', surface: null, isInteractive: false })
-  const call = await $.tool.call({ tool: `mcp__session-context__${world.registeredTools[0]}` } as never)
+  const tool = `mcp__session-context__${world.registeredTools[0]}` as const
+  const beforeFigures = await $.tool.call({ tool, tool_use_id: 'toolu_01' })
+  world.windows = [usageWindow('five_hour', 52, SOON_MS)]
+  const call = await $.tool.call({ tool, tool_use_id: 'toolu_02' })
 
   expect(world.registeredTools).toHaveLength(1)
+  expect(beforeFigures.result).toBe(
+    'No plan usage figures: they arrive with the first model response, and an account off a subscription has none.',
+  )
   const report = parseNote(String(call.result))
   expect(report.instantMs).toBe(START_MS)
   expect(report.rest).toBe(`Plan usage: 5h 52% (resets ${resetLabel(SOON_MS, START_MS)}).`)
