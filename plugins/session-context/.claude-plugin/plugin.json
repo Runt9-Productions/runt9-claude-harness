@@ -1,0 +1,9 @@
+{
+  "name": "session-context",
+  "version": "0.2.0",
+  "description": "Puts the local time and the plan's usage beside a prompt, at most once every 15 minutes, warns once when a usage window passes 90%, and gives Claude a tool for the current usage",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "types": "./types/index.d.ts"
+}
