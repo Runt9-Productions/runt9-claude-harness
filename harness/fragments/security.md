@@ -18,9 +18,16 @@
   (`--force-with-lease` included), no `branch -D`, no deleting a remote branch or a tag, no rewriting a pushed commit,
   and no expiring the reflog or pruning unreachable objects. Lost commits are hard to get back even on the agent's own
   branch.
+- No recursive delete of the filesystem root, the home directory, a `.git` directory or a path outside the working
+  directories unless the user's message names that path; scratch locations and what this session created are not this
+  rule. Give the user the exact path and ask, and for `.git` use the git command that does the job (`git worktree
+  remove`, `git rebase --abort`). Nothing in the session can restore what such a delete destroys.
 - No remote shell or connection to infrastructure (a remote host, a database on one, a cluster or a cloud account's
   live resources) unless the user named that host or service for the task, and read-only use counts. A live system is
   outside the task until the user puts it inside.
+- A cloud instance metadata service (the link-local address and hostname cloud providers serve it from, in any spelling) is
+  reached only when the user names it for the task; use the cloud CLI with the credentials the user configured. The
+  service hands the machine's own credentials to any process that asks.
 - When proving a test the user asked for, a source edit that breaks one behaviour so its test can be seen to fail is
   reverted before anything is staged, committed or pushed, and nothing but running the tests happens while it is in
   place. A perturbation left in ships the bug its test exists to catch.
