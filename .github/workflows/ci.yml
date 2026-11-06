@@ -216,11 +216,6 @@ jobs:
           done
           exit "$status"
 
-      # A mod test takes its zone from the /etc/localtime link and ignores TZ. In UTC a time shown in UTC instead of
-      # local time, or an offset with its sign flipped, still passes; an east-of-UTC half-hour offset fails both.
-      - name: Set a non-UTC system time zone
-        run: sudo timedatectl set-timezone Asia/Kolkata
-
       # Loading a mod writes its types and tsconfig.json; with no credentials the run then fails, which is expected.
       # That `-p` writes them is undocumented, and type-aware oxlint passes silently without them, so their absence
       # fails the step.

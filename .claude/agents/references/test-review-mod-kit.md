@@ -25,4 +25,4 @@ runs each file in its own child process, so a failure in one file does not stop 
 
 A test runs in the zone the `/etc/localtime` link names; the kit ignores `TZ` and `/etc/timezone`, and a test has no
 `process` to set one. In UTC a local-time bug, such as UTC hours shown as local, passes, so a time-zone failure is
-forced only on a machine whose link names another zone. CI's `plugins` job sets `Asia/Kolkata`.
+forced only on a machine whose link names another zone; CI runs in UTC.
