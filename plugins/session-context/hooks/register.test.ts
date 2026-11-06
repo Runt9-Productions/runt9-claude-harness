@@ -64,12 +64,13 @@ function usageWindow(kind: string, percentUsed: number, resetMs?: number): Sessi
   return { kind, percentUsed, resetsAt: new Date(resetMs).toISOString() }
 }
 
-/** A reset time as the local clock shows it: 16:00 on the local date of `nowMs`, Mon 09:00 on any other. */
+/** A reset time as the local clock shows it: 16:00 on the local date of `nowMs`, 01-22 09:00 on any other. */
 function resetLabel(resetMs: number, nowMs: number): string {
   const reset = new Date(resetMs)
   const time = reset.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-  if (reset.toLocaleDateString('en-CA') === new Date(nowMs).toLocaleDateString('en-CA')) return time
-  return `${reset.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`
+  const resetDate = reset.toLocaleDateString('en-CA')
+  if (resetDate === new Date(nowMs).toLocaleDateString('en-CA')) return time
+  return `${resetDate.slice('YYYY-'.length)} ${time}`
 }
 
 /** The first local midnight after `ms`, in the zone the test runs in. */
@@ -237,10 +238,8 @@ test('the time line carries each usage window, with its reset time when it has o
   const context = await submit($, clock, 0, USER)
 
   expect(context).toHaveLength(1)
-  const tomorrow = new Date(tomorrowMs).toLocaleDateString('en-US', { weekday: 'short' })
-  expect(parseNote(context?.[0]).rest).toBe(
-    `Plan usage: 5h 52% (resets 23:59), 1wk 31.5% (resets ${tomorrow} 00:01), spend 104%, example_window 7%.`,
-  )
+  const tomorrow = resetLabel(tomorrowMs, START_MS)
+  expect(parseNote(context?.[0]).rest).toBe(`Plan usage: 5h 52% (resets 23:59), 1wk 31.5% (resets ${tomorrow}), spend 104%, example_window 7%.`)
 })
 
 test('a time line sent before any usage figures comes again once they arrive, and one with figures waits its 15 minutes', async ($, on) => {
@@ -261,33 +260,42 @@ test('a time line sent before any usage figures comes again once they arrive, an
   expect(afterFigures).toBeUndefined()
 })
 
-test('a window passing 90% adds one line to the next prompt that enters, and again only in its next period', async ($, on) => {
+test('a window passing 90% adds one line to the next prompt that enters, and again only once the reset it showed has passed', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   const world = engine(on)
-  const nextPeriodMs = SOON_MS + 5 * 60 * MINUTE_MS
+  // Inside the 15 minutes, so no time line comes between the readings.
+  const resetMs = START_MS + 10 * MINUTE_MS
+  const driftedResetMs = resetMs + 5_000
+  const nextPeriodMs = resetMs + 5 * 60 * MINUTE_MS
 
   // The seven-day window is past 90% throughout, so only the time line shows it.
   const weekly = usageWindow('seven_day', 95, nextPeriodMs)
 
-  world.windows = [usageWindow('five_hour', 40, SOON_MS), weekly]
+  world.windows = [usageWindow('five_hour', 40, resetMs), weekly]
   await submit($, clock, 0, USER)
-  world.windows = [usageWindow('five_hour', 91, SOON_MS), weekly]
+  world.windows = [usageWindow('five_hour', 91, resetMs), weekly]
   world.dropNext = true
   await submit($, clock, 1, USER)
   const crossed = await submit($, clock, 2, USER)
-  world.windows = [usageWindow('five_hour', 97, SOON_MS), weekly]
-  const samePeriod = await submit($, clock, 3, USER)
-  // The session sat idle across the reset while other sessions spent the new window.
+  // A reading with no figures, then one of the same period whose reset time is a few seconds off.
+  world.windows = []
+  await submit($, clock, 3, USER)
+  world.windows = [usageWindow('five_hour', 97, driftedResetMs), weekly]
+  const samePeriod = await submit($, clock, 4, USER)
+  // Idle across the reset: the figures are still the last response's, from the period that ended.
+  world.windows = [usageWindow('five_hour', 97, driftedResetMs), weekly]
+  const endedPeriod = await submit($, clock, 11, USER)
   world.windows = [usageWindow('five_hour', 92, nextPeriodMs), weekly]
-  const nextPeriod = await submit($, clock, 4, USER)
+  const nextPeriod = await submit($, clock, 12, USER)
 
   const startMinute = (minute: number) => START_MS + minute * MINUTE_MS
-  expect(crossed).toEqual([`Plan usage passed 90%: 5h 91% (resets ${resetLabel(SOON_MS, startMinute(2))}).`])
+  expect(crossed).toEqual([`Plan usage passed 90%: 5h 91% (resets ${resetLabel(resetMs, startMinute(2))}).`])
   expect(samePeriod).toBeUndefined()
-  expect(nextPeriod).toEqual([`Plan usage passed 90%: 5h 92% (resets ${resetLabel(nextPeriodMs, startMinute(4))}).`])
+  expect(endedPeriod).toBeUndefined()
+  expect(nextPeriod).toEqual([`Plan usage passed 90%: 5h 92% (resets ${resetLabel(nextPeriodMs, startMinute(12))}).`])
 })
 
-test('a window with no reset time warns again after it falls back under 90%', async ($, on) => {
+test('a window with no reset time warns again only after a reading shows it back under 90%', async ($, on) => {
   const clock = mock.clock(on, { now: START_MS })
   const world = engine(on)
 
@@ -295,12 +303,17 @@ test('a window with no reset time warns again after it falls back under 90%', as
   await submit($, clock, 0, USER)
   world.windows = [usageWindow('spend_limit', 95)]
   const crossed = await submit($, clock, 1, USER)
+  world.windows = []
+  await submit($, clock, 2, USER)
+  world.windows = [usageWindow('spend_limit', 95)]
+  const afterEmpty = await submit($, clock, 3, USER)
   world.windows = [usageWindow('spend_limit', 10)]
-  const fellBack = await submit($, clock, 2, USER)
+  const fellBack = await submit($, clock, 4, USER)
   world.windows = [usageWindow('spend_limit', 90)]
-  const crossedAgain = await submit($, clock, 3, USER)
+  const crossedAgain = await submit($, clock, 5, USER)
 
   expect(crossed).toEqual(['Plan usage passed 90%: spend 95%.'])
+  expect(afterEmpty).toBeUndefined()
   expect(fellBack).toBeUndefined()
   expect(crossedAgain).toEqual(['Plan usage passed 90%: spend 90%.'])
 })

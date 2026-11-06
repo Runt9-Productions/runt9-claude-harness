@@ -17,10 +17,15 @@ const PLAN_USAGE: ToolSpec = {
 const lastAttachedAt = atom({ plugin: 'session-context', key: 'lastAttachedAt' } as const, null)
 const lastLineHadUsage = atom({ plugin: 'session-context', key: 'lastLineHadUsage' } as const, false)
 const lastUserMessageAt = atom({ plugin: 'session-context', key: 'lastUserMessageAt' } as const, null)
-const windowsPastAlert = atom({ plugin: 'session-context', key: 'windowsPastAlert' } as const, {})
+const warnedWindows = atom({ plugin: 'session-context', key: 'warnedWindows' } as const, {})
 
 function twoDigits(value: number): string {
   return String(value).padStart(2, '0')
+}
+
+// 11-04
+function monthDay(date: Date): string {
+  return `${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}`
 }
 
 // 14:32
@@ -42,7 +47,7 @@ function utcOffset(date: Date): string {
 function localTime(now: EpochMs): string {
   const date = new Date(now)
   const weekday = date.toLocaleDateString('en-US', { weekday: 'long' })
-  const day = `${date.getFullYear()}-${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}`
+  const day = `${date.getFullYear()}-${monthDay(date)}`
   return `Local time: ${weekday} ${day} ${clockTime(date)} (${utcOffset(date)}).`
 }
 
@@ -56,13 +61,12 @@ function duration(ms: number): string {
   return `${hours} h ${minutes} min`
 }
 
-// 16:00 on today's local date, Mon 09:00 on any other.
+// 16:00 on today's local date, 11-11 09:00 on any other.
 function resetTime(resetsAt: string, now: EpochMs): string {
   const reset = new Date(resetsAt)
   const isToday = reset.toDateString() === new Date(now).toDateString()
   if (isToday) return clockTime(reset)
-  const weekday = reset.toLocaleDateString('en-US', { weekday: 'short' })
-  return `${weekday} ${clockTime(reset)}`
+  return `${monthDay(reset)} ${clockTime(reset)}`
 }
 
 // 5h 52% (resets 16:00), or 5h 52% from a window that gives no reset time.
@@ -72,7 +76,7 @@ function windowUsage(window: SessionRateLimit, now: EpochMs): string {
   return `${usage} (resets ${resetTime(window.resetsAt, now)})`
 }
 
-// Plan usage: 5h 52% (resets 16:00), 1wk 31% (resets Mon 09:00).
+// Plan usage: 5h 52% (resets 16:00), 1wk 31% (resets 11-09 09:00).
 function planUsage(windows: readonly SessionRateLimit[], now: EpochMs): string {
   const usages = windows.map(window => windowUsage(window, now))
   return `Plan usage: ${usages.join(', ')}.`
@@ -96,15 +100,35 @@ function isPastAlert(window: SessionRateLimit): boolean {
   return window.percentUsed >= ALERT_PERCENT
 }
 
-// A window's reset time names its period, so a later one is a new period that may cross 90% again. A window that
-// gives none rearms only by falling back under 90%.
 function periodsOf(windows: readonly SessionRateLimit[]): WindowPeriods {
   return Object.fromEntries(windows.map(window => [window.kind, window.resetsAt ?? null]))
 }
 
-function isAlertDue(window: SessionRateLimit, alerted: WindowPeriods): boolean {
+function hasPassed(resetsAt: string, now: EpochMs): boolean {
+  return Date.parse(resetsAt) <= now
+}
+
+// Later readings of one period can give a reset time a few seconds off the warned one, so only the clock passing the
+// warned reset ends the period. A reading that leaves the window out, as an empty one does, says nothing about it.
+function isStillWarned(kind: string, warnedResetsAt: string | null, windows: readonly SessionRateLimit[], now: EpochMs): boolean {
+  if (warnedResetsAt !== null) return !hasPassed(warnedResetsAt, now)
+  const reading = windows.find(window => window.kind === kind)
+  if (reading === undefined) return true
+  return isPastAlert(reading)
+}
+
+function stillWarned(warned: WindowPeriods, windows: readonly SessionRateLimit[], now: EpochMs): WindowPeriods {
+  const kept = Object.entries(warned).filter(([kind, warnedResetsAt]) => isStillWarned(kind, warnedResetsAt, windows, now))
+  return Object.fromEntries(kept)
+}
+
+// The figures come from the last model response, so the first prompt after an idle spell can still read a period
+// that has ended.
+function isAlertDue(window: SessionRateLimit, warned: WindowPeriods, now: EpochMs): boolean {
   if (!isPastAlert(window)) return false
-  return alerted[window.kind] !== (window.resetsAt ?? null)
+  if (Object.hasOwn(warned, window.kind)) return false
+  if (window.resetsAt === undefined) return true
+  return !hasPassed(window.resetsAt, now)
 }
 
 // The tool's answer: the local time, then the usage, so a reset at 16:00 reads against today's date.
@@ -173,10 +197,11 @@ export const register: Register = on => {
     const attachedAt: EpochMs | null = await read($, lastAttachedAt)
     const hadUsage: boolean = await read($, lastLineHadUsage)
     const userMessageAt: EpochMs | null = await read($, lastUserMessageAt)
-    const alerted: WindowPeriods = await read($, windowsPastAlert)
+    const lastWarned: WindowPeriods = await read($, warnedWindows)
+    const warned = stillWarned(lastWarned, rateLimits, now)
     const hasUsage = rateLimits.length > 0
     const isTimeDue = isTimeLineDue(attachedAt, now, hasUsage && !hadUsage)
-    const alertsDue = rateLimits.filter(window => isAlertDue(window, alerted))
+    const alertsDue = rateLimits.filter(window => isAlertDue(window, warned, now))
     let note: string | undefined
     if (isTimeDue) note = timeNote(now, userMessageAt, rateLimits)
     else if (alertsDue.length > 0) note = alertNote(alertsDue, now)
@@ -189,8 +214,7 @@ export const register: Register = on => {
       await update($, lastLineHadUsage, () => hasUsage)
     }
     if (isUserMessage(e.origin)) await update($, lastUserMessageAt, () => now)
-    const pastAlert = rateLimits.filter(isPastAlert)
-    await update($, windowsPastAlert, () => periodsOf(pastAlert))
+    await update($, warnedWindows, () => ({ ...warned, ...periodsOf(alertsDue) }))
     return result
   })
 

@@ -25,6 +25,14 @@ The server drives a Chrome that is already installed; the plugin does not instal
 
 Every flag above appears in the `--help` of version 1.12.0.
 
+It also sets two environment variables, each read by version 1.12.0 as on when set to any non-empty value:
+
+- `CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS`: the server skips its daily check of npm for a newer version, which would
+  otherwise run in a detached child process.
+- `CHROME_DEVTOOLS_MCP_NO_CONFIG_DISCOVERY`: the server reads no config file it finds on its own, such as
+  `~/.config/cd4a/config.json`. Without it, any option such a file sets that the flags above do not, such as the
+  paths the file tools may reach or the URLs the browser may open, applies without notice.
+
 ## Tool names
 
 The server is named `chrome-devtools` inside this plugin, so its tools are named
@@ -37,5 +45,7 @@ the same name, or Claude sees two browsers.
 ## Raising the pin
 
 The version is pinned exactly, so an update to the server reaches no one until the pin changes. Before raising it,
-check each flag above against the new version's `npx chrome-devtools-mcp@<version> --help`, and raise the plugin's
+check each flag above against the new version's `npx chrome-devtools-mcp@<version> --help`, check each environment
+variable against its source (`build/src/utils/check-for-updates.js` and `build/src/config/ConfigLocator.js` in
+1.12.0), and raise the plugin's
 own version in `.claude-plugin/plugin.json` with it.
