@@ -19,8 +19,11 @@ as UNKNOWN.
 
 --stale-in A..B is the merge gate, and implies --stale. A note fails when a commit in A..B changes one of its sources
 and neither that commit nor a later one in its history edits the note leaving `verified` on or after the change's
-date, so a source change after the note's last edit fails even on the same day. UNKNOWN fails, and staleness from
-before A never does.
+date, so a source change after the note's last edit fails even on the same day. A commit in A..B, merges left out,
+that is that commit or a later one in its history and carries the trailer `Reverified: <note path>`, with the path as
+the validator shows it, counts as such an edit. The trailer satisfies the gate only: --stale keeps warning until
+`verified` moves, since a squash merge drops a branch's commit messages and the trailer with them. UNKNOWN fails, and
+staleness from before A never does.
 
 Exit status: 0 no errors, whatever the warnings; 1 at least one error; 2 nothing could be checked, because the root
 is missing or holds no notes, kb.toml is unreadable or invalid, the format file cannot be read, or the range does
@@ -70,6 +73,7 @@ KEY_ABSENT = "no"
 RELATIONS_HEADING = "Relations"
 SCOPE_OPENER = "**Scope.**"
 GIT_TIMEOUT_SECONDS = 30
+REVERIFIED_TRAILER = "Reverified"
 # A date one day past UTC today is still today in some timezone.
 FUTURE_GRACE = datetime.timedelta(days=1)
 
@@ -204,6 +208,16 @@ class Git:
         result = self.run("show", f"{commit}:{path}")
         frontmatter = parse_frontmatter(result.stdout) if result.returncode == 0 else None
         return as_date(frontmatter.get("verified")) if frontmatter else None
+
+    def reverified_in(self, span: str, path: str) -> list[str]:
+        """Commits in the span, merges left out, whose trailers include `Reverified: <path>`."""
+        trailers = f"%(trailers:key={REVERIFIED_TRAILER},valueonly,unfold,separator=%x09)"
+        found = []
+        for line in self.output("log", "--no-merges", f"--format=%H%x09{trailers}", span).splitlines():
+            sha, *notes = line.split("\t")
+            if path in notes:
+                found.append(sha)
+        return found
 
     def commits(self, *args: str) -> list[tuple[str, datetime.date]]:
         """Commits from `git log`, merges left out, each as (sha, the committer's own date)."""
@@ -718,9 +732,14 @@ def note_edits(git: Git, path: str, revision: str) -> list[tuple[str, datetime.d
     return edits
 
 
-def is_reverified(git: Git, change: str, date: datetime.date, edits: list[tuple[str, datetime.date]]) -> bool:
-    """Whether the change itself, or a commit descending from it, edits the note leaving `verified` on or after date."""
-    return any(verified >= date and git.is_ancestor(change, edit) for edit, verified in edits)
+def is_reverified(
+    git: Git, change: str, date: datetime.date, edits: list[tuple[str, datetime.date]], trailers: list[str]
+) -> bool:
+    """Whether the change itself, or a commit descending from it, edits the note leaving `verified` on or after date,
+    or carries the note's `Reverified` trailer."""
+    covering = [edit for edit, verified in edits if verified >= date]
+    covering.extend(trailers)
+    return any(git.is_ancestor(change, commit) for commit in covering)
 
 
 def find_stale(git: Git, _path: str, sources: list[str], verified: datetime.date) -> str | None:
@@ -733,16 +752,18 @@ def find_stale(git: Git, _path: str, sources: list[str], verified: datetime.date
 
 def find_ungated(git: Git, path: str, sources: list[str], _verified: datetime.date, span: str) -> str | None:
     edits = note_edits(git, path, span)
+    trailers = git.reverified_in(span, path)
     uncovered = []
     for sha, date in git.commits(span, "--", *sources):
-        if not is_reverified(git, sha, date, edits):
+        if not is_reverified(git, sha, date, edits, trailers):
             uncovered.append(sha)
     if not uncovered:
         return None
     oldest = uncovered[-1][:12]
     return (
         f"{len(uncovered)} commit(s) in the range, oldest {oldest}, change its sources and no commit after them edits "
-        "the note with `verified` on or after their date; re-read the sources, then commit the note"
+        f"the note with `verified` on or after their date or carries `{REVERIFIED_TRAILER}: {path}`; re-read the "
+        "sources, then commit the note or the trailer"
     )
 
 

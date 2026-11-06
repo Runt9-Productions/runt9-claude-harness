@@ -65,7 +65,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/scripts/validate.py" --root .
   git call). UNKNOWN is never clean.
 - `--stale-in A..B` is the merge gate, which CI runs over a pull request's own commits. It fails a note when a
   commit in the range changes a source and no commit from that one onwards edits the note with `verified` on or after
-  its date. Merge commits never count as changing a source.
+  its date, or carries the trailer `Reverified: <note path>`. Merge commits never count as changing a source.
 - It needs PyYAML. If the import fails, tell the user to install it; never install it yourself.
 
 ## Re-verifying a stale note
@@ -74,6 +74,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/skills/reference-kb/scripts/validate.py" --root .
 2. Re-read the changed parts.
 3. Re-check only the claims resting on them, and correct the ones that are now wrong.
 4. Move `verified` to today, and say in the Scope line which claims were carried forward without a re-check.
+
+When the change broke no claim, the merge gate also passes with no edit: add the trailer `Reverified: <note path>`
+to the last paragraph of a commit message at or after the change, one trailer per note. `verified` stays, so
+`--stale` keeps reporting a change dated after it.
 
 A frontmatter-only edit, such as rebuilding `sources`, never moves `verified`. Any commit that edits a note counts
 as re-verifying the source changes before it whose date is on or before `verified`, so check those changes before
