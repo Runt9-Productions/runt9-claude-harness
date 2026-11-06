@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import type { SessionAppendInput } from 'claude-code'
 
 import { HELPER, JUDGE_PROMPT, ROOT, SCOUT, bashResult, carried, checkFile, endTurn, engine, prompt, recordOf, reply } from './test-support'
 
@@ -39,6 +40,28 @@ test('where a surface draws the judgment waits for the hook to return, and a run
   await prompt($, 'THIRD-ASK')
   await $.turn.complete({ ...turnEnd, turnId: 'synthetic-turn-3' })
   expect(world.calls).toHaveLength(2)
+})
+
+test("an unstamped prompt is the person's only as the main session's own prompt in a run with no surface", async ($, on) => {
+  const world = engine(on, { alpha: checkFile('turn-end', 'prompts') }, [SCOUT])
+  world.settings = '{ "judgeHeadless": true }'
+  await prompt($, 'TERMINAL-ASK', undefined, 'unclassified')
+  await endTurn($, world)
+  expect(recordOf(world.calls[0])).toContain('[prompt from another agent]\nTERMINAL-ASK')
+
+  world.surfaces = []
+  const unstamped = (text: string): SessionAppendInput['message'] => ({ type: 'user', role: 'user', content: [{ type: 'text', text }] })
+  await prompt($, 'OPERATOR-ASK', undefined, 'unclassified')
+  await $.session.append({ message: { ...unstamped('META-NOTICE'), isMeta: true }, door: 'prompt', origin: { kind: 'unclassified' }, uuid: crypto.randomUUID() })
+  await $.session.append({ message: unstamped('MID-TURN-DELIVERY'), door: 'delivery', origin: { kind: 'unclassified' }, uuid: crypto.randomUUID() })
+  await endTurn($, world)
+  const record = recordOf(world.calls[1])
+  expect(record).toContain('[prompt from person]\nOPERATOR-ASK')
+  for (const other of ['META-NOTICE', 'MID-TURN-DELIVERY']) expect(record).toContain(`[prompt from another agent]\n${other}`)
+
+  await prompt($, 'SCOUT-BRIEF', SCOUT.id, 'unclassified')
+  await endTurn($, world, SCOUT.id)
+  expect(recordOf(world.calls[2])).toContain('[prompt from lead]\nSCOUT-BRIEF')
 })
 
 test("the record holds only what the batch's checks read, each item cut short, with a refused call's kind", async ($, on) => {

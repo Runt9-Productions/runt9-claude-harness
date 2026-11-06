@@ -113,6 +113,19 @@ async function addItem<T extends ActivityItem>($: EngineInterface, id: string, m
 /** Text as the judge may read it: secrets redacted, then cut to `limit`. */
 const shown = (text: string, limit: number) => cut(redacted(text).text, limit)
 
+/**
+ * Whether an unstamped prompt is the operator's: a `-p` run's prompt reaches the session `unclassified`, not `sdk` as
+ * the kit types say. A notice the engine queues unstamped is meta.
+ */
+async function isOperatorPrompt($: EngineInterface, row: SessionAppendInput): Promise<boolean> {
+  if (row.origin.kind !== 'unclassified') return false
+  if (row.door !== 'prompt') return false
+  if (row.agentId !== undefined) return false
+  if (row.message.isMeta === true) return false
+  // A session that draws somewhere has a composer, which stamps the person's prompts.
+  return (await $.session.surfaces()).length === 0
+}
+
 /** Keeps a row as a prompt or a reply when it is one: a prompt someone sent the agent, or the agent's own text. */
 export async function captureRow($: EngineInterface, row: SessionAppendInput) {
   const id = activityId(row.agentId)
@@ -122,7 +135,8 @@ export async function captureRow($: EngineInterface, row: SessionAppendInput) {
     return
   }
   if (row.door !== 'prompt' && row.door !== 'delivery') return
-  const sender = SENDERS[row.origin.kind]
+  const isOperator = await isOperatorPrompt($, row)
+  const sender = isOperator ? PERSON : SENDERS[row.origin.kind]
   if (sender === undefined) return
   const text = textOf(row.message)
   if (text === '') return
