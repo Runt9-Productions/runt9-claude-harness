@@ -35,6 +35,10 @@ Rulings for building the `watcher` plugin. Platform facts measured for it that o
   body of one or two sentences that is its judging prompt. Precedence is machine-local, then repository, then shipped,
   by file name (owner, 2026-11-06): Haiku judges best on short criteria, and shipping many small checks at once is
   cheap.
+- [decision] The repository's checks stay, and a toast once per repository in a run names the shipped checks they
+  turn off or replace and the checks they add, counting only those still in force (owner, 2026-11-07): a cloned
+  repository can turn off a shipped check or name a costly model, and the toast makes that visible without dropping
+  per-project tuning.
 - [decision] One judge call per trigger carries every check subscribed to it, with one structured answer per check
   (owner, 2026-11-06): a call per check would multiply cost by the number of checks.
 - [decision] Every flag is a board decision offering "Send to the session", "Useful" and "Noise" (owner, 2026-11-06).

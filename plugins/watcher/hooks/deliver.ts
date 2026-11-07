@@ -93,7 +93,8 @@ function nudgeText(finding: Finding, to: Addressees): string {
 function sentText(flag: PostedFlag, note: string | undefined): string {
   return [
     `[watcher] The owner sends you this from the watcher's "${flag.check}" check, a model reading ${whoseWork(flag.teammate)}: ${flag.summary}`,
-    evidenceLine(quoteOf(flag.evidence)),
+    // Quoted already when the flag was posted; a second cut would replace the count it gives.
+    evidenceLine(flag.evidence),
     ...(note === undefined ? [] : [`The owner's note: ${note}`]),
   ].join('\n')
 }
@@ -163,6 +164,13 @@ export async function noteMainTurn($: EngineInterface, isInTurn: boolean) {
   await update($, isMainInTurn, () => isInTurn)
 }
 
+/** Toasts and logs that a send the owner pressed did not arrive, since the owner otherwise believes it did. */
+function reportUnsent($: EngineInterface, posted: PostedFlag, reason: string) {
+  const text = `could not send ${posted.decisionId} to ${posted.recipient}: ${reason}`
+  $.ui.toast(`watcher ${text}`)
+  log($, text)
+}
+
 /**
  * Tells the loop the flag was about. An idle main session gets it as a prompt, which starts a turn; a running one
  * reads it at its next step.
@@ -172,11 +180,11 @@ async function sendToSession($: EngineInterface, posted: PostedFlag, note: strin
   const isPrompted = posted.agentId === undefined && !(await read($, isMainInTurn))
   if (isPrompted) {
     const submitted = await $.prompt.submit({ text })
-    if (submitted.drop !== undefined) log($, `could not send ${posted.decisionId} to ${posted.recipient}: ${submitted.drop}`)
+    if (submitted.drop !== undefined) reportUnsent($, posted, submitted.drop)
     return
   }
   const failure = await tell($, posted.agentId, text)
-  if (failure !== undefined) log($, `could not send ${posted.decisionId} to ${posted.recipient}: ${failure}`)
+  if (failure !== undefined) reportUnsent($, posted, failure)
 }
 
 /** Acts on the option the owner pressed, a send counting as useful too; Dismiss and a note sent alone change nothing. */
@@ -192,20 +200,22 @@ async function act($: EngineInterface, posted: PostedFlag, decision: BoardDecisi
   }
 }
 
+const isWaitingIn = (decisions: readonly BoardDecision[], id: string) => decisions.some(decision => decision.id === id && decision.answer === undefined)
+
 /**
  * Reads the owner's answers to the watcher's own flags from a write of board's decisions that landed: each one
- * answered in `value` and waiting in `previous`. A flag whose decision is gone, answered or withdrawn, is forgotten.
+ * answered in `value` and waiting in `previous`. A flag whose decision this write took from waiting, by answering or
+ * withdrawing it, is forgotten. A flag absent from `previous` is kept, since it may have been posted after the write.
  */
 export async function readBoardAnswers($: EngineInterface, previous: readonly BoardDecision[], value: readonly BoardDecision[]) {
-  const wasWaiting = (id: string) => previous.some(decision => decision.id === id && decision.answer === undefined)
   const answered = value
     .filter(decision => decision.plugin === 'watcher')
     .filter(decision => decision.answer !== undefined)
-    .filter(decision => wasWaiting(decision.id))
-  const isStillWaiting = (posted: PostedFlag) => value.some(decision => decision.id === posted.decisionId && decision.answer === undefined)
+    .filter(decision => isWaitingIn(previous, decision.id))
+  const isSettled = (posted: PostedFlag) => isWaitingIn(previous, posted.decisionId) && !isWaitingIn(value, posted.decisionId)
   const all = await waitingFlags($)
-  if (answered.length === 0 && all.every(isStillWaiting)) return
-  await keepFlags($, isStillWaiting)
+  if (answered.length === 0 && !all.some(isSettled)) return
+  await keepFlags($, posted => !isSettled(posted))
   for (const decision of answered) {
     const posted = all.find(entry => entry.decisionId === decision.id)
     if (posted === undefined) {

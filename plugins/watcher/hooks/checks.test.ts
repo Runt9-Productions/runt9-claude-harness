@@ -31,7 +31,7 @@ function criteriaOf(call: ModelCompleteInput | undefined, name: string): string 
   return body.slice(0, body.search(/\n\n(###|## )/))
 }
 
-test('a repository check replaces a shipped one and a machine-local one replaces both, and an empty body disables', async ($, on) => {
+test('a repository check replaces a shipped one and a machine-local one replaces both, an empty body disables, and what the repository changes in force is toasted once per repository', async ($, on) => {
   const world = engine(on, { alpha: checkFile('shipped alpha'), bravo: checkFile('shipped bravo'), charlie: checkFile('shipped charlie') })
   world.files = {
     [`${REPOSITORY_DIR}/alpha.md`]: checkFile('repository alpha'),
@@ -45,7 +45,18 @@ test('a repository check replaces a shipped one and a machine-local one replaces
   const [call] = await judgedCalls($, world)
   expect(carriedBy(call)).toEqual(['alpha', 'delta'])
   expect([criteriaOf(call, 'alpha'), criteriaOf(call, 'delta')]).toEqual(['machine alpha', 'repository delta'])
-  expect(world.toasts).toEqual([])
+  // The machine-local alpha overrides the repository's, so the repository is not said to replace it.
+  const ownToast = 'watcher: this repository turns off bravo and adds delta'
+  expect(world.toasts).toEqual([ownToast])
+
+  await judgedCalls($, world)
+  expect(world.toasts).toEqual([ownToast])
+  const other = `${ROOT}-other`
+  world.top = other
+  // Another repository changing the same checks is told of all the same.
+  world.files = { [`${other}/.claude/watcher/checks/bravo.md`]: '', [`${other}/.claude/watcher/checks/delta.md`]: checkFile('other delta') }
+  await judgedCalls($, world)
+  expect(world.toasts).toEqual([ownToast, ownToast])
 })
 
 test("a check written in the spec's format reads with its comments left out, and one naming no model gets haiku", async ($, on) => {

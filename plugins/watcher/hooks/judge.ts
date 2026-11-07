@@ -31,8 +31,8 @@ const MAX_ANSWER_TOKENS = 4096
 
 const JUDGE_TIMEOUT_MS = 60_000
 
-// A session that draws somewhere judges once the hook has returned, so the model call never holds the agent's turn
-// or tool call.
+// A session that draws somewhere judges once the hook has returned, so neither gathering the inputs nor the model
+// call holds the agent's turn or tool call.
 const AFTER_HOOK_RETURNS_MS = 1
 
 // How much of an answer that could not be read the debug log shows.
@@ -212,7 +212,8 @@ function answerObject(text: string): unknown {
 
 function verdictOf(entry: unknown, byName: ReadonlyMap<string, Check>): Verdict {
   if (typeof entry !== 'object' || entry === null) throw new Error(`the entry ${JSON.stringify(entry)} is not an object`)
-  const { name, raised, confidence, summary, evidence, repeats } = entry as Record<string, unknown>
+  // A missing evidence or repeats takes its quiet value, so one field left out does not lose a raised finding.
+  const { name, raised, confidence, summary, evidence = '', repeats = false } = entry as Record<string, unknown>
   const check = typeof name === 'string' ? byName.get(name) : undefined
   if (check === undefined) throw new Error(`an entry names ${JSON.stringify(name)}, which this call did not carry`)
   if (typeof raised !== 'boolean') throw new Error(`"${check.name}" has "raised" ${JSON.stringify(raised)}, not true or false`)
@@ -308,25 +309,20 @@ async function judgeBatches($: EngineInterface, batches: readonly Batch[], judge
   }
 }
 
-async function prepare($: EngineInterface, judged: Judged, given: readonly ActivityItem[] | undefined) {
-  const { agentId, trigger } = judged
-  const roster = await $.agent.list()
-  const teammate = agentId === undefined ? undefined : roster.find(agent => agent.id === agentId)
-  if (agentId !== undefined && teammate?.teammateId === undefined) {
-    // Only the main session and teammates are judged. A subagent's run is one turn, so its end frees its capture.
-    if (trigger === 'turn-end') await dropActivity($, agentId)
-    return
-  }
-  const settings = await readSettings($)
-  // A session with no surface is a -p or SDK run, whose flags nobody reads.
-  const isHeadless = (await $.session.surfaces()).length === 0
-  if (isHeadless && !settings.judgeHeadless) return
-  const checks = await loadChecks($)
-  const subscribed = checks.filter(check => check.triggers.includes(trigger)).filter(check => fitsAgent(check, teammate !== undefined))
-  if (subscribed.length === 0) return
-  const agentKey = activityId(agentId)
-  const window = given ?? (await takeWindow($, agentKey, trigger))
-  const inputs = await gatherInputs($, readsOf(subscribed), window, rosterText(roster, agentId), agentKey)
+/** What a judgment takes at its event: the roster, the teammate judged if any, the checks subscribed and the window. */
+type Taken = {
+  roster: readonly AgentInfo[]
+  teammate: AgentInfo | undefined
+  settings: Settings
+  subscribed: readonly Check[]
+  window: readonly ActivityItem[]
+}
+
+/** Gathers what the checks read, builds a call per model and judges them. */
+async function judgeTaken($: EngineInterface, judged: Judged, taken: Taken) {
+  const { roster, teammate, settings, subscribed, window } = taken
+  const agentKey = activityId(judged.agentId)
+  const inputs = await gatherInputs($, readsOf(subscribed), window, rosterText(roster, judged.agentId), agentKey)
   const answerable = subscribed.filter(check => hasItsInputs(check, inputs))
   const frame: Frame = {
     instructions: await $.fs.read(`${$.plugin.root}/${JUDGE_FILE}`),
@@ -344,11 +340,36 @@ async function prepare($: EngineInterface, judged: Judged, given: readonly Activ
     .map(([model, group], index) => batchFor(model, group, frame, index === goalGroup))
     .filter(batch => batch !== undefined)
   if (batches.length === 0) return
-  const outlet: Outlet = { settings, to: addresseesFor(roster, teammate, trigger) }
+  const outlet: Outlet = { settings, to: addresseesFor(roster, teammate, judged.trigger) }
+  await judgeBatches($, batches, judged, outlet)
+}
+
+/**
+ * Runs the cheap gates and cuts the window at the event, which a later cut would widen. Where a surface draws, the
+ * rest runs once the hook has returned.
+ */
+async function prepare($: EngineInterface, judged: Judged, given: readonly ActivityItem[] | undefined) {
+  const { agentId, trigger } = judged
+  const roster = await $.agent.list()
+  const teammate = agentId === undefined ? undefined : roster.find(agent => agent.id === agentId)
+  if (agentId !== undefined && teammate?.teammateId === undefined) {
+    // Only the main session and teammates are judged. A subagent's run is one turn, so its end frees its capture.
+    if (trigger === 'turn-end') await dropActivity($, agentId)
+    return
+  }
+  const settings = await readSettings($)
+  // A session with no surface is a -p or SDK run, whose flags nobody reads.
+  const isHeadless = (await $.session.surfaces()).length === 0
+  if (isHeadless && !settings.judgeHeadless) return
+  const checks = await loadChecks($)
+  const subscribed = checks.filter(check => check.triggers.includes(trigger)).filter(check => fitsAgent(check, teammate !== undefined))
+  if (subscribed.length === 0) return
+  const window = given ?? (await takeWindow($, activityId(agentId), trigger))
+  const taken: Taken = { roster, teammate, settings, subscribed, window }
   // A headless run ends as soon as its last turn does and would cut a judgment left for later, so where the setting
   // has it judged, it judges before the hook returns.
-  if (isHeadless) await judgeBatches($, batches, judged, outlet)
-  else $.clock.after(AFTER_HOOK_RETURNS_MS, () => void loggingFailure($, judged, () => judgeBatches($, batches, judged, outlet)))
+  if (isHeadless) await judgeTaken($, judged, taken)
+  else $.clock.after(AFTER_HOOK_RETURNS_MS, () => void loggingFailure($, judged, () => judgeTaken($, judged, taken)))
 }
 
 /** Runs `work`, writing a failure to the debug log rather than letting it fail the session's event or go unseen. */

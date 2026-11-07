@@ -21,14 +21,17 @@ test('one call per model carries every check subscribed to the trigger and to th
   expect(world.calls[0]?.prompt).toContain('Criteria of a synthetic check.')
 })
 
-test('where a surface draws the judgment waits for the hook to return, and a run with none is judged only when the setting asks, before it returns', async ($, on) => {
+test('where a surface draws the judgment, from reading its inputs on, waits for the hook to return, and a run with none is judged only when the setting asks, before it returns', async ($, on) => {
   const world = engine(on, { alpha: checkFile('turn-end', 'prompts') })
   const turnEnd = { answer: '', durationMs: 1, isAborted: false, reason: 'answer' } as const
+  const judgeReads = () => world.reads.filter(path => path.endsWith('/judge.md'))
   await prompt($, 'FIRST-ASK')
   await $.turn.complete({ ...turnEnd, turnId: 'synthetic-turn-1' })
   expect(world.calls).toEqual([])
+  expect(judgeReads()).toEqual([])
   await world.clock.advance(10)
   expect(world.calls).toHaveLength(1)
+  expect(judgeReads()).toHaveLength(1)
 
   world.surfaces = []
   await prompt($, 'SECOND-ASK')
@@ -186,10 +189,10 @@ test('a failure in a judgment finished after the hook returned is written to the
   expect(world.logs.filter(line => line.startsWith('watcher could not judge the main session at turn-end'))).toHaveLength(1)
 })
 
-test('a raised verdict is logged with its summary, and an answer that cannot be read is logged once and dropped', async ($, on) => {
+test('a raised verdict is logged with its summary, even with its evidence and repeats left out, and an answer that cannot be read is logged once and dropped', async ($, on) => {
   const world = engine(on, { papa: checkFile('turn-end', 'prompts'), quebec: checkFile('turn-end', 'prompts') })
   const entries = [
-    { name: 'papa', raised: true, confidence: 'high', summary: 'SUMMARY-PAPA', evidence: 'FIRST-ASK', repeats: false },
+    { name: 'papa', raised: true, confidence: 'high', summary: 'SUMMARY-PAPA' },
     { name: 'quebec', raised: false, confidence: 'low', summary: '', evidence: '', repeats: false },
     { name: 'zulu', raised: true, confidence: 'high', summary: 'SUMMARY-ZULU', evidence: '', repeats: false },
   ]

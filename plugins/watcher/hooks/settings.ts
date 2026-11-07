@@ -28,15 +28,19 @@ const DEFAULTS: Settings = {
 
 const SETTINGS_FILE = 'settings.json'
 
-// What a toast has said already, so a bad file is reported once however often it is read.
+// The keys of the toasts shown already, so what is read again before every judgment is reported once per run.
 const reported = new Set<string>()
+
+/** Toasts `text` once per distinct `key`, which is the text itself unless given. */
+export function toastOnce($: EngineInterface, text: string, key = text) {
+  if (reported.has(key)) return
+  reported.add(key)
+  $.ui.toast(text)
+}
 
 /** Toasts that `what` was skipped and why, once per distinct text. */
 export function reportSkipped($: EngineInterface, what: string, reason: string) {
-  const text = `watcher skipped ${what}: ${reason}`
-  if (reported.has(text)) return
-  reported.add(text)
-  $.ui.toast(text)
+  toastOnce($, `watcher skipped ${what}: ${reason}`)
 }
 
 /** Writes `watcher <text>` to Claude Code's debug log, never the transcript. */

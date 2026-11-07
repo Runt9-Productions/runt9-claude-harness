@@ -26,6 +26,8 @@ export type World = {
   calls: ModelCompleteInput[]
   /** The debug log, in order. */
   logs: string[]
+  /** Each path the plugin read with `$.fs.read`, in order. */
+  reads: string[]
   toasts: string[]
   /** The shipped checks, by name; a test may add one while it runs. */
   checks: Record<string, string>
@@ -102,6 +104,7 @@ export function engine(on: On, checks: Record<string, string>, roster: readonly 
     clock: mock.clock(on),
     calls: [],
     logs: [],
+    reads: [],
     toasts: [],
     checks,
     answers: [],
@@ -158,6 +161,7 @@ export function engine(on: On, checks: Record<string, string>, roster: readonly 
     return { value: entries }
   })
   on('fs.read', (_, e) => {
+    world.reads.push(e.path)
     if (e.path.endsWith('/judge.md')) return { value: JUDGE_PROMPT }
     if (e.path === SETTINGS_PATH && world.settings !== undefined) return { value: world.settings }
     const file = world.files[e.path]

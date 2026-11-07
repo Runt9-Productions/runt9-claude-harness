@@ -155,7 +155,9 @@ Checks are read from three places, each replacing a check of the same name from 
 A file whose body is empty, whether the file is empty or has frontmatter and nothing after it, turns off the check of
 its name; a file of that name in a later place brings it back. A file that cannot be read as a check is reported in a
 toast, `watcher skipped <path>: <reason>`, and skipped, so the check it would have replaced stays in force. Each
-toast shows once per run.
+toast shows once per run. When a repository's checks are in force, not overridden by a machine-local file of the same
+name, a toast once per repository in a run says what they change, such as `watcher: this repository turns off drift,
+replaces stale-note and adds deploy-gate`.
 
 The checks are read again before every judgment, so a new, changed or emptied file takes effect at the next one with
 no restart. `~` here is `HOME`, or `USERPROFILE` where that is unset, not `CLAUDE_CONFIG_DIR`.
