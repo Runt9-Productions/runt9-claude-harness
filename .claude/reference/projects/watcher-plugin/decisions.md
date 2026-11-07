@@ -45,12 +45,15 @@ Rulings for building the `watcher` plugin. Platform facts measured for it that o
   reported (owner, 2026-11-06).
 - [decision] Shared state holds, per session, its repository, branch and a one-line goal, the files it changed, and
   the findings raised (owner, 2026-11-06).
-- [decision] The first pull request ships the frame and 16 checks: drift from the goal, a decision the owner should
-  know about, a question guessed instead of asked, a claim of verification without evidence, a problem masked to keep
-  moving, agreeing by reflex, a teammate stalled or going in circles, a fact worth recording, a knowledge base note
-  the change may have made untrue, building what may already exist, two sessions on the same work, a secret in the
-  transcript, a consequential action that was allowed, a request that was dropped, the same correction needed twice,
-  and work diverging from its plan (owner, 2026-11-06).
+- [decision] The first pull request ships the frame and 15 checks: drift from the goal, a decision the owner should
+  have been asked about or told of, a claim of verification without evidence, a problem masked to keep moving,
+  agreeing by reflex, a teammate stalled or going in circles, a fact worth recording, a knowledge base note the change
+  may have made untrue, building what may already exist, two sessions on the same work, a secret in the transcript, a
+  consequential action that was allowed, a request that was dropped, the same correction needed twice, and work
+  diverging from its plan (owner, 2026-11-06; merged to 15 on 2026-11-07).
+- [decision] A question guessed instead of asked and a decision not told are one check, `unasked-decision`
+  (owner, 2026-11-07): both catch the agent settling what the person should decide, and two checks raising the same
+  observation post two flags for one event.
 - [decision] Not in the first pull request: a teammate brief missing what the teammate needs, and a board answer not
   acted on (later); rules slipping late in a long context (no: sessions are compacted early enough) (owner,
   2026-11-06).

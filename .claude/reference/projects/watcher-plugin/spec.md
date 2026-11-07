@@ -85,7 +85,7 @@ One or two sentences saying what to look for and what counts as raising it.
 | `plugins/watcher/hooks/shared.ts` | the per-session store key and other sessions' entries |
 | `plugins/watcher/hooks/inputs.ts` | the `notes` and `plan` reads and the secret pattern match |
 | `plugins/watcher/hooks/*.test.ts` | kit tests per module, the model stubbed |
-| `plugins/watcher/judge.md`, `plugins/watcher/checks/*.md` | the judge prompt and the 16 checks |
+| `plugins/watcher/judge.md`, `plugins/watcher/checks/*.md` | the judge prompt and the 15 checks |
 | `plugins/watcher/types/index.d.ts` | the watcher's state keys |
 | `plugins/watcher/local.example/checks/example.md` | a synthetic sample check |
 | `plugins/watcher/README.md` | what it watches, the check format, precedence, cost, what it does not do |
@@ -118,11 +118,11 @@ a new concern is a short prose file rather than new code.
 - A confidence bar, a cap per agent per hour and deduplication keep it quiet; useful and noise answers are counted
   per check.
 - Sessions share state on the machine (repository, branch, goal, files changed, findings) under per-session keys.
-- The first checks: drift from the goal, a decision the user should know about, a question guessed instead of asked,
-  a claim of verification without evidence, a problem masked to keep moving, agreeing by reflex, a teammate stalled
-  or going in circles, a fact worth recording, a knowledge base note a change may have made untrue, building what may
-  already exist, two sessions on the same work, a secret in the transcript, a consequential action that was allowed,
-  a request that was dropped, the same correction needed twice, and work diverging from its plan.
+- The first checks: drift from the goal, a decision the user should have been asked about or told of, a claim of
+  verification without evidence, a problem masked to keep moving, agreeing by reflex, a teammate stalled or going in
+  circles, a fact worth recording, a knowledge base note a change may have made untrue, building what may already
+  exist, two sessions on the same work, a secret in the transcript, a consequential action that was allowed, a
+  request that was dropped, the same correction needed twice, and work diverging from its plan.
 
 ## Out of scope
 

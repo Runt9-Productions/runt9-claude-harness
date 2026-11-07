@@ -20,7 +20,7 @@ checks, board's opt-in for answers a plugin keeps, and the README describing bot
 
 ## Where it stands
 
-- [status] Complete: the watcher plugin ships with its 16 checks, and board keeps the answers to a plugin's own
+- [status] Complete: the watcher plugin ships with its 15 checks, and board keeps the answers to a plugin's own
   decisions; the platform facts it measured are in the plugins domain notes.
 
 ## Goal

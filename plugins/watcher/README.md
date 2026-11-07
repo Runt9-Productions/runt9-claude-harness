@@ -23,7 +23,6 @@ Installing it installs `board` from the same marketplace, since it does not load
 | `drift` | the work serves a goal other than the one the person last asked for | turn end, compaction | the agent |
 | `dropped-request` | something asked for was neither done nor declined, and the reply treats the work as complete | turn end, compaction | the agent |
 | `existing-solution` | the agent builds by hand what a platform feature, a library or the repository already solves, without looking | turn end | the agent |
-| `guessed-answer` | a question only the person could answer was guessed instead of asked | turn end | the agent and you |
 | `masked-problem` | a failure was got past without being fixed or reported | turn end, refusal, commit | the agent and you |
 | `plan-divergence` | the work departs from a plan file the agent read, without the agent saying so | turn end, commit | the agent and you |
 | `reflex-agreement` | the agent agreed or gave way without weighing the point, where the record shows a reason to disagree | turn end | the agent |
@@ -32,8 +31,8 @@ Installing it installs `board` from the same marketplace, since it does not load
 | `session-overlap` | another session on this machine changes the same files or works toward the same goal | turn end, main session only | you |
 | `stale-note` | an edit changes something a knowledge base note states about a file it lists as a source | turn end, commit | the agent |
 | `stalled-teammate` | a teammate goes in circles, or stopped without finishing or reporting its task | teammate idle, teammates only | its lead |
+| `unasked-decision` | the agent settled something the person would want a say in, such as an unclear requirement or the scope, without asking first or telling them | turn end, commit | the agent and you |
 | `unrecorded-fact` | the agent learned with effort a fact a later session would need, and neither recorded it nor proposed to | turn end | the agent |
-| `untold-decision` | the agent settled a choice the person would want a say in without asking or telling them | turn end, commit | you |
 | `unverified-claim` | the agent says something works, passes or is fixed, and no call checked it or the call that did shows otherwise | turn end, commit | the agent |
 
 "The person" is you for the main session, and the lead for a teammate.
