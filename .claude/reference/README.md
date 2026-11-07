@@ -7,8 +7,8 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 
 | Note | Read it before |
 |---|---|
-| [Plugin Platform](domains/plugins/overview.md) | writing, loading or naming a plugin, its skills or its agents, or reasoning about how a change reaches users |
-| [Mod CI Checks](domains/plugins/mod-ci.md) | changing the `plugins` CI job, or checking a mod locally |
+| [Plugin Platform](domains/plugins/overview.md) | writing, loading or naming a plugin, its skills or its agents, reasoning about how a change reaches users, or relying on a mod's state, timers, messages or refusals at run time |
+| [Mod CI Checks](domains/plugins/mod-ci.md) | changing the `plugins` CI job, checking a mod locally, or writing a kit test |
 | [Hooks Module Loader](domains/plugins/hooks-module-loader.md) | splitting a mod's hooks module across files, or moving a function, atom or matcher value between them |
 | [Skill Loading](domains/skills/overview.md) | relying on a skill being in context: when it loads, and what survives compaction |
 | [Teammate Mailbox](domains/agent-teams/mailbox.md) | sending text between teammates that holds tags |
@@ -25,6 +25,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Plugin Templates](projects/plugin-templates/overview.md) | reading the rulings and the designs ruled out behind the template copy (issue #37) |
 | [Bootstrap Update](projects/bootstrap-update/overview.md) | reading the rulings and the designs ruled out behind `bootstrap.py --update` (issue #41) |
 | [Bootstrap Menu](projects/bootstrap-menu/overview.md) | reading the rulings and the designs ruled out behind the `bootstrap.py` selection menu and `all` (#121) |
+| [Watcher Plugin](projects/watcher-plugin/overview.md) | building or changing the `watcher` plugin (issue #35) |
 
 ## Local conventions
 

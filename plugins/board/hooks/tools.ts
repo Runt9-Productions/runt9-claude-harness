@@ -43,6 +43,11 @@ export type AskDecisionInput = {
   options?: BoardOption[]
   recommended?: number
   withdraw?: boolean
+  /**
+   * Left out of the schema: only another plugin's own call sets it, and from the model it is ignored. The answer is
+   * then kept in the decision for that plugin rather than delivered to any loop.
+   */
+  isAnswerKept?: boolean
 }
 
 export const MAX_NOTE_CHARS = 200
