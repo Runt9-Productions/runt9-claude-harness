@@ -182,6 +182,48 @@ export const PROBE_CALLER: Plugin = {
   },
 }
 
+/** The store key under which KEEPER lists each answer it read. */
+export const KEPT_ANSWERS_KEY = 'kept-answers'
+
+/**
+ * Another plugin. Its `post` command posts the decision in ASK, keeping the answer when the args are `kept`; `reword`
+ * and `withdraw`, with a decision's id as args, change it. It reads each answer to its own decisions as the README
+ * tells such a plugin to and appends it to the store under KEPT_ANSWERS_KEY. An inline plugin's hooks run without this
+ * module's scope, so each spells out every value it uses.
+ */
+export const KEEPER: Plugin = {
+  name: 'keeper',
+  register(on) {
+    on('command.run', { command: 'post' }, async ($, e) => {
+      const decision = { tool: 'mcp__board__ask_decision', question: 'Draft an issue on the tracker?', options: [{ label: 'Skip' }, { label: 'Draft it' }] }
+      const posted = await $.tool.call({ ...decision, isAnswerKept: e.args === 'kept' } as never)
+      return { text: JSON.stringify(posted) }
+    })
+    on('command.run', { command: 'reword' }, async ($, e) => {
+      const changed = await $.tool.call({ tool: 'mcp__board__ask_decision', id: e.args, question: 'Reworded by keeper?' } as never)
+      return { text: JSON.stringify(changed) }
+    })
+    on('command.run', { command: 'withdraw' }, async ($, e) => {
+      const changed = await $.tool.call({ tool: 'mcp__board__ask_decision', id: e.args, withdraw: true } as never)
+      return { text: JSON.stringify(changed) }
+    })
+    on('state.set', { plugin: 'board', key: 'decisions' }, async ($, e, next) => {
+      const written = await next(e)
+      if (!written.value?.isSet) return written
+      const before = e.previous ?? []
+      const wasWaiting = (id: string) => before.some(d => d.id === id && d.answer === undefined)
+      const newlyAnswered = e.value
+        .filter(d => d.plugin === 'keeper')
+        .filter(d => d.answer !== undefined)
+        .filter(d => wasWaiting(d.id))
+      const readSoFar = ((await $.store.get('kept-answers')) ?? []) as unknown[]
+      const read = newlyAnswered.map(d => ({ id: d.id, answer: d.answer, chosenOption: d.chosenOption, note: d.note }))
+      if (read.length > 0) await $.store.set('kept-answers', [...readSoFar, ...read])
+      return written
+    })
+  },
+}
+
 /** Reads back each row the mod appended, with the loop it went to (`undefined` for the main session). */
 export function captureAppends(on: On): () => { to: string | undefined; text: string }[] {
   const session = mock.session(on)

@@ -2,7 +2,8 @@ export type BoardOption = { label: string; description?: string }
 
 /**
  * sending: the answer is being delivered to the asking loop. sent: delivered, no model request has carried it yet.
- * seen: a request of that loop has. failed: neither the append nor a message reached it, so no agent was told.
+ * seen: a request of that loop has, or the answer is kept for a plugin. failed: neither the append nor a message
+ * reached it, so no agent was told.
  */
 export type BoardDelivery = 'sending' | 'sent' | 'seen' | 'failed'
 
@@ -17,8 +18,18 @@ export type BoardDecision = {
   agentId?: string
   /** The asking agent's name as the pane shows it; absent when the main session asked. */
   askedBy?: string
+  /** The plugin whose own call posted it; absent when a model loop did. */
+  plugin?: string
+  /** True only with `plugin`: the answer stays here for that plugin and is delivered to no loop. */
+  isAnswerKept?: boolean
+  /** The whole answer as the asker is told it, the note included. */
   answer?: string
-  /** What the owner has typed in the note box so far; sent along with the option they press. */
+  /** The label of the option the owner pressed; absent while unanswered, and for Other and Dismiss. */
+  chosenOption?: string
+  /**
+   * What the owner has typed in the note box so far; sent along with the option they press. Once answered, the note
+   * that went with the answer, trimmed, or for Other its text; absent when there was none.
+   */
   note?: string
   /** Absent until answered. */
   delivery?: BoardDelivery

@@ -1,0 +1,10 @@
+{
+  "name": "watcher",
+  "version": "0.1.0",
+  "description": "Has a model read what each session does against short prose checks, nudging the agent when its work goes off track and flagging to the owner on the board what they should know",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "types": "./types/index.d.ts",
+  "dependencies": [{ "name": "board", "version": ">=0.2.0" }]
+}

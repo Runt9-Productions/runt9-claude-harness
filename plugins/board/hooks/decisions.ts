@@ -39,11 +39,14 @@ function optionsRefusal(options: readonly (BoardOption | string)[]): string | un
   return isEveryLabelled ? undefined : 'needs a label on every option'
 }
 
-/** Posts, rewords or withdraws a decision for the calling loop; `agentId` is absent for the main session. */
-export async function askDecision($: EngineInterface, agentId: string | undefined, input: AskDecisionInput): Promise<string> {
+/**
+ * Posts, rewords or withdraws a decision for the calling loop; `agentId` is absent for the main session, and `plugin`
+ * names the plugin whose own call this is, absent for a model's.
+ */
+export async function askDecision($: EngineInterface, agentId: string | undefined, plugin: string | undefined, input: AskDecisionInput): Promise<string> {
   await bind($)
-  if (input.withdraw) return withdrawDecision($, agentId, input.id)
-  if (input.id !== undefined) return rewordDecision($, agentId, input.id, input)
+  if (input.withdraw) return withdrawDecision($, agentId, plugin, input.id)
+  if (input.id !== undefined) return rewordDecision($, agentId, plugin, input.id, input)
   if (!input.question) return 'Nothing posted: a new decision needs a question.'
   const refusal = optionsRefusal(input.options ?? [])
   if (refusal !== undefined) return `Nothing posted: a new decision ${refusal}.`
@@ -57,12 +60,15 @@ export async function askDecision($: EngineInterface, agentId: string | undefine
     recommended: input.recommended,
     agentId,
     askedBy: agentLabel(rows, agentId),
+    plugin,
+    isAnswerKept: plugin !== undefined && input.isAnswerKept === true,
   }
   await update($, decisions, all => [...all, decision])
   await save($)
   void openBoard($)
   await flash($, id)
-  // The away plugin reads the decision id from the start of this result.
+  // Plugins read the decision id from the start of this result.
+  if (decision.isAnswerKept) return `Posted ${id}. Its answer is kept in the board's decisions for ${plugin}; no loop is told it.`
   return `Posted ${id}. The answer will arrive as a message starting "[board]"; do not wait for it.`
 }
 
@@ -80,7 +86,18 @@ export function notPosterText(rows: readonly BoardActivity[], id: string, poster
   return `${id} was posted by ${poster}; only ${poster} or the main session can change it.`
 }
 
-async function rewordDecision($: EngineInterface, agentId: string | undefined, id: string, input: AskDecisionInput): Promise<string> {
+/**
+ * Why the caller may not change `decision`, or undefined when it may. One whose answer a plugin keeps is changed only
+ * by that plugin's own call, so no model loop rewords or withdraws what the plugin asks the owner, which may be about
+ * that loop; any other follows notPosterText.
+ */
+function changeRefusal(rows: readonly BoardActivity[], decision: BoardDecision, callerId: string | undefined, callerPlugin: string | undefined): string | undefined {
+  if (!decision.isAnswerKept) return notPosterText(rows, decision.id, decision.agentId, callerId)
+  if (callerPlugin === decision.plugin) return undefined
+  return `${decision.id} was posted by the ${decision.plugin} plugin, which keeps its answer; only ${decision.plugin} can change it.`
+}
+
+async function rewordDecision($: EngineInterface, agentId: string | undefined, plugin: string | undefined, id: string, input: AskDecisionInput): Promise<string> {
   const optionsProblem = input.options === undefined ? undefined : optionsRefusal(input.options)
   if (optionsProblem !== undefined) return `Nothing changed: a decision ${optionsProblem}.`
   const options = input.options?.map(asOption)
@@ -96,9 +113,9 @@ async function rewordDecision($: EngineInterface, agentId: string | undefined, i
       refusal = `Nothing changed: there is no ${id}. Omit id to post a new decision.`
       return all
     }
-    const notPoster = notPosterText(rows, id, existing.agentId, agentId)
-    if (notPoster !== undefined) {
-      refusal = `Nothing changed: ${notPoster}`
+    const notAllowed = changeRefusal(rows, existing, agentId, plugin)
+    if (notAllowed !== undefined) {
+      refusal = `Nothing changed: ${notAllowed}`
       return all
     }
     if (existing.answer !== undefined) {
@@ -142,13 +159,13 @@ export async function tellPoster($: EngineInterface, posterId: string | undefine
   if (failure !== undefined) $.ui.toast(`Not delivered to ${agentLabel(rows, posterId) ?? 'Claude'} (${failure}); tell it yourself: ${row}`)
 }
 
-async function withdrawDecision($: EngineInterface, agentId: string | undefined, id: string | undefined): Promise<string> {
+async function withdrawDecision($: EngineInterface, agentId: string | undefined, plugin: string | undefined, id: string | undefined): Promise<string> {
   if (id === undefined) return 'Nothing withdrawn: withdraw needs the id of the decision.'
   const listed: BoardDecision[] = await read($, decisions)
   const decision = listed.find(d => d.id === id)
   if (decision === undefined) return `Nothing withdrawn: there is no ${id}.`
-  const notPoster = notPosterText(await read($, activity), id, decision.agentId, agentId)
-  if (notPoster !== undefined) return `Nothing withdrawn: ${notPoster}`
+  const notAllowed = changeRefusal(await read($, activity), decision, agentId, plugin)
+  if (notAllowed !== undefined) return `Nothing withdrawn: ${notAllowed}`
   if (decision.answer !== undefined) return `Nothing withdrawn: the owner already answered ${id}: ${decision.answer}`
   await retireIds($, 'D', [id])
   // Checked again inside the update, so an answer pressed since the read is delivered rather than lost.
@@ -213,18 +230,31 @@ export async function resetFlashAndHotkeys($: EngineInterface) {
   await update($, areHotkeysHeld, () => false)
 }
 
-async function answer($: EngineInterface, id: string, text: string) {
+/** What the owner gave, as the decision records it once answered. */
+type OwnerAnswer = Required<Pick<BoardDecision, 'answer'>> & Pick<BoardDecision, 'chosenOption' | 'note'>
+
+/** A kept answer starts seen: nothing is delivered, so the pane never lists it as unsent and Send now skips it. */
+function answered(decision: BoardDecision, given: OwnerAnswer): BoardDecision {
+  const delivery = decision.isAnswerKept ? 'seen' : 'sending'
+  return { ...decision, ...given, delivery }
+}
+
+async function answer($: EngineInterface, id: string, given: OwnerAnswer) {
   await bind($)
   // Claimed inside the update, which retries on a conflicting write, so two quick presses answer once.
   let claimed: BoardDecision | undefined
   await update($, decisions, all => {
     claimed = all.find(d => d.id === id && d.answer === undefined)
-    return all.map(d => (d === claimed ? { ...d, answer: text, delivery: 'sending' as const } : d))
+    return all.map(d => (d === claimed ? answered(d, given) : d))
   })
   if (!claimed) return
   await holdHotkeys($)
   await save($)
-  await sendAnswer($, claimed, text)
+  if (claimed.isAnswerKept) {
+    $.ui.toast(`${id} answered; the answer stays with ${claimed.plugin} and Claude is not told`)
+    return
+  }
+  await sendAnswer($, claimed, given.answer)
 }
 
 export async function retry($: EngineInterface, id: string) {
@@ -311,12 +341,16 @@ export async function answerWithNote($: EngineInterface, id: string, label: stri
   // A press on a frame drawn before a reword can name an option the decision no longer offers.
   const isOffered = label === DISMISSED_ANSWER || (decision?.options.map(asOption).some(o => o.label === label) ?? false)
   if (!isOffered) return
-  const note = decision?.note?.trim()
-  await answer($, id, note ? `${label}. Note: ${note}` : label)
+  const chosenOption = label === DISMISSED_ANSWER ? undefined : label
+  const typed = decision?.note?.trim() ?? ''
+  const note = typed === '' ? undefined : typed
+  const text = note === undefined ? label : `${label}. Note: ${note}`
+  await answer($, id, { answer: text, chosenOption, note })
 }
 
 export async function answerOther($: EngineInterface, id: string, text: string) {
-  if (text.trim()) await answer($, id, `Other: ${text.trim()}`)
+  const typed = text.trim()
+  if (typed !== '') await answer($, id, { answer: `Other: ${typed}`, chosenOption: undefined, note: typed })
 }
 
 /** Marks every answer and owner's change sent to this loop as seen; called as one of its model requests goes out. */

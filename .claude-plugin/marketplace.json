@@ -64,6 +64,11 @@
       "name": "chrome-devtools",
       "source": "./plugins/chrome-devtools",
       "description": "Starts the chrome-devtools-mcp browser server at a pinned version, headless, with a throwaway profile, no local files, redacted request headers and no data sent to outside services"
+    },
+    {
+      "name": "watcher",
+      "source": "./plugins/watcher",
+      "description": "Has a model read what each session does against short prose checks, nudging the agent when its work goes off track and flagging to the owner on the board what they should know"
     }
   ]
 }
