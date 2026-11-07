@@ -1,86 +1,39 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { FsEntry, On } from 'claude-code'
+import type { ModelCompleteInput } from 'claude-code'
 
-import type { Check } from '../types'
+import { HOME, ROOT, carried, endTurn, engine, prompt } from './test-support'
+import type { World } from './test-support'
 
-const ROOT = '/work/repo'
-const HOME = '/home/user'
 const REPOSITORY_DIR = `${ROOT}/.claude/watcher/checks`
 const MACHINE_DIR = `${HOME}/.claude/local/watcher/checks`
-// Stands for the plugin's own checks/ directory, wherever the kit loads the plugin from.
-const SHIPPED_DIR = '/plugin/checks'
-
-const SHIPPED_MARK = '/checks'
-
-type World = {
-  toasts: string[]
-  /** What the plugin last wrote to its `checks` state. */
-  checks: readonly Check[]
-}
 
 /** A check file's text: its frontmatter, then `criteria` as its body. */
 const checkFile = (criteria: string, frontmatter = 'triggers: [turn-end]\naudience: nudge\nagents: all\nreads: [prompts]') =>
   `---\n${frontmatter}\n---\n${criteria}\n`
 
-/** The fields every check written by `checkFile` with its default frontmatter has. */
-const DEFAULTS = { triggers: ['turn-end'], audience: 'nudge', agents: 'all', reads: ['prompts'], model: 'haiku' } as const
-
-/** The path as `files` keys it: a path outside the repository and home is the plugin's, so it moves under SHIPPED_DIR. */
-function keyed(path: string): string {
-  if (path.startsWith(`${ROOT}/`)) return path
-  if (path.startsWith(`${HOME}/`)) return path
-  const mark = path.lastIndexOf(SHIPPED_MARK)
-  return `${SHIPPED_DIR}${path.slice(mark + SHIPPED_MARK.length)}`
+/** The calls one judged turn of the main session makes. */
+async function judgedCalls($: Engine, world: World): Promise<ModelCompleteInput[]> {
+  const before = world.calls.length
+  await prompt($, 'THE-ASK')
+  await endTurn($, world)
+  return world.calls.slice(before)
 }
 
-/** The engine nouns the loader calls, over `files`, by absolute path; a directory exists where a file lies beneath it. */
-function engine(on: On, files: Record<string, string>): World {
-  const world: World = { toasts: [], checks: [] }
-  const paths = Object.keys(files)
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('state.set', { plugin: 'watcher', key: 'checks' }, (_, e, next) => {
-    world.checks = e.value
-    return next(e)
-  })
-  on('session.root', () => ({ value: ROOT }))
-  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : undefined }))
-  on('fs.exists', (_, e) => {
-    const directory = `${keyed(e.path)}/`
-    return { value: paths.some(path => path.startsWith(directory)) }
-  })
-  on('fs.list', (_, e) => {
-    const directory = `${keyed(e.path)}/`
-    const entries: FsEntry[] = paths
-      .filter(path => path.startsWith(directory))
-      .map(path => ({ name: path.slice(directory.length), kind: 'file', size: 1, mtimeMs: 1, isLink: false }))
-    if (entries.length === 0) throw new Error(`ENOENT: ${directory}`)
-    return { value: entries }
-  })
-  on('fs.read', (_, e) => {
-    const path = keyed(e.path)
-    const text = files[path]
-    if (text === undefined) throw new Error(`ENOENT: ${path}`)
-    return { value: text }
-  })
-  on('ui.toast', (_, e) => {
-    world.toasts.push(e.text)
-    return { value: undefined }
-  })
-  return world
-}
+const carriedBy = (call: ModelCompleteInput | undefined) => (call === undefined ? [] : carried(call))
 
-/** The checks in force once a session has started. */
-async function startSession($: Engine, world: World): Promise<readonly Check[]> {
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  return world.checks
+/** What a call's prompt tells the judge of the check `name`. */
+function criteriaOf(call: ModelCompleteInput | undefined, name: string): string {
+  const prompt = call?.prompt ?? ''
+  const start = prompt.indexOf(`### ${name}\n\n`)
+  if (start < 0) return ''
+  const body = prompt.slice(start + `### ${name}\n\n`.length)
+  return body.slice(0, body.search(/\n\n(###|## )/))
 }
 
 test('a repository check replaces a shipped one and a machine-local one replaces both, and an empty body disables', async ($, on) => {
-  const world = engine(on, {
-    [`${SHIPPED_DIR}/alpha.md`]: checkFile('shipped alpha'),
-    [`${SHIPPED_DIR}/bravo.md`]: checkFile('shipped bravo'),
-    [`${SHIPPED_DIR}/charlie.md`]: checkFile('shipped charlie'),
+  const world = engine(on, { alpha: checkFile('shipped alpha'), bravo: checkFile('shipped bravo'), charlie: checkFile('shipped charlie') })
+  world.files = {
     [`${REPOSITORY_DIR}/alpha.md`]: checkFile('repository alpha'),
     [`${REPOSITORY_DIR}/bravo.md`]: checkFile(''),
     [`${REPOSITORY_DIR}/delta.md`]: checkFile('repository delta'),
@@ -88,11 +41,10 @@ test('a repository check replaces a shipped one and a machine-local one replaces
     [`${MACHINE_DIR}/charlie.md`]: '',
     // The template the installer leaves beside a machine-local file, which no reader takes.
     [`${MACHINE_DIR}/delta.md.example`]: checkFile('example delta'),
-  })
-  expect(await startSession($, world)).toEqual([
-    { name: 'alpha', ...DEFAULTS, criteria: 'machine alpha' },
-    { name: 'delta', ...DEFAULTS, criteria: 'repository delta' },
-  ])
+  }
+  const [call] = await judgedCalls($, world)
+  expect(carriedBy(call)).toEqual(['alpha', 'delta'])
+  expect([criteriaOf(call, 'alpha'), criteriaOf(call, 'delta')]).toEqual(['machine alpha', 'repository delta'])
   expect(world.toasts).toEqual([])
 })
 
@@ -105,21 +57,16 @@ test("a check written in the spec's format reads with its comments left out, and
     'model: sonnet',
   ].join('\n')
   const world = engine(on, {
-    [`${SHIPPED_DIR}/kilo.md`]: checkFile('One sentence.\n\nAnother paragraph.', specFormat),
-    [`${SHIPPED_DIR}/lima.md`]: checkFile('Lima.', 'triggers: teammate-idle\naudience: flag\nagents: teammates\nreads: [status]'),
+    kilo: checkFile('One sentence.\n\nAnother paragraph.', specFormat),
+    lima: checkFile('Lima.', 'triggers: turn-end\naudience: flag\nagents: main\nreads: prompts'),
   })
-  expect(await startSession($, world)).toEqual([
-    {
-      name: 'kilo',
-      triggers: ['turn-end', 'commit'],
-      audience: 'both',
-      agents: 'all',
-      reads: ['prompts', 'calls', 'replies', 'results'],
-      model: 'sonnet',
-      criteria: 'One sentence.\n\nAnother paragraph.',
-    },
-    { name: 'lima', triggers: ['teammate-idle'], audience: 'flag', agents: 'teammates', reads: ['status'], model: 'haiku', criteria: 'Lima.' },
+  const calls = await judgedCalls($, world)
+  expect(calls.map(call => ({ model: call.model, checks: carried(call) }))).toEqual([
+    { model: 'sonnet', checks: ['kilo'] },
+    { model: 'haiku', checks: ['lima'] },
   ])
+  expect(criteriaOf(calls[0], 'kilo')).toBe('One sentence.\n\nAnother paragraph.')
+  expect(world.toasts).toEqual([])
 })
 
 test('each bad file is reported once by its path and skipped, leaving the check it would have replaced in force', async ($, on) => {
@@ -131,19 +78,15 @@ test('each bad file is reported once by its path and skipped, leaving the check 
     [`${MACHINE_DIR}/juliet.md`]: checkFile('Juliet.', 'triggers: [turn-end]\naudience: nudge\nagents: all\nreads: [prompts, diary]'),
     [`${MACHINE_DIR}/Kilo Check.md`]: checkFile('Kilo.'),
   }
-  const world = engine(on, {
-    [`${SHIPPED_DIR}/alpha.md`]: checkFile('shipped alpha'),
-    ...badFiles,
-    [`${MACHINE_DIR}/mike.md`]: checkFile('Mike.'),
-  })
-  expect(await startSession($, world)).toEqual([
-    { name: 'alpha', ...DEFAULTS, criteria: 'shipped alpha' },
-    { name: 'mike', ...DEFAULTS, criteria: 'Mike.' },
-  ])
+  const world = engine(on, { alpha: checkFile('shipped alpha') })
+  world.files = { ...badFiles, [`${MACHINE_DIR}/mike.md`]: checkFile('Mike.') }
+  const [call] = await judgedCalls($, world)
+  expect(carriedBy(call)).toEqual(['alpha', 'mike'])
+  expect(criteriaOf(call, 'alpha')).toBe('shipped alpha')
   const reportedPaths = Object.keys(badFiles).map(path => world.toasts.filter(toast => toast.includes(`${path}:`)).length)
   expect(reportedPaths).toEqual([1, 1, 1, 1, 1, 1])
   expect(world.toasts).toHaveLength(6)
 
-  await startSession($, world)
+  await judgedCalls($, world)
   expect(world.toasts).toHaveLength(6)
 })

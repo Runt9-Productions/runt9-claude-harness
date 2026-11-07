@@ -31,7 +31,8 @@ With no surface, as in `claude -p`, nothing is added.
 | `mcp__board__set_status` | Sets the caller's one-line status. |
 | `mcp__board__read_board` | Lists the open tasks with who holds each, and the decisions and tasks still waiting on you. |
 
-Only the agent that posted a decision or a task for you, or the main session, can change or withdraw it. When the
+Only the agent that posted a decision or a task for you, or the main session, can change or withdraw it; a decision
+whose answer a plugin keeps can be changed only by that plugin. When the
 main session rewords or withdraws another agent's decision, or withdraws its task for you, that agent is told with a
 `[board]` message. An id is never issued twice in a session, even after its item is dropped or cleared.
 
@@ -73,7 +74,8 @@ A plugin can post a decision and read the owner's answer itself, so that no mode
 - **Posting.** From the plugin's own hook, call `$.tool.call({ tool: 'mcp__board__ask_decision', question, options,
   ..., isAnswerKept: true })`. The field is not in the tool's schema, and a model that passes it is ignored: the board
   takes the posting plugin from the call's origin, which the host sets. The result starts with `Posted D<n>`. A
-  decision's id is unique only within one session's board.
+  decision's id is unique only within one session's board, and the ids start again at `D1` when the session id changes, as after a
+  `/clear`, since the board then empties its decisions.
 - **Answering.** The board writes the answer into its `decisions` state and nowhere else: no `[board]` message, no
   Send now, and no line under "Answered, not yet sent to Claude".
 - **Reading.** Declare `board` in the plugin's `dependencies` to get its types, then hook `state.set` on
@@ -91,8 +93,9 @@ A plugin can post a decision and read the owner's answer itself, so that no mode
   | presses Dismiss | absent | as for an option | `Dismissed without choosing an option`, with `. Note: <note>` when there is one |
   | types a note and presses Enter | absent | the text, trimmed | `Other: <text>` |
 
-- **Changing it.** The main session can still reword or withdraw the decision, as it can any other. A withdrawn
-  decision leaves `decisions` with no answer.
+- **Changing it.** Only the plugin that posted the decision can reword or withdraw it, by calling the tool again with
+  its id from its own hook. A call from the main session's model or any other agent is refused, so no loop can edit
+  or remove what the plugin asks the owner. A withdrawn decision leaves `decisions` with no answer.
 
 ## Nudges
 
@@ -126,4 +129,4 @@ change without it:
 - A new decision flashes on the pane and in the line above the prompt; it is `away`'s only alert in its distracted
   mode.
 - An agent counts as ended when `$.agent.list()` lists it as `completed`, `failed` or `killed`; `away` keeps a copy
-  of that list.
+  of that list, and so does `watcher`.

@@ -59,7 +59,6 @@ function argumentsOf(call: ToolCallInput): Record<string, unknown> {
   return call as unknown as Record<string, unknown>
 }
 
-/** The file a call edits, when its tool is one that edits a file. */
 export function editedFile(call: ToolCallInput): string | undefined {
   const key = EDITING_TOOLS[call.tool]
   if (key === undefined) return undefined
@@ -140,15 +139,15 @@ export async function notesText($: EngineInterface, edited: readonly string[]): 
   const directory = `${top}/${REFERENCE_DIRECTORY}`
   if (!(await $.fs.exists(directory))) return undefined
   const editedFiles = new Set(edited.map(path => relativeTo(top, path)))
-  const shown: string[] = []
+  const found: string[] = []
   for (const path of await noteFiles($, directory)) {
     const text = await $.fs.read(path)
     const listed = sourcesOf(text).filter(source => editedFiles.has(source))
     if (listed.length === 0) continue
-    shown.push(`[note ${relativeTo(top, path)}, a source of which was edited: ${listed.join(', ')}]\n${cut(text, NOTE_CHARS)}`)
-    if (shown.length === SHOWN_NOTES) break
+    found.push(`[note ${relativeTo(top, path)}, a source of which was edited: ${listed.join(', ')}]\n${shown(text, NOTE_CHARS)}`)
+    if (found.length === SHOWN_NOTES) break
   }
-  return shown.length === 0 ? undefined : shown.join('\n\n')
+  return found.length === 0 ? undefined : found.join('\n\n')
 }
 
 /**
@@ -159,12 +158,12 @@ export async function notesText($: EngineInterface, edited: readonly string[]): 
  */
 export async function planText($: EngineInterface, files: readonly string[]): Promise<string | undefined> {
   const root = await $.session.root()
-  const shown: string[] = []
+  const found: string[] = []
   for (const path of files.slice(-SHOWN_PLANS)) {
     if (!(await $.fs.exists(path))) continue
-    shown.push(`[plan file ${relativeTo(root, path)}]\n${cut(await $.fs.read(path), PLAN_CHARS)}`)
+    found.push(`[plan file ${relativeTo(root, path)}]\n${shown(await $.fs.read(path), PLAN_CHARS)}`)
   }
-  return shown.length === 0 ? undefined : shown.join('\n\n')
+  return found.length === 0 ? undefined : found.join('\n\n')
 }
 
 /** `[redacted GitHub token: 40 characters, 3 distinct]`: enough for the judge to tell a real key from a placeholder. */
@@ -178,6 +177,9 @@ export function redacted(text: string): { text: string; hasSecret: boolean } {
   for (const { kind, pattern } of SECRET_PATTERNS) result = result.replace(pattern, secret => redactionMark(kind, secret))
   return { text: result, hasSecret: result !== text }
 }
+
+/** Text as the judge may read it: secrets redacted, then cut to `limit`. */
+export const shown = (text: string, limit: number) => cut(redacted(text).text, limit)
 
 /** The parts of a redacted text around each mark, so the judge sees what surrounds a secret wherever it sat. */
 export function aroundSecrets(text: string): string {

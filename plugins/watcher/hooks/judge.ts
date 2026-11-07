@@ -9,7 +9,7 @@ import { renderRecord } from './digest'
 import type { RecordSection } from './digest'
 import { notesText, planText } from './inputs'
 import { CONFIDENCES, quieten, raisedSummaries } from './quiet'
-import { readSettings } from './settings'
+import { log, readSettings } from './settings'
 import type { Settings } from './settings'
 import { isGoalUnknown, noteFindings, noteGoal, sharedText } from './shared'
 
@@ -64,10 +64,6 @@ type Judged = { agentId: string | undefined; trigger: Trigger }
 type Outlet = { settings: Settings; to: Addressees }
 
 const judgedText = (judged: Judged) => `${judged.agentId ?? 'the main session'} at ${judged.trigger}`
-
-function log($: EngineInterface, text: string) {
-  $.ui.log(`watcher ${text}`, { to: 'debug' })
-}
 
 function fitsAgent(check: Check, isTeammate: boolean): boolean {
   if (check.agents === 'all') return true
@@ -352,7 +348,16 @@ async function prepare($: EngineInterface, judged: Judged, given: readonly Activ
   // A headless run ends as soon as its last turn does and would cut a judgment left for later, so where the setting
   // has it judged, it judges before the hook returns.
   if (isHeadless) await judgeBatches($, batches, judged, outlet)
-  else $.clock.after(AFTER_HOOK_RETURNS_MS, () => void judgeBatches($, batches, judged, outlet))
+  else $.clock.after(AFTER_HOOK_RETURNS_MS, () => void loggingFailure($, judged, () => judgeBatches($, batches, judged, outlet)))
+}
+
+/** Runs `work`, writing a failure to the debug log rather than letting it fail the session's event or go unseen. */
+async function loggingFailure($: EngineInterface, judged: Judged, work: () => Promise<void>) {
+  try {
+    await work()
+  } catch (err) {
+    log($, `could not judge ${judgedText(judged)}: ${String(err)}`)
+  }
 }
 
 /**
@@ -360,12 +365,8 @@ async function prepare($: EngineInterface, judged: Judged, given: readonly Activ
  * that trigger and that kind of agent: one model call per model the checks name.
  */
 export async function judgeAt($: EngineInterface, agentId: string | undefined, trigger: Trigger, window?: readonly ActivityItem[]) {
-  try {
-    await prepare($, { agentId, trigger }, window)
-  } catch (err) {
-    // The session's own event runs through the hook that called this, and a watcher failure must not fail it.
-    log($, `could not judge ${judgedText({ agentId, trigger })}: ${String(err)}`)
-  }
+  const judged: Judged = { agentId, trigger }
+  await loggingFailure($, judged, () => prepare($, judged, window))
 }
 
 /** Judges a teammate that went idle, found by its name when the event carries no id. */

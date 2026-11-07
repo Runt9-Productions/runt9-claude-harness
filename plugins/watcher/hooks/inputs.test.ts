@@ -92,3 +92,21 @@ test('a result matching a secret pattern is judged at once on that call alone, t
   for (const shown of ['[redacted GitHub token', 'aws configure set key [redacted AWS access key']) expect(turn).toContain(shown)
   for (const hidden of [githubToken, inputKey]) expect(turn).not.toContain(hidden)
 })
+
+test('a note and a plan file have their secrets redacted before the judge reads them', async ($, on) => {
+  const world = engine(on, { lima: checkFile('turn-end', 'calls, notes, plan') })
+  // Built here so no secret scan of this file sees a whole token; both are fake.
+  const noteToken = `ghp_${'Nn4'.repeat(12)}`
+  const planToken = `ghp_${'Pp5'.repeat(12)}`
+  const checklist = `${ROOT}/docs/checklist.md`
+  world.files = { [`${REFERENCE}/parser.md`]: note('\n  - src/parser.ts', `NOTE-BODY ${noteToken}`), [checklist]: `PLAN-BODY ${planToken}` }
+  on('tool.call', { tool: 'Edit' }, () => ({ result: 'edited', text: 'The file was edited.' }))
+  on('tool.call', { tool: 'Read' }, () => ({ result: 'read', text: 'The file was read.' }))
+  await prompt($, 'THE-ASK')
+  await $.tool.call({ tool: 'Read', file_path: checklist })
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/src/parser.ts`, old_string: 'a', new_string: 'b' })
+  await endTurn($, world)
+  const record = recordOf(world.calls[0])
+  for (const shown of ['NOTE-BODY [redacted GitHub token', 'PLAN-BODY [redacted GitHub token']) expect(record).toContain(shown)
+  for (const hidden of [noteToken, planToken]) expect(record).not.toContain(hidden)
+})

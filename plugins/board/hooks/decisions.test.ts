@@ -361,6 +361,23 @@ test("only a plugin's own call that asks for it keeps an answer: from the model,
   ])
 })
 
+test('a decision whose answer a plugin keeps is reworded or withdrawn only by that plugin, never by a model loop', { plugins: [KEEPER] }, async ($, on) => {
+  const store = engine(on)
+  await $.command.run({ command: 'post', args: 'kept' } as never)
+  await $.command.run({ command: 'post', args: 'kept' } as never)
+
+  const refusal = 'D1 was posted by the keeper plugin, which keeps its answer; only keeper can change it.'
+  expect(resultText(await $.tool.call({ tool: ASK.tool, id: 'D1', question: 'Resolved?' } as never))).toContain(`Nothing changed: ${refusal}`)
+  expect(resultText(await $.tool.call({ tool: ASK.tool, id: 'D1', withdraw: true } as never))).toContain(`Nothing withdrawn: ${refusal}`)
+  expect(resultText(await $.tool.call({ tool: ASK.tool, id: 'D1', withdraw: true, agentId: WORKER.id } as never))).toContain(`Nothing withdrawn: ${refusal}`)
+  expect(saved(store)).not.toContain('Resolved?')
+
+  expect((await $.command.run({ command: 'reword', args: 'D1' } as never)).text).toContain('Updated D1')
+  expect((await $.command.run({ command: 'withdraw', args: 'D2' } as never)).text).toContain('Withdrew D2')
+  expect(saved(store)).toContain('Reworded by keeper?')
+  expect(saved(store)).not.toContain('"id":"D2"')
+})
+
 test("a plugin's own decision names that plugin as its asker on the pane", { plugins: [KEEPER] }, async ($, on) => {
   engine(on)
   await $.command.run({ command: 'post', args: '' } as never)

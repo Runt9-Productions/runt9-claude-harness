@@ -85,6 +85,7 @@ export type PostedFlag = {
   decisionId: string
   check: string
   summary: string
+  /** The judge's evidence as the flag quotes it: one line, cut short. */
   evidence: string
   /** Who "Send to the session" tells, as the owner reads it: `the main session`, or `the teammate "scout"`. */
   recipient: string
@@ -127,8 +128,6 @@ export type SessionEntry = {
 declare module 'claude-code' {
   interface PluginState {
     watcher: {
-      /** Every check in force, by name, once precedence and disabling are applied. */
-      checks: readonly Check[]
       /** Each agent's capture: `main` for the main session, else the agent's id. */
       activity: StateFamily<AgentActivity>
       /** Each judged agent's quiet record, keyed as `activity` is. */

@@ -1,10 +1,7 @@
-import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { AgentScope, Audience, Check, DigestPart, Trigger } from '../types'
 import { machineLocalDirectory, reportSkipped } from './settings'
-
-const checks = atom({ plugin: 'watcher', key: 'checks' } as const, [] as readonly Check[])
 
 const TRIGGERS: readonly Trigger[] = ['turn-end', 'refusal', 'teammate-idle', 'compaction', 'commit', 'secret-match']
 
@@ -162,8 +159,8 @@ async function applyFile($: EngineInterface, byName: Map<string, Check>, directo
 }
 
 /**
- * Reads the checks in force into the `checks` state and returns them. A file replaces the check of its name from a
- * location of lower precedence; a bad file is reported and skipped, so the check it would have replaced stays in force.
+ * The checks in force, sorted by name. A file replaces the check of its name from a location of lower precedence; a
+ * bad file is reported and skipped, so the check it would have replaced stays in force.
  */
 export async function loadChecks($: EngineInterface): Promise<readonly Check[]> {
   const byName = new Map<string, Check>()
@@ -172,6 +169,5 @@ export async function loadChecks($: EngineInterface): Promise<readonly Check[]> 
       await applyFile($, byName, directory, fileName)
     }
   }
-  const loaded = [...byName.values()].sort((left, right) => left.name.localeCompare(right.name))
-  return update($, checks, () => loaded)
+  return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name))
 }

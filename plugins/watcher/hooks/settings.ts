@@ -39,6 +39,11 @@ export function reportSkipped($: EngineInterface, what: string, reason: string) 
   $.ui.toast(text)
 }
 
+/** Writes `watcher <text>` to Claude Code's debug log, never the transcript. */
+export function log($: EngineInterface, text: string) {
+  $.ui.log(`watcher ${text}`, { to: 'debug' })
+}
+
 /** `~/.claude/local/watcher`, or undefined where the environment names no home. */
 export async function machineLocalDirectory($: EngineInterface): Promise<string | undefined> {
   const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))

@@ -85,16 +85,22 @@ test("the record holds only what the batch's checks read, each item cut short, w
   for (const hidden of ['INPUT-START', 'PROMPT-START', 'RESULT-TEXT']) expect(exits).not.toContain(hidden)
 })
 
-test('an agent keeps at most 150 items between judgments, dropping its oldest call before any prompt', async ($, on) => {
+test('an agent keeps its latest 150 items, so prompts already judged never crowd out a new call, and keeps its latest prompt while a judgment has still to read it', async ($, on) => {
   const world = engine(on, { kilo: checkFile('turn-end', 'prompts, calls') })
   on('tool.call', { tool: 'Bash' }, bashResult({ result: { stdout: '', stderr: '', interrupted: false }, text: 'ok' }))
-  await prompt($, 'FIRST-ASK')
-  await $.tool.call({ tool: 'Bash', command: 'OLDEST-CALL' })
-  for (let index = 1; index <= 149; index += 1) await prompt($, `ASK_${index}`)
+  for (let index = 1; index <= 150; index += 1) await prompt($, `ASK_${index}`)
   await endTurn($, world)
-  const record = recordOf(world.calls[0])
-  for (const kept of ['FIRST-ASK', 'ASK_149']) expect(record).toContain(kept)
-  expect(record).not.toContain('OLDEST-CALL')
+  await $.tool.call({ tool: 'Bash', command: 'NEW-CALL' })
+  await endTurn($, world)
+  expect(recordOf(world.calls[1])).toContain('NEW-CALL')
+
+  await prompt($, 'OLDER-ASK')
+  await prompt($, 'LATEST-ASK')
+  for (let index = 1; index <= 150; index += 1) await $.tool.call({ tool: 'Bash', command: `CALL_${String(index).padStart(3, '0')}` })
+  await endTurn($, world)
+  const record = recordOf(world.calls[2])
+  for (const kept of ['LATEST-ASK', 'CALL_002', 'CALL_150']) expect(record).toContain(kept)
+  for (const dropped of ['OLDER-ASK', 'CALL_001']) expect(record).not.toContain(dropped)
 })
 
 test('a record past its cap drops the oldest items, other calls before prompts, and says so', async ($, on) => {
@@ -169,6 +175,15 @@ test('a push that happened judges the commit checks, and a git command that fail
   await world.clock.advance(10)
   expect(world.calls.map(carried)).toEqual([['november']])
   expect(recordOf(world.calls[0])).toContain('git push')
+})
+
+test('a failure in a judgment finished after the hook returned is written to the debug log', async ($, on) => {
+  const world = engine(on, { alpha: checkFile('turn-end', 'prompts') })
+  world.isStoreFailing = true
+  world.answers.push(JSON.stringify({ checks: [{ name: 'alpha', raised: false, confidence: 'low', summary: '', evidence: '', repeats: false }], goal: 'A GOAL' }))
+  await prompt($, 'FIRST-ASK')
+  await endTurn($, world)
+  expect(world.logs.filter(line => line.startsWith('watcher could not judge the main session at turn-end'))).toHaveLength(1)
 })
 
 test('a raised verdict is logged with its summary, and an answer that cannot be read is logged once and dropped', async ($, on) => {

@@ -98,13 +98,14 @@ export function noteCleared(sessionId: string) {
 }
 
 /**
- * Moves the entry, without its goal, since after a `/clear` the judge reads the goal from the prompts anew. The files,
- * findings and waiting flags stay the session's own.
+ * Moves the entry, keeping its files and findings as the session's own. The goal goes, since after a `/clear` the
+ * judge reads it from the prompts anew, and so do the waiting flags: board empties its decisions when the session id
+ * changes, so none of them can be answered.
  */
 async function carryOver($: EngineInterface, from: string, to: string) {
   const earlier = entryOf(await $.store.get(from))
   if (earlier === undefined) return
-  await $.store.set(to, { ...earlier, goal: undefined })
+  await $.store.set(to, { ...earlier, goal: undefined, flags: [] })
   await $.store.delete(from)
 }
 
@@ -133,7 +134,6 @@ async function updateEntry($: EngineInterface, change: (entry: SessionEntry, her
   })
 }
 
-/** Adds a file an agent of this session changed. */
 export async function noteFileChanged($: EngineInterface, path: string) {
   await updateEntry($, (entry, here) => {
     const file = relativeTo(here.top, path)
@@ -142,7 +142,6 @@ export async function noteFileChanged($: EngineInterface, path: string) {
   })
 }
 
-/** Whether the session's goal is still to be read from the person's prompts. */
 export async function isGoalUnknown($: EngineInterface): Promise<boolean> {
   return (await ownEntry($))?.goal === undefined
 }
@@ -159,7 +158,7 @@ export async function noteFindings($: EngineInterface, findings: readonly Shared
   await updateEntry($, entry => ({ ...entry, findings: [...entry.findings, ...findings].slice(-MAX_FINDINGS) }))
 }
 
-/** The flags this session posted whose answers have not been read, kept across a restart of Claude Code. */
+/** The flags this session posted whose answers have not been read, kept across a restart that resumes its id. */
 export async function waitingFlags($: EngineInterface): Promise<readonly PostedFlag[]> {
   return (await ownEntry($))?.flags ?? []
 }

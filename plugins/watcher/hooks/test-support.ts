@@ -54,6 +54,8 @@ export type World = {
   branch: string
   /** Files on disk beside the shipped checks, by absolute path. */
   files: Record<string, string>
+  /** While true, every `$.store.set` fails. */
+  isStoreFailing: boolean
 }
 
 /** The entries directly under `directory` among the `files` paths. */
@@ -84,7 +86,7 @@ const quietAnswer = (call: ModelCompleteInput) =>
   JSON.stringify({ checks: carried(call).map(name => ({ name, raised: false, confidence: 'low', summary: '', evidence: '', repeats: false })) })
 
 /** An answer raising each entry given and no other check the call carried. */
-export function raising(entries: readonly { name: string; summary: string; confidence?: string; repeats?: boolean }[]): string {
+export function raising(entries: readonly { name: string; summary: string; confidence?: string; repeats?: boolean; evidence?: string }[]): string {
   const checks = entries.map(entry => ({ confidence: 'high', repeats: false, evidence: `EVIDENCE-OF-${entry.summary}`, raised: true, ...entry }))
   return JSON.stringify({ checks })
 }
@@ -114,6 +116,7 @@ export function engine(on: On, checks: Record<string, string>, roster: readonly 
     top: ROOT,
     branch: 'synthetic-branch',
     files: {},
+    isStoreFailing: false,
   }
   const isFileDirectory = (path: string) => Object.keys(world.files).some(file => file.startsWith(`${path}/`))
   on('session.append', { door: 'note' }, (_, e, next) => (e.agentId !== undefined && world.refusing.has(e.agentId) ? { deny: 'the loop is not running' } : next(e)))
@@ -166,6 +169,7 @@ export function engine(on: On, checks: Record<string, string>, roster: readonly 
   })
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
   on('store.set', (_, e) => {
+    if (world.isStoreFailing) throw new Error('the store refused the write')
     // As the real store keeps it: JSON, an undefined field dropped.
     store.set(e.key, JSON.parse(JSON.stringify(e.value)) as unknown)
     return { value: undefined }
@@ -233,40 +237,66 @@ export async function judgedTurn($: Engine, world: World, answer: string, agentI
 export const bashResult = (result: ToolCallResult) => () => result
 
 /**
- * A stand-in for board, as its README describes it to a plugin keeping its answers: `ask_decision` from a plugin
- * records the decision with that plugin's name, and the `answer` command, with args `<id>|<option>|<note>`, writes the
- * owner's answer into `decisions`; an empty option is Dismiss, which board records with no `chosenOption`. An inline
- * plugin's hooks close over nothing of this file, so each spells its values.
+ * A stand-in for board 0.2.0, as its README describes it to a plugin keeping its answers and as its code binds a
+ * session. `ask_decision` from a plugin records the decision with that plugin's name, keeping its answer only then.
+ * The `answer` command, with args `<id>|<option>|<note>`, is the owner's press: a note is written first, as typing it
+ * is, then the answer, into a decision still unanswered; an empty option is Dismiss, which board records with no
+ * `chosenOption`. Ids come from a counter, never reissued. On its first call after the session id changes, as after
+ * a `/clear`, board empties its decisions and starts its ids again, so a press meant for a decision from before finds
+ * none. An inline plugin's hooks close over nothing of this file, so each spells its values.
  */
 export const BOARD: Plugin = {
   name: 'board',
   register(on) {
+    let boundSessionId: string | undefined
+    let lastNumber = 0
+    const key = { plugin: 'board', key: 'decisions' } as const
+    // Whether the session id changed since the last call, as board's bind finds; each hook then empties the
+    // decisions. Passed no `$`, since the loader takes no helper here that is.
+    const isRebound = (id: string) => {
+      const wasBound = boundSessionId !== undefined && boundSessionId !== id
+      if (wasBound) lastNumber = 0
+      boundSessionId = id
+      return wasBound
+    }
     on('tool.call', { tool: 'mcp__board__ask_decision' }, async ($, e, next) => {
-      const { value = [] } = await $.state.get({ plugin: 'board', key: 'decisions' } as const)
-      const id = `D${value.length + 1}`
+      if (isRebound(await $.session.id())) await $.state.set(key, [])
+      const { value = [] } = await $.state.get(key)
+      lastNumber += 1
+      const id = `D${lastNumber}`
       const input = e as unknown as { question: string; context?: string; options: { label: string }[]; isAnswerKept?: boolean }
       const plugin = next.origin.plugin === 'engine' ? undefined : next.origin.plugin
-      const decision = { id, question: input.question, context: input.context, options: input.options, plugin, isAnswerKept: input.isAnswerKept === true }
-      await $.state.set({ plugin: 'board', key: 'decisions' } as const, [...value, decision])
-      return { result: `Posted ${id}. Its answer is kept in the board's decisions for ${plugin ?? 'nobody'}; no loop is told it.` }
+      const isAnswerKept = plugin !== undefined && input.isAnswerKept === true
+      const decision = { id, question: input.question, context: input.context, options: input.options, plugin, isAnswerKept }
+      await $.state.set(key, [...value, decision])
+      if (!isAnswerKept) return { result: `Posted ${id}. The answer will arrive as a message starting "[board]"; do not wait for it.` }
+      return { result: `Posted ${id}. Its answer is kept in the board's decisions for ${plugin}; no loop is told it.` }
     })
     on('command.run', { command: 'answer' }, async ($, e) => {
+      if (isRebound(await $.session.id())) await $.state.set(key, [])
       const [id, option = '', note] = e.args.split('|')
-      const { value = [] } = await $.state.get({ plugin: 'board', key: 'decisions' } as const)
       const chosenOption = option === '' ? undefined : option
       const label = chosenOption ?? 'Dismissed without choosing an option'
       const answer = note === undefined ? label : `${label}. Note: ${note}`
-      const answered = value.map(d => (d.id === id ? { ...d, answer, chosenOption, note, delivery: 'seen' as const } : d))
-      await $.state.set({ plugin: 'board', key: 'decisions' } as const, answered)
+      if (note !== undefined) {
+        const { value = [] } = await $.state.get(key)
+        await $.state.set(key, value.map(d => (d.id === id ? { ...d, note } : d)))
+      }
+      const { value = [] } = await $.state.get(key)
+      const answered = value.map(d => (d.id === id && d.answer === undefined ? { ...d, answer, chosenOption, note, delivery: 'seen' as const } : d))
+      await $.state.set(key, answered)
       return { text: 'answered' }
     })
     // As board restores its decisions after a restart: args are the decisions as JSON.
     on('command.run', { command: 'restore' }, async ($, e) => {
-      await $.state.set({ plugin: 'board', key: 'decisions' } as const, JSON.parse(e.args) as BoardDecision[])
+      if (isRebound(await $.session.id())) await $.state.set(key, [])
+      const restored = JSON.parse(e.args) as BoardDecision[]
+      lastNumber = restored.length
+      await $.state.set(key, restored)
       return { text: 'restored' }
     })
     on('command.run', { command: 'decisions' }, async $ => {
-      const { value = [] } = await $.state.get({ plugin: 'board', key: 'decisions' } as const)
+      const { value = [] } = await $.state.get(key)
       return { text: JSON.stringify(value) }
     })
   },

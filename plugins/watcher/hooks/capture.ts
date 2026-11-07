@@ -3,13 +3,13 @@ import type { EngineInterface, SessionAppendInput, ToolCallInput, ToolCallResult
 
 import type { ActivityItem, AgentActivity, RefusalKind, Trigger } from '../types'
 import { cut } from './digest'
-import { aroundSecrets, editedFile, planFileRead, redacted } from './inputs'
+import { aroundSecrets, editedFile, planFileRead, redacted, shown } from './inputs'
 import { noteFileChanged } from './shared'
 
 // The activity id of the main session. Agent ids start with `a`, so none is the same.
 const MAIN = 'main'
 
-// What one agent keeps between judgments, so the state stays bounded however long a turn runs.
+// What one agent keeps, so the state stays bounded however long a session runs.
 const MAX_ITEMS = 150
 
 const TEXT_CHARS = 2000
@@ -71,7 +71,6 @@ const verdicts = new Map<string, PermissionVerdict>()
 // capture it, so the refusal is judged once the call returns.
 const denials = new Set<string>()
 
-/** The activity id of an event's loop. */
 export function activityId(agentId: string | undefined): string {
   return agentId ?? MAIN
 }
@@ -88,12 +87,23 @@ function textOf(message: SessionAppendInput['message']): string {
     .trim()
 }
 
-/** Drops the oldest item past the bound, other than a prompt while any other kind is left: the request anchors most checks. */
-function bounded(items: readonly ActivityItem[]): readonly ActivityItem[] {
+/** The first `seq` that some trigger which has judged the agent has not yet read; 0 before any judgment. */
+function judgedByAll(activity: AgentActivity): number {
+  const places = Object.values(activity.judgedUpTo).filter(place => place !== undefined)
+  return places.length === 0 ? 0 : Math.min(...places)
+}
+
+/**
+ * Drops the oldest item past the bound. The latest prompt is kept while a judgment still has to read it, since the
+ * request anchors most checks; no other item is kept over a newer one, so a long session never fills the bound with
+ * prompts and drops each new item on arrival.
+ */
+function bounded(activity: AgentActivity, items: readonly ActivityItem[]): readonly ActivityItem[] {
   if (items.length <= MAX_ITEMS) return items
-  const oldestOther = items.findIndex(item => item.kind !== 'prompt')
-  const dropped = oldestOther < 0 ? 0 : oldestOther
-  return [...items.slice(0, dropped), ...items.slice(dropped + 1)]
+  const latestPrompt = items.findLast(item => item.kind === 'prompt')
+  const isLatestPromptUnread = latestPrompt !== undefined && latestPrompt.seq >= judgedByAll(activity)
+  if (isLatestPromptUnread && latestPrompt === items[0]) return [latestPrompt, ...items.slice(2)]
+  return items.slice(1)
 }
 
 /** Adds the item `makeItem` builds for the agent's next `seq`, and returns it. */
@@ -103,15 +113,12 @@ async function addItem<T extends ActivityItem>($: EngineInterface, id: string, m
     const activity = current ?? EMPTY
     // Built again on each try: update runs this again when another write got in first.
     added = makeItem(activity.nextSeq)
-    const items = bounded([...activity.items, added])
+    const items = bounded(activity, [...activity.items, added])
     return { ...activity, items, nextSeq: activity.nextSeq + 1 }
   })
   if (added === undefined) throw new Error(`the activity of ${id} was not updated`)
   return added
 }
-
-/** Text as the judge may read it: secrets redacted, then cut to `limit`. */
-const shown = (text: string, limit: number) => cut(redacted(text).text, limit)
 
 /**
  * Whether an unstamped prompt is the operator's: a `-p` run's prompt reaches the session `unclassified`, not `sdk` as
@@ -176,7 +183,8 @@ function inputOf(call: ToolCallInput): string {
   return JSON.stringify(Object.fromEntries(args))
 }
 
-function resultText(result: ToolCallResult): string {
+/** The text a call's result gives. The engine's types leave `text` absent on a hook's own `{ result }`. */
+export function resultText(result: ToolCallResult): string {
   if (result.deny !== undefined) return result.deny
   if (result.text !== undefined) return result.text
   if (typeof result.result === 'string') return result.result
@@ -191,7 +199,6 @@ async function notePlanFile($: EngineInterface, id: string, path: string) {
   })
 }
 
-/** The plan files the agent has read, latest last. */
 export async function planFilesRead($: EngineInterface, id: string): Promise<readonly string[]> {
   const { value } = await $.state.get({ plugin: 'watcher', key: 'activity', id } as const)
   return value?.planFiles ?? []

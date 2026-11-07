@@ -45,8 +45,8 @@ function optionsRefusal(options: readonly (BoardOption | string)[]): string | un
  */
 export async function askDecision($: EngineInterface, agentId: string | undefined, plugin: string | undefined, input: AskDecisionInput): Promise<string> {
   await bind($)
-  if (input.withdraw) return withdrawDecision($, agentId, input.id)
-  if (input.id !== undefined) return rewordDecision($, agentId, input.id, input)
+  if (input.withdraw) return withdrawDecision($, agentId, plugin, input.id)
+  if (input.id !== undefined) return rewordDecision($, agentId, plugin, input.id, input)
   if (!input.question) return 'Nothing posted: a new decision needs a question.'
   const refusal = optionsRefusal(input.options ?? [])
   if (refusal !== undefined) return `Nothing posted: a new decision ${refusal}.`
@@ -86,7 +86,18 @@ export function notPosterText(rows: readonly BoardActivity[], id: string, poster
   return `${id} was posted by ${poster}; only ${poster} or the main session can change it.`
 }
 
-async function rewordDecision($: EngineInterface, agentId: string | undefined, id: string, input: AskDecisionInput): Promise<string> {
+/**
+ * Why the caller may not change `decision`, or undefined when it may. One whose answer a plugin keeps is changed only
+ * by that plugin's own call, so no model loop rewords or withdraws what the plugin asks the owner, which may be about
+ * that loop; any other follows notPosterText.
+ */
+function changeRefusal(rows: readonly BoardActivity[], decision: BoardDecision, callerId: string | undefined, callerPlugin: string | undefined): string | undefined {
+  if (!decision.isAnswerKept) return notPosterText(rows, decision.id, decision.agentId, callerId)
+  if (callerPlugin === decision.plugin) return undefined
+  return `${decision.id} was posted by the ${decision.plugin} plugin, which keeps its answer; only ${decision.plugin} can change it.`
+}
+
+async function rewordDecision($: EngineInterface, agentId: string | undefined, plugin: string | undefined, id: string, input: AskDecisionInput): Promise<string> {
   const optionsProblem = input.options === undefined ? undefined : optionsRefusal(input.options)
   if (optionsProblem !== undefined) return `Nothing changed: a decision ${optionsProblem}.`
   const options = input.options?.map(asOption)
@@ -102,9 +113,9 @@ async function rewordDecision($: EngineInterface, agentId: string | undefined, i
       refusal = `Nothing changed: there is no ${id}. Omit id to post a new decision.`
       return all
     }
-    const notPoster = notPosterText(rows, id, existing.agentId, agentId)
-    if (notPoster !== undefined) {
-      refusal = `Nothing changed: ${notPoster}`
+    const notAllowed = changeRefusal(rows, existing, agentId, plugin)
+    if (notAllowed !== undefined) {
+      refusal = `Nothing changed: ${notAllowed}`
       return all
     }
     if (existing.answer !== undefined) {
@@ -148,13 +159,13 @@ export async function tellPoster($: EngineInterface, posterId: string | undefine
   if (failure !== undefined) $.ui.toast(`Not delivered to ${agentLabel(rows, posterId) ?? 'Claude'} (${failure}); tell it yourself: ${row}`)
 }
 
-async function withdrawDecision($: EngineInterface, agentId: string | undefined, id: string | undefined): Promise<string> {
+async function withdrawDecision($: EngineInterface, agentId: string | undefined, plugin: string | undefined, id: string | undefined): Promise<string> {
   if (id === undefined) return 'Nothing withdrawn: withdraw needs the id of the decision.'
   const listed: BoardDecision[] = await read($, decisions)
   const decision = listed.find(d => d.id === id)
   if (decision === undefined) return `Nothing withdrawn: there is no ${id}.`
-  const notPoster = notPosterText(await read($, activity), id, decision.agentId, agentId)
-  if (notPoster !== undefined) return `Nothing withdrawn: ${notPoster}`
+  const notAllowed = changeRefusal(await read($, activity), decision, agentId, plugin)
+  if (notAllowed !== undefined) return `Nothing withdrawn: ${notAllowed}`
   if (decision.answer !== undefined) return `Nothing withdrawn: the owner already answered ${id}: ${decision.answer}`
   await retireIds($, 'D', [id])
   // Checked again inside the update, so an answer pressed since the read is delivered rather than lost.

@@ -36,8 +36,6 @@ const LIT_STYLE = { color: 'black', backgroundColor: 'yellow' }
 /**
  * Who asked a waiting decision, as its line shows it: the agent, else the plugin that posted it, else nothing for the
  * main session. Only the pane names the plugin, since `askedBy` also names whom an answer is delivered to.
- *
- * (keeper asks)
  */
 function askerPrefix(decision: BoardDecision): string {
   const asker = decision.askedBy ?? decision.plugin

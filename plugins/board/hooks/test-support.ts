@@ -186,9 +186,9 @@ export const PROBE_CALLER: Plugin = {
 export const KEPT_ANSWERS_KEY = 'kept-answers'
 
 /**
- * Another plugin, `keeper`, whose `post` command posts the decision in ASK, asking to keep its answer when the args are
- * `kept`, and answers with the tool's result. It reads each answer to its own decisions as the README tells such a
- * plugin to, and appends what it read to the store under KEPT_ANSWERS_KEY. An inline plugin's hooks run without this
+ * Another plugin. Its `post` command posts the decision in ASK, keeping the answer when the args are `kept`; `reword`
+ * and `withdraw`, with a decision's id as args, change it. It reads each answer to its own decisions as the README
+ * tells such a plugin to and appends it to the store under KEPT_ANSWERS_KEY. An inline plugin's hooks run without this
  * module's scope, so each spells out every value it uses.
  */
 export const KEEPER: Plugin = {
@@ -198,6 +198,14 @@ export const KEEPER: Plugin = {
       const decision = { tool: 'mcp__board__ask_decision', question: 'Draft an issue on the tracker?', options: [{ label: 'Skip' }, { label: 'Draft it' }] }
       const posted = await $.tool.call({ ...decision, isAnswerKept: e.args === 'kept' } as never)
       return { text: JSON.stringify(posted) }
+    })
+    on('command.run', { command: 'reword' }, async ($, e) => {
+      const changed = await $.tool.call({ tool: 'mcp__board__ask_decision', id: e.args, question: 'Reworded by keeper?' } as never)
+      return { text: JSON.stringify(changed) }
+    })
+    on('command.run', { command: 'withdraw' }, async ($, e) => {
+      const changed = await $.tool.call({ tool: 'mcp__board__ask_decision', id: e.args, withdraw: true } as never)
+      return { text: JSON.stringify(changed) }
     })
     on('state.set', { plugin: 'board', key: 'decisions' }, async ($, e, next) => {
       const written = await next(e)

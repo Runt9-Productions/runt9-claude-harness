@@ -238,7 +238,7 @@ jobs:
             echo "::group::$dir"
             # A plugin named in `dependencies` gets its types laid only when it loads on this run too.
             plugin_dirs=(--plugin-dir "$dir")
-            for dependency in $(jq -r '.dependencies[]?' "$dir/.claude-plugin/plugin.json"); do
+            for dependency in $(jq -r '.dependencies[]? | if type == "string" then . else .name end' "$dir/.claude-plugin/plugin.json"); do
               plugin_dirs+=(--plugin-dir "plugins/$dependency")
             done
             CLAUDE_CODE_PLUGIN_DIR_WATCH=1 timeout 120 claude -p "${plugin_dirs[@]}" x > /dev/null 2>&1 || true

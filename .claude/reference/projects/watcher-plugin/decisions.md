@@ -63,8 +63,8 @@ Rulings for building the `watcher` plugin. Platform facts measured for it that o
   answering (owner, 2026-11-06).
 - [decision] The judge marks repeats: each call is shown the summaries already raised for that agent, per check, and
   says which finding repeats one, with a normalised exact match as a backstop (owner, 2026-11-06): a model rarely words the same observation identically twice.
-- [decision] The checks are loaded again before each judgment (lead, 2026-11-06): a mod's `$.state` empties when the
-  session id changes, with no `session.start` after it, and a new check file then takes effect without a restart.
+- [decision] The checks are loaded again before each judgment (lead, 2026-11-06): no `session.start` follows `/clear`, whether
+  `$.state` survives a session-id change is unconfirmed, and a new check file then takes effect without a restart.
 - [decision] Each trigger keeps its own place in an agent's record (lead, 2026-11-06): with one place per agent, a
   mid-turn commit would leave the turn's end without the turn's prompt.
 - [decision] The stalled-teammate check triggers on a teammate going idle only (lead, 2026-11-06): a teammate's turn
@@ -88,10 +88,19 @@ Rulings for building the `watcher` plugin. Platform facts measured for it that o
 - [decision] The judge's answer carries a one-line `goal` while the session's goal is unknown (lead, 2026-11-06): the
   shared entry needs it and no check's answer holds it.
 - [decision] When a session's id changes within one process (`/clear`), the watcher carries its store entry over to
-  the new id (owner, 2026-11-06): otherwise the overlap check reads the session's own past as another session.
+  the new id, dropping the goal and the waiting flags (owner, 2026-11-06): otherwise the overlap check reads the
+  session's own past as another session, and board empties its decisions on an id change, so those flags cannot be
+  answered.
+- [decision] The watcher depends on board `>=0.2.0` in the object form, and CI's mod step reads both dependency forms
+  (owner, 2026-11-06): an older board ignores the kept-answer opt-in, so the owner's answers would reach the model.
 - [decision] The README's two unmeasured claims (an idle main session reads a nudge with the next prompt; a message
   typed mid-turn may be left out of the record) are measured in verification and kept, corrected or dropped by what
   is seen (owner, 2026-11-06).
+- [decision] A nudge, a flag's context and what Send to the session passes on carry a short evidence quote fenced as
+  record text that is data, not instructions (owner, 2026-11-06): the judge reads untrusted tool output, and a nudge
+  reaches the agent as a user-role message.
+- [decision] A decision posted with `isAnswerKept` can be reworded or withdrawn only by the plugin that posted it
+  (lead, 2026-11-06): otherwise the watched agent could rewrite or remove a flag about its own work.
 - [decision] The limits and the headless opt-in are read from `~/.claude/local/watcher/settings.json` at each
   judgment, a missing file giving the defaults (lead, 2026-11-06).
 - [decision] The build writes only `plugins/watcher/**`, `plugins/board/**`, `.claude-plugin/marketplace.json`, the
@@ -110,6 +119,8 @@ Rulings for building the `watcher` plugin. Platform facts measured for it that o
 
 ## Open questions
 
+- [question] Does a backgrounded or detached session report no surfaces? If so the watcher treats it as headless and
+  stops judging it unless the headless setting is on.
 - [question] Does `session.append` fire for an in-process teammate's rows? It needs an interactive session to
   measure; without it the stalled-teammate check falls back to the roster and `TeammateIdle`.
 - [question] Does another plugin's `state.set` hook fire on board's writes when the owner presses an answer in an

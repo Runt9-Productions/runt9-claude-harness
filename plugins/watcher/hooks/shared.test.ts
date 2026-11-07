@@ -39,7 +39,7 @@ test("a session's entry holds its repository, branch, the first line of its goal
   expect(recordOf(world.calls[3])).toContain('Other sessions: none updated within a day.')
 })
 
-test("after a /clear the session's overlap check shows the files it changed before as its own, it asks the goal again, and a flag posted before is acted on", { plugins: [BOARD] }, async ($, on) => {
+test("after a /clear the session's overlap check shows the files it changed before as its own and it asks the goal again, while a flag posted before, which board no longer holds, is forgotten and never acted on", { plugins: [BOARD] }, async ($, on) => {
   const world = engine(on, { kilo: checkFile('turn-end', 'prompts', 'all', 'haiku', 'flag'), overlap: checkFile('turn-end', 'prompts, shared', 'main') })
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'edited', text: 'The file was edited.' }))
   await prompt($, 'Fix the failing parser test.')
@@ -53,10 +53,10 @@ test("after a /clear the session's overlap check shows the files it changed befo
   await endTurn($, world)
   expect(world.calls[1]?.prompt).toContain('## Goal')
   for (const shown of ['Files changed: src/parser.ts', 'Other sessions: none updated within a day.']) expect(recordOf(world.calls[1])).toContain(shown)
+  expect(world.store.get('session:synthetic-session-after-clear')).toMatchObject({ flags: [] })
 
   await answerFlag($, world, 'D1', 'Send to the session')
-  expect(world.submitted).toHaveLength(1)
-  expect(world.submitted[0]).toContain('KILO-BEFORE')
+  expect(world.submitted).toEqual([])
 })
 
 test('a flag posted before Claude Code restarted is acted on when the owner answers it after, and then forgotten', { plugins: [BOARD] }, async ($, on) => {
