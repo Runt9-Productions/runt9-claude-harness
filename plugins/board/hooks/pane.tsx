@@ -33,6 +33,15 @@ function activityText(row: BoardActivity): string {
 
 const LIT_STYLE = { color: 'black', backgroundColor: 'yellow' }
 
+/**
+ * Who asked a waiting decision, as its line shows it: the agent, else the plugin that posted it, else nothing for the
+ * main session. Only the pane names the plugin, since `askedBy` also names whom an answer is delivered to.
+ */
+function askerPrefix(decision: BoardDecision): string {
+  const asker = decision.askedBy ?? decision.plugin
+  return asker === undefined ? '' : `(${asker} asks) `
+}
+
 // Declared again in each file that uses them, since the loader refuses an imported atom (register.tsx has the rule).
 const decisions =atom({ plugin: 'board', key: 'decisions' } as const, [])
 const tasks = atom({ plugin: 'board', key: 'tasks' } as const, [])
@@ -107,7 +116,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       {waiting.map((d, index) => (
         <Box key={d.id} flexDirection="column" marginBottom={1}>
           <Text bold {...(lit.includes(d.id) ? LIT_STYLE : {})}>
-            {d.id} {d.askedBy ? `(${d.askedBy} asks) ` : ''}
+            {d.id} {askerPrefix(d)}
             {d.question}
           </Text>
           {d.context && <Text italic>{d.context}</Text>}
