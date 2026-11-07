@@ -12,7 +12,7 @@ tags:
 ## Status
 
 - **Live item:** none
-- **How far along:** 01 to 06 built; verification next
+- **How far along:** every item built
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-06
 

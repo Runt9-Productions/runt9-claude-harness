@@ -75,6 +75,14 @@ stub, so its tests check the frame's handling of answers, not the judgments them
 - Whether any check needs a stronger model than Haiku: a per-check `model` field is already in the frontmatter, so
   lines barely move; cost does.
 
+## Actual
+
+- 62 files against the base: 22 production files (+2,195 / -25), 9 test files (+1,180 / -1), 31 prose files (+956 /
+  -25: the 16 checks, the judge prompt, both READMEs, examples and the knowledge base), plus one CI line.
+- Missed: production ran past the range because the review round added hardening (record bounds that never go blind,
+  owner-only edits of kept decisions, fenced evidence, redaction of every input, carrying the entry over a `/clear`);
+  the file count missed that 16 checks are 16 files.
+
 ## Relations
 
 - part_of [[Watcher Plugin]]
