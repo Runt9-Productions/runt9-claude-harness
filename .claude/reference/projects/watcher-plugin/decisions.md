@@ -119,12 +119,10 @@ Rulings for building the `watcher` plugin. Platform facts measured for it that o
 
 ## Open questions
 
-- [question] Does a backgrounded or detached session report no surfaces? If so the watcher treats it as headless and
-  stops judging it unless the headless setting is on.
+- [question] Does `$.state` empty when the session id changes within one process (`/clear`)? Nothing the watcher does
+  depends on the answer, since it reloads its checks and moves its entry itself.
 - [question] Does `session.append` fire for an in-process teammate's rows? It needs an interactive session to
   measure; without it the stalled-teammate check falls back to the roster and `TeammateIdle`.
-- [question] Does another plugin's `state.set` hook fire on board's writes when the owner presses an answer in an
-  interactive session? It fires in the kit and in a `claude -p` run; if it does not, board raises an event instead.
 
 ## Relations
 
