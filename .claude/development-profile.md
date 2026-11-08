@@ -102,7 +102,9 @@ a knowledge base note already answers a question, this file points there.
   only workflow in `.github/workflows/`; CodeQL runs as GitHub's default setup outside `gate`, and the watch does not
   follow it.
 - The bot cannot rerun a job, since its App lacks Actions write, so a run failed by the runner rather than the code
-  is rerun by the owner or by the next push. It cannot push a change to `.github/workflows/` either (section 10). Nor
+  is rerun by the owner or by the next push. Closing and reopening the pull request also starts a new `CI` run on the
+  same head with no commit, since the `pull_request` trigger in `.github/workflows/ci.yml` lists `reopened` (done
+  once, 2026-11-08). It cannot push a change to `.github/workflows/` either (section 10). Nor
   can it command Dependabot: `@dependabot rebase` and the other commands are taken only from a user with push access,
   so the owner posts them.
 - Duration: `CI` takes about 1.5 minutes (recent runs, 2026-10-28); a local code review took 8 and 16 minutes
