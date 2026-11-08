@@ -11,8 +11,8 @@ tags:
 
 ## Status
 
-- **Live item:** 01
-- **How far along:** spec written
+- **Live item:** none; 01 built
+- **How far along:** 01 built and verified through the `LSP` tool
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-07
 
@@ -22,7 +22,7 @@ tags:
 
 ## Checklist
 
-- [ ] 01 The `typescript-go-lsp` plugin with its README and marketplace entry, a tracked root `tsconfig.json` over
+- [x] 01 The `typescript-go-lsp` plugin with its README and marketplace entry, a tracked root `tsconfig.json` over
   every mod with its line in `CLAUDE.md`, and a knowledge base note on the TypeScript language server's traps with its
   entry-point row
 

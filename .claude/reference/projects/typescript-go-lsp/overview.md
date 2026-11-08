@@ -18,7 +18,7 @@ when that pull request merges.
 
 ## Where it stands
 
-- [status] Spec written; build not started.
+- [status] Item 01 built and staged, not yet committed or reviewed.
 
 ## Goal
 

@@ -14,6 +14,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Teammate Mailbox](domains/agent-teams/mailbox.md) | sending text between teammates that holds tags |
 | [Teammate Lifecycle](domains/agent-teams/lifecycle.md) | writing a rule about how teammates report, wait or stop, or testing one headless |
 | [Built-in Worktrees](domains/worktrees/overview.md) | relying on a worktree's contents or base, or on a language server answer inside one |
+| [TypeScript Language Server](domains/lsp/typescript.md) | trusting a TypeScript `findReferences`, `incomingCalls` or `hover` answer, or changing the root `tsconfig.json` |
 | [Guardrails](domains/guardrails/overview.md) | writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to stop a call |
 | [Comparing Harness Variants](domains/experiments/overview.md) | running two or more versions of a prompt, skill or reviewer against each other, or reading such a comparison's results |
 | [Development Process](domains/development-process/overview.md) | changing what a plugin ships, CI, anything under `.github/workflows/`, or a file the pre-push gate reads |
@@ -26,6 +27,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Bootstrap Update](projects/bootstrap-update/overview.md) | reading the rulings and the designs ruled out behind `bootstrap.py --update` (issue #41) |
 | [Bootstrap Menu](projects/bootstrap-menu/overview.md) | reading the rulings and the designs ruled out behind the `bootstrap.py` selection menu and `all` (#121) |
 | [Watcher Plugin](projects/watcher-plugin/overview.md) | building or changing the `watcher` plugin (issue #35) |
+| [TypeScript Go LSP Plugin](projects/typescript-go-lsp/overview.md) | reading the rulings and the designs ruled out behind the `typescript-go-lsp` plugin and the root `tsconfig.json` (issue #131) |
 
 ## Local conventions
 

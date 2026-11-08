@@ -66,6 +66,11 @@
       "description": "Starts the chrome-devtools-mcp browser server at a pinned version, headless, with a throwaway profile, no local files, redacted request headers and no data sent to outside services"
     },
     {
+      "name": "typescript-go-lsp",
+      "source": "./plugins/typescript-go-lsp",
+      "description": "TypeScript and JavaScript code intelligence for the LSP tool, served by TypeScript 7's built-in language server (tsc --lsp) from the global tsc"
+    },
+    {
       "name": "watcher",
       "source": "./plugins/watcher",
       "description": "Has a model read what each session does against short prose checks, nudging the agent when its work goes off track and flagging to the owner on the board what they should know"

@@ -28,11 +28,14 @@ Rulings for the `typescript-go-lsp` plugin and the root `tsconfig.json`. Read be
 - [decision] The build runs in the session that wrote the spec, not a fresh one in the worktree (owner, 2026-11-07).
   That session had no TypeScript language server running, so there was no server to be rooted in the wrong checkout.
 
-## Open questions
-
-- [question] Is one root project enough? Five plugins' `types/index.d.ts` each augment the `claude-code` module, and
-  one project merges those augmentations. The build checks that navigation is unaffected, and falls back to one
-  project per plugin if it isn't.
+- [fact] One root project is enough. `claude-code` never resolves in it, so the five augmentations never merge, and
+  navigation over them was unaffected (measured through the `LSP` tool, 2026-11-07).
+- [decision] The root `tsconfig.json` maps `"*"` to `./plugins/*/types/index.d.ts` under `paths` (owner,
+  2026-11-07). A plugin imported by its bare name (watcher's `from 'board'`) then resolves to that plugin's types, so
+  references reach across plugins. A specifier with no matching plugin falls back to normal resolution.
+- [decision] Ship with the cross-plugin gap documented (owner, 2026-11-07). Once Claude Code writes a plugin's own
+  `tsconfig.json`, that plugin's files leave the root project, and references from other plugins stop showing up.
+  That file is generated and gitignored, so this repository can't change it.
 
 ## Relations
 
