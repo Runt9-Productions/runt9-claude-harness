@@ -9,7 +9,7 @@
       "Bash(sshpass *)",
       "Bash(ssh-copy-id *)",
       "Bash(mosh *)",
-      "Bash(rsync *:*)"
+      "Bash(rsync *)"
     ]
   }
 }
