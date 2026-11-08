@@ -55,3 +55,4 @@ pass silently when their input is missing, which is why the job checks the input
 
 - part_of [[Plugin Platform]]
 - see_also [[Development Process]]
+- see_also [[TypeScript Language Server]]

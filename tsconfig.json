@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    // Resolves an import of another plugin by name, such as 'board', to that plugin's types; any other name resolves
+    // as it would without the mapping.
+    "paths": { "*": ["./plugins/*/types/index.d.ts"] }
+  },
+  "include": ["plugins/*/hooks", "plugins/*/types", "plugins/*/tests"]
+}
