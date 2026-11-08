@@ -13,9 +13,14 @@ hierarchy, hover, document symbols and workspace symbols. The plugin runs the la
 
 ## Requirement
 
-TypeScript 7 installed globally (`npm install -g typescript@7`) under the Node that launches Claude Code. The plugin
-runs whichever `tsc` is first on `PATH`, never a project's own copy and never `npx`, so a project without TypeScript
-installed still gets a server, and starting one never fetches a package.
+TypeScript 7 installed globally (`npm install -g typescript@7`), so that `tsc` on the `PATH` of the shell you start
+`claude` from is version 7 (`tsc --version`). The plugin runs whichever `tsc` is first on that `PATH`, never a
+project's own copy and never `npx`, so a project without TypeScript installed still gets a server, and starting one
+never fetches a package. This was measured on Linux only; Windows, where a global npm `tsc` is a `tsc.cmd` shim, is
+untested.
+
+Disable the official `typescript-lsp` plugin (`/plugin disable typescript-lsp@claude-plugins-official`) while this one
+is enabled. Both claim the same file extensions.
 
 ## Traps
 

@@ -20,14 +20,8 @@ Rulings for the `typescript-go-lsp` plugin and the root `tsconfig.json`. Read be
   2026-11-07). That is the measured setup, and its requirement goes in the README.
 - [decision] The interface-references trap goes in the plugin README and in a knowledge base note, not in a
   tool-routing guide (owner, 2026-11-07), since no tool-routing guide ships.
-- [decision] The plugin was checked through Claude Code's real `LSP` tool before the issue was written (owner,
-  2026-11-07), so the issue rests on measured behaviour.
 - [decision] A tracked root `tsconfig.json` covers every mod (owner, 2026-11-07). Without a project config the server
   silently returns partial references and callers, and the per-plugin configs are generated and gitignored.
-- [decision] The spec and its edit scope are approved as written (owner, 2026-11-07).
-- [decision] The build runs in the session that wrote the spec, not a fresh one in the worktree (owner, 2026-11-07).
-  That session had no TypeScript language server running, so there was no server to be rooted in the wrong checkout.
-
 - [fact] One root project is enough. `claude-code` never resolves in it, so the five augmentations never merge, and
   navigation over them was unaffected (measured through the `LSP` tool, 2026-11-07).
 - [decision] The root `tsconfig.json` maps `"*"` to `./plugins/*/types/index.d.ts` under `paths` (owner,

@@ -6,7 +6,7 @@ tags:
 - plugins
 - lsp
 - typescript
-status: implementation
+status: complete
 opened: '2026-11-07'
 ---
 
@@ -18,7 +18,7 @@ when that pull request merges.
 
 ## Where it stands
 
-- [status] Item 01 built and staged, not yet committed or reviewed.
+- [status] Complete: item 01 built in #132; the durable facts are in [[TypeScript Language Server]].
 
 ## Goal
 
