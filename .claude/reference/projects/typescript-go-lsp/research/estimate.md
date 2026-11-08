@@ -44,6 +44,12 @@ and adds the root `tsconfig.json` and a knowledge base note.
 - `tsc --lsp` doesn't appear in `tsc --help` for 7.0.2. The TypeScript 7.0 announcement (Microsoft devblogs, 2026)
   says the native port serves LSP, and editor configs run `tsc --lsp --stdio`.
 
+## Actual
+
+139 production lines added over 9 files, against an estimate of 130 to 190 over 7. No tests. The two extra files are
+the one-line back-links in the plugins and worktrees notes. The estimate missed the wildcard `paths` mapping that
+references across plugins needed, and the review fix round.
+
 ## Relations
 
 - part_of [[TypeScript Go LSP Plugin]]
