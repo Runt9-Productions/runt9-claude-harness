@@ -5,7 +5,7 @@ permalink: guardrails/overview
 tags: [guardrails, auto-mode, sandbox, permissions, hooks, credentials, installs]
 verified: 2026-11-06
 coverage: partial
-measured_on: "Claude Code 2.1.314, 2.1.316 and 2.1.318, Linux bubblewrap 0.9.0"
+measured_on: "Claude Code 2.1.314, 2.1.316, 2.1.318 and 2.1.319, Linux bubblewrap 0.9.0"
 sources:
   - "harness/settings/guardrails-automode.json"
   - "harness/settings/guardrails-sandbox.json"
@@ -56,7 +56,10 @@ sources:
 > forward without a re-check. Later in #121, after component summaries and descriptions moved to the docs (in
 > `bootstrap/settings.py` only its imports and `settings_components` changed; `bootstrap/update.py` did not change),
 > that diff was read and every citation into both files checked against its line, all unchanged; the `#measured`
-> lines were not re-run, and every other claim was carried forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
+> lines were not re-run, and every other claim was carried forward without a re-check. The line on when Claude Code
+> warns about a malformed permission rule was measured once on 2.1.319, on 2026-11-08, in a scratch session with one
+> malformed deny rule, launched and then relaunched; other malformed rules and allow rules were not tried, and every
+> other claim was carried forward without a re-check. Not covered: macOS and Windows sandboxing, the Read tool's path through auto mode
 > (only the documentation's account), pushes over HTTPS from inside the sandbox, and any JVM build run end to end in
 > the sandbox.
 
@@ -132,6 +135,10 @@ stop a call.
   the sandbox's `denyRead`, which covers every sandboxed process.
 - [vendor] A `!` rule carves paths out only of the cwd-relative (`path`, `./path`) rules listed before it in the same
   file, so a rule anchored with `//` or `~/` cannot be narrowed.
+- [trap] Claude Code warns about a malformed permission rule only on the first launch in a project, and a relaunch
+  shows no warning whether or not the rule was fixed, so a check that a fix removed the warning runs in a fresh
+  directory. Seen once, with the deny rule `Bash(rsync *:*)`, whose warning read "⚠ Deny rule Bash(rsync *:*) reads
+  its * literally · use Bash(rsync *)". #measured
 
 ### Model-evaluated hooks
 
