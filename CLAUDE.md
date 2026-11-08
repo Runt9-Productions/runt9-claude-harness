@@ -44,6 +44,10 @@ nothing from an employer, a private project or a specific machine goes in, in co
   area before its code or platform behaviour; a question it does not answer is still open.
 - `package.json` at the root: the pinned tools CI and local checks run (TypeScript and oxlint, with
   `.oxlintrc.json`).
+- `tsconfig.json` at the root: one project over every mod's `hooks`, `types` and `tests`, so the TypeScript language
+  server's references and callers on a mod are complete without loading it. The TypeScript Language Server note in
+  `.claude/reference/domains/lsp/` lists where they are not, and where `hover` comes back empty. CI ignores it and
+  type-checks each mod with the `tsconfig.json` Claude Code generates for that mod.
 
 ## Releasing
 

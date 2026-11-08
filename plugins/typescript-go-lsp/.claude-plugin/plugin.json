@@ -1,0 +1,24 @@
+{
+  "name": "typescript-go-lsp",
+  "version": "0.1.0",
+  "description": "TypeScript and JavaScript code intelligence for the LSP tool, served by TypeScript 7's built-in language server (tsc --lsp) from the global tsc",
+  "author": {
+    "name": "Runt9 Productions"
+  },
+  "lspServers": {
+    "typescript": {
+      "command": "tsc",
+      "args": ["--lsp", "--stdio"],
+      "extensionToLanguage": {
+        ".ts": "typescript",
+        ".mts": "typescript",
+        ".cts": "typescript",
+        ".tsx": "typescriptreact",
+        ".js": "javascript",
+        ".mjs": "javascript",
+        ".cjs": "javascript",
+        ".jsx": "javascriptreact"
+      }
+    }
+  }
+}

@@ -39,3 +39,4 @@ worktree. The language-server trap returns a clean "not found" rather than an er
 
 - see_also [[Plugin Platform]]
 - see_also [[Teammate Lifecycle]]
+- see_also [[TypeScript Language Server]]
