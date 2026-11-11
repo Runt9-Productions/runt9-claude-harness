@@ -28,6 +28,14 @@ tags:
 - Keeping held messages across a reload was ruled out, which kept about 30 production lines, their tests and a probe
   out of the change.
 
+## Actual
+
+Against the base: production 4 files, +76 -146 (`register.ts`, the README, `plugin.json` and the marketplace
+entry); tests 1 file, +162 -198; knowledge base 11 files, +343 -19, the project's own notes included. The estimate
+missed that `claude -p` hosts no teammate the plugin acts on, which moved verification to an interactive session and
+turned the knowledge base work from one fact into a record of where a teammate's mail lands with and without the
+plugin; the unread tracking a review finding added was not foreseen either.
+
 ## Relations
 
 - part_of [[Teammate Delivery Tool Result]]
