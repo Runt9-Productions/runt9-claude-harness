@@ -6,7 +6,7 @@ tags:
 - plugins
 - agent-teams
 - teammate-delivery
-status: implementation
+status: complete
 opened: '2026-11-11'
 ---
 
@@ -17,7 +17,9 @@ from its transcript (issue #143). It ends when that pull request merges.
 
 ## Where it stands
 
-- [status] Every checklist item is built; review fixes are in progress.
+- [status] Complete: teammate-delivery 0.2.0 holds a mid-turn message, adds it to the teammate's next tool result,
+  and mails at the turn's end what is still held or unread. Its durable facts are in [[Teammate Mailbox]],
+  [[Teammate Lifecycle]], [[Plugin Platform]] and [[Rewriting Session History]].
 
 ## Goal
 
