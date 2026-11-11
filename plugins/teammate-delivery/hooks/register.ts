@@ -55,8 +55,9 @@ function isTextOrImage(part: unknown): boolean {
   return part.type === 'text' || part.type === 'image'
 }
 
-// Text sent beside a `tool_reference` in a tool result has made the API refuse every later request, so a row whose
-// results hold anything but text and images is left without the messages.
+// Text inside a `tool_reference` result's content makes every later request fail. The messages go beside the results
+// instead, which `tool_reference` rows accept too, but other result kinds are untried, so only rows of text and image
+// results take them. Skipping a row delays the messages by one tool call at most.
 function takesMessages(block: ApiContentBlock): boolean {
   if (block.type !== 'tool_result') return true
   const content = block.content
@@ -86,18 +87,15 @@ function senderName(agents: readonly AgentInfo[], agentId: string | undefined): 
   return agents.find(agent => agent.id === agentId)?.name ?? agentId
 }
 
-// The open turn of the teammate a model's message addresses, with the message composed for it. Undefined leaves the
-// message to the mailbox.
+// The running teammate a model's message addresses, with the message composed for it. Undefined leaves the message to
+// the mailbox.
 async function divertedMessage($: EngineInterface, openTurns: ReadonlyMap<string, Turn>, e: SessionSendInput) {
   if (e.origin.kind !== 'model' || openTurns.size === 0) return undefined
   const agents = await $.agent.list()
   const target = addressedTeammate(agents, e.to)
   if (target === undefined) return undefined
-  // Read after the listing, so a turn that closed meanwhile is not found.
-  const turn = openTurns.get(target.id)
-  if (turn === undefined) return undefined
   const text = composeMessage(senderName(agents, e.agentId), e.text)
-  return { text, turn, recipient: target.name ?? target.id }
+  return { text, agentId: target.id, recipient: target.name ?? target.id }
 }
 
 async function safely($: EngineInterface, work: () => Promise<void>): Promise<void> {
@@ -111,13 +109,11 @@ async function safely($: EngineInterface, work: () => Promise<void>): Promise<vo
 export const register: Register = on => {
   const openTurns = new Map<string, Turn>()
 
-  function openTurn(agentId: string, turnId: string): Turn {
+  function openTurn(agentId: string, turnId: string): void {
     const current = openTurns.get(agentId)
-    if (current?.id === turnId) return current
+    if (current?.id === turnId) return
     // A turn whose end this module never heard leaves its messages to the next one.
-    const turn: Turn = { id: turnId, texts: current?.texts ?? [], recipient: current?.recipient }
-    openTurns.set(agentId, turn)
-    return turn
+    openTurns.set(agentId, { id: turnId, texts: current?.texts ?? [], recipient: current?.recipient })
   }
 
   on('turn.start', ($, e, next) => {
@@ -154,9 +150,12 @@ export const register: Register = on => {
     // A failed lookup leaves the message to the mailbox.
     const diverted = await divertedMessage($, openTurns, e).catch(() => undefined)
     if (diverted === undefined) return next(e)
-    // Nothing is awaited between finding the turn and holding the message, so the turn is still open here.
-    diverted.turn.texts.push(diverted.text)
-    diverted.turn.recipient = diverted.recipient
+    // Looked up after the last await, so a turn that ended during the listing is not found and the turn found is still
+    // open when it takes the message.
+    const turn = openTurns.get(diverted.agentId)
+    if (turn === undefined) return next(e)
+    turn.texts.push(diverted.text)
+    turn.recipient = diverted.recipient
     return { isDelivered: true }
   })
 }

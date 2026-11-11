@@ -246,6 +246,16 @@ describe('diverting into a running turn', () => {
     expect(await carriedTexts($, WORKER, textAndImage)).toEqual([`${LEAD_HEADER}\n> hello`])
   })
 
+  test('messages held by a turn whose end went unheard carry into the next turn', async ($, on) => {
+    world(on, [WORKER])
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+
+    await start($, WORKER, 'turn-2')
+
+    expect(await carriedTexts($, WORKER)).toEqual([`${LEAD_HEADER}\n> hello`])
+  })
+
   test('a turn first seen at a model request takes messages', async ($, on) => {
     const w = world(on, [WORKER])
     await step($, WORKER)
@@ -345,14 +355,16 @@ describe('the end of the turn', () => {
     })
   }
 
-  test('a mailbox refusal is toasted', async ($, on) => {
+  test("a mailbox refusal is toasted with the recipient's name and the reason", async ($, on) => {
     const w = world(on, [WORKER], { mailboxRefuses: true })
     await start($, WORKER)
-    await modelSend($, 'worker-a', 'hello')
+    // Addressed by id, so a toast naming the recipient as the sender addressed it shows the id.
+    await modelSend($, WORKER.id, 'hello')
 
     await end($, WORKER, 'answer')
 
-    expect(w.toasts).toEqual([expect.stringContaining('synthetic refusal')])
+    // The lookahead rejects the teammate id, which starts with the name.
+    expect(w.toasts).toEqual([expect.stringMatching(/\bworker-a\b(?!@).*synthetic refusal/)])
   })
 
   test('a mailbox send that throws is toasted, and the next held message is still sent', async ($, on) => {

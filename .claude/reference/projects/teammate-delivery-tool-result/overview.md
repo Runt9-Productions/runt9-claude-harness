@@ -17,7 +17,7 @@ from its transcript (issue #143). It ends when that pull request merges.
 
 ## Where it stands
 
-- [status] Spec approved; item 01 is next.
+- [status] Every checklist item is built; review fixes are in progress.
 
 ## Goal
 

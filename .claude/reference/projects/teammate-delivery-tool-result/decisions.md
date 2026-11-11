@@ -59,6 +59,12 @@ says the plugin does.
   result kind and the delay costs at most one tool call (owner, 2026-11-11). It settles the question of dropping the
   skip rule.
 
+- [decision] A message added to a tool result that no model response read, because the turn then ended by an abort
+  or an error, is mailed at the turn's end, though the teammate may then read it twice (owner, 2026-11-11). It
+  settles the question of what happens to a message added but never read.
+- [decision] The watcher plugin's `tell`, which appends rows to a running teammate's conversation the way 0.1.2 did,
+  gets its own issue rather than a change in this pull request (owner, 2026-11-11).
+
 ## Open questions
 
 - None.
