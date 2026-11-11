@@ -41,7 +41,7 @@ refs reach that no branch or tag on the remote already has, the annotated tags i
    ref names for shapes and secrets.
 2. If the scan passes, the `public-leak` lens, run as an agent, reviews exactly what the scan read
    (`scan.sh --export`) through `claude -p`. Any finding not rated Normal refuses the push, and so does any open
-   question, or a review that does not report reading every input to its last line. Normal findings are only printed.
+   question, or a review whose `Read` calls did not reach the end of every input. Normal findings are only printed.
 
 Neither the scan nor the review reads binary content. The review raises an open question for every binary file the
 push adds or changes, so such a push is always refused, and binaries go out only over the SSH override below.
