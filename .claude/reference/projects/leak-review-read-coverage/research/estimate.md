@@ -37,5 +37,9 @@ knowledge base, and its tests carry more of the weight.
 - The shape of `tool_use_result` for Read is not documented per tool; the Agent SDK reference types it as `unknown`
   and says it holds the tool's structured output. Measured once on Claude Code 2.1.322. A change of shape fails every
   review closed (exit 2), so it is loud, not silent.
-- Whether Read ever reports a truncated read in the same shape (a token-capped call errors instead, which leaves no
-  `file` object). If it does, the coverage walk still counts only the lines reported.
+
+## Verified since
+
+- How Read reports a truncated read, measured in [[Leak Review]]: a whole read over the token cap returns the same
+  shape with `truncatedByTokenCap: true` and `numLines` counting only the lines returned, so the walk counts only
+  those; a read over the size cap errors and leaves no `file` object.

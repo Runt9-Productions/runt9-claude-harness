@@ -12,7 +12,8 @@ setup() {
     # and effort it was given. As the real claude does, it refuses stream-json without --verbose, and prints only the
     # result line for any other format. For stream-json it prints a Read result for each file read whole, then the
     # result line with the findings in ~/findings or none. A file named in ~/unread is read under a name that ends in
-    # its own, and one named in ~/unnumbered is read with no startLine, through the empty line Read adds at the end.
+    # its own, one named in ~/unnumbered is read with no startLine, through the empty line Read adds at the end, and
+    # one named in ~/relative is read by its bare name, as Read reports a path given relative to the bundle.
     export HOME=$BATS_TEST_TMPDIR/home
     mkdir -p "$HOME/.local/bin"
     export PATH=$HOME/.local/bin:$PATH
@@ -38,6 +39,7 @@ if [[ $format == stream-json && -z $verbose ]]; then
 fi
 unread=$(cat "$HOME/unread" 2> /dev/null || true)
 unnumbered=$(cat "$HOME/unnumbered" 2> /dev/null || true)
+relative=$(cat "$HOME/relative" 2> /dev/null || true)
 for file in *; do
     if [[ $format != stream-json ]]; then
         break
@@ -47,6 +49,8 @@ for file in *; do
         fields="\"filePath\":\"$PWD/x$file\",\"startLine\":1,\"numLines\":$lines"
     elif [[ $file == "$unnumbered" ]]; then
         fields="\"filePath\":\"$PWD/$file\",\"numLines\":$(( lines + 1 ))"
+    elif [[ $file == "$relative" ]]; then
+        fields="\"filePath\":\"$file\",\"startLine\":1,\"numLines\":$lines"
     else
         fields="\"filePath\":\"$PWD/$file\",\"startLine\":1,\"numLines\":$lines"
     fi
@@ -128,6 +132,13 @@ EOF
     run "$review_text" "$body" "$repo" main
     [ "$status" -eq 2 ]
     [[ $output == *"leak-review: did not read line 1 of the 3 lines in body.md"* ]]
+}
+
+@test "a Read result that names its input by a path relative to the bundle counts as reading it" {
+    printf 'Example title\n\nExample body.\n' > "$body"
+    echo body.md > "$HOME/relative"
+    run "$review_text" "$body" "$repo" main
+    [ "$status" -eq 0 ]
 }
 
 @test "a check that did not run exits 2, not 1" {

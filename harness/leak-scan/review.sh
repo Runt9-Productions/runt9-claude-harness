@@ -166,14 +166,15 @@ jq -r '.structured_output
       (.open_questions[] | "Question  \(.location)\n  \(.text)\n  \(.question)")' "$scratch/result.json" >&2
 
 # What the review read is taken from Read's own results in the stream, never from the model's answer. Each result covers
-# numLines lines from startLine. Walking them in order of start from line 1, a range extends what was read only where it
-# touches it, so a skipped page ends the walk as surely as a short last one. A result whose fields are missing or of
-# another type is left out, so a changed result shape refuses rather than passes.
+# numLines lines from startLine, and names its file by the path Read was given: absolute, or the bare name relative to
+# the bundle. Walking them in order of start from line 1, a range extends what was read only where it touches it and
+# never shrinks it, so a skipped page ends the walk as surely as a short last one. A result whose fields are missing or
+# of another type is left out, so a changed result shape refuses rather than passes.
 for input in "${inputs[@]}"; do
     lines=$(wc -l < "$bundle/$input")
-    first_unread=$(jq -n --arg suffix "/$input" '
+    first_unread=$(jq -n --arg name "$input" '
         [inputs | select(.type == "user") | .tool_use_result | objects | .file | objects
-            | select(.filePath | strings | endswith($suffix))
+            | select(.filePath | strings | . == $name or endswith("/" + $name))
             | [.startLine, .numLines] | select(all(type == "number"))]
         | sort
         | reduce .[] as [$start, $count] (1; if $start <= . then [., $start + $count] | max else . end)' \

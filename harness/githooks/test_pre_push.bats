@@ -26,8 +26,8 @@ setup() {
     # The hook gives claude a fixed environment, so the stub reads its verdict from ~/stub/mode. Every call is counted,
     # and the bundle and environment it was given are kept for inspection. It prints a stream as stream-json does: a
     # Read result for each file in the bundle, the structured output tool's result, then the result line. Each file is
-    # read whole, and commits.patch in two pages, the later one first. short ends one line before the end of
-    # commits.patch, and gap starts its later page one line late.
+    # read whole, and commits.patch in two pages, the later one first, then line 3 again. short ends one line before
+    # the end of commits.patch, and gap starts its later page one line late.
     cat > "$HOME/.local/bin/claude" << 'EOF'
 #!/usr/bin/env bash
 echo call >> "$HOME/stub/calls"
@@ -49,7 +49,10 @@ for file in *; do
     case $mode in
         short) read_result "$file" 2 $(( lines - 2 )) ;;
         gap) read_result "$file" 3 $(( lines - 2 )) ;;
-        *) read_result "$file" 2 $(( lines - 1 )) ;;
+        *)
+            read_result "$file" 2 $(( lines - 1 ))
+            read_result "$file" 3 1
+            ;;
     esac
     read_result "$file" 1 1
 done
