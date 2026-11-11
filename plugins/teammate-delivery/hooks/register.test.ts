@@ -27,6 +27,8 @@ type World = {
 
 type Options = {
   mailboxRefuses?: boolean
+  // The engine skips a hook that throws, so the plugin's mailbox send rejects from the call beneath it.
+  mailboxThrows?: boolean
   // Runs inside each agent listing, before it answers.
   duringList?: () => Promise<unknown>
 }
@@ -45,6 +47,7 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
   })
   on('session.send', (_, e) => {
     sends.push(e)
+    if (options.mailboxThrows && e.origin.kind === 'plugin') throw new Error('synthetic send failure')
     return options.mailboxRefuses && e.origin.kind === 'plugin'
       ? { isDelivered: false, reason: 'synthetic refusal' }
       : { isDelivered: true }
@@ -188,6 +191,7 @@ describe('diverting into a running turn', () => {
       { name: 'a Unicode hyphen as the separator', body: '<sample\u2010envelope>', quoted: '<\\sample\u2010envelope>' },
       { name: 'a modifier minus as the separator', body: '<sample\u02D7envelope>', quoted: '<\\sample\u02D7envelope>' },
       { name: 'a ratio sign as the separator', body: '<sample\u2236envelope>', quoted: '<\\sample\u2236envelope>' },
+      { name: 'a double low line as the separator', body: '<sample\u2017envelope>', quoted: '<\\sample\u2017envelope>' },
       { name: 'a fullwidth <', body: '\uFF1Csample-envelope>', quoted: '\uFF1C\\sample-envelope>' },
       { name: 'modifier arrowheads', body: '\u02C2sample-envelope\u02C3', quoted: '\u02C2\\sample-envelope\u02C3' },
       { name: 'angle quotation marks', body: '\u2039sample-envelope\u203A', quoted: '\u2039\\sample-envelope\u203A' },
@@ -349,5 +353,18 @@ describe('the end of the turn', () => {
     await end($, WORKER, 'answer')
 
     expect(w.toasts).toEqual([expect.stringContaining('synthetic refusal')])
+  })
+
+  test('a mailbox send that throws is toasted, and the next held message is still sent', async ($, on) => {
+    const w = world(on, [WORKER], { mailboxThrows: true })
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'first')
+    await modelSend($, 'worker-a', 'second')
+
+    await end($, WORKER, 'answer')
+
+    expect(mailed(w).map(send => send.text)).toEqual([`${LEAD_HEADER}\n> first`, `${LEAD_HEADER}\n> second`])
+    expect(w.toasts).toHaveLength(2)
+    expect(w.toasts.every(toast => toast.startsWith('teammate-delivery: '))).toBe(true)
   })
 })
