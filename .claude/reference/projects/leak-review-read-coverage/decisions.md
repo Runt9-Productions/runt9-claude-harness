@@ -26,8 +26,9 @@ about the Read tool's results live in [[Leak Review]].
 - [proposal] The measured ranges of each input must cover line 1 through its last line with no gap, so a skipped
   middle page fails as well as a short end (approved with the spec)
 - [proposal] A Read result also counts when its `filePath` is exactly the input's name, because a Read given a
-  relative path reports it that way and the walk would otherwise refuse an input that was read (open, put to the
-  owner with the pull request)
+  relative path reports it that way and the walk would otherwise refuse an input that was read (approved below)
+- [decision] Keep the exact-name match for a Read result's `filePath`, added in the review fix round beside the
+  `/<name>` suffix match (owner, 2026-11-11)
 
 ## Open Questions
 
