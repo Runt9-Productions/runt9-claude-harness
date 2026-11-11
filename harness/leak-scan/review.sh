@@ -168,7 +168,7 @@ jq -r '.structured_output
 # What the review read is taken from Read's own results in the stream, never from the model's answer. Each result covers
 # numLines lines from startLine, and names its file by the path Read was given: absolute, or the bare name relative to
 # the bundle. Walking them in order of start from line 1, a range extends what was read only where it touches it and
-# never shrinks it, so a skipped page ends the walk as surely as a short last one. A result whose fields are missing or
+# never shrinks it, so a skipped page ends the walk like a short last one. A result whose fields are missing or
 # of another type is left out, so a changed result shape refuses rather than passes.
 for input in "${inputs[@]}"; do
     lines=$(wc -l < "$bundle/$input")
