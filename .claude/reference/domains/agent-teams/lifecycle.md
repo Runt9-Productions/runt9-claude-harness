@@ -2,17 +2,17 @@
 title: Teammate Lifecycle
 type: note
 permalink: agent-teams/lifecycle
-tags: [agent-teams, teammates, forked-skills, delegation]
+tags: [agent-teams, teammates, forked-skills, delegation, headless, resume]
 verified: 2026-11-01
 coverage: partial
-measured_on: "Claude Code 2.1.312"
+measured_on: "Claude Code 2.1.312 and 2.1.322"
 sources:
   - plugins/delegation/skills/delegation/SKILL.md
 ---
 
 # Teammate Lifecycle
 
-> **Scope.** What a lead receives from an Agent Teams teammate, where a forked skill a teammate invokes reports, whether a finished background command wakes a teammate, how a teammate is stopped, and what an agent without `Write` can still write. The `-p` lines are carried from headless runs on 2.1.312 (2026-10-28) and the interactive lines from a re-run in an interactive lead session with Agent Teams on (2026-10-29, version not recorded beside it); neither was re-measured when this note was written. The delegation skill lines cited were read, and re-read on 2026-11-01, when the lens-review skill was checked and found to say nothing about where its report goes. Not covered: the interactive idle notification's content, a lead in `-p` with nothing of its own still running, teammates in a terminal pane of their own, and teammate compaction.
+> **Scope.** What a lead receives from an Agent Teams teammate, where a forked skill a teammate invokes reports, whether a finished background command wakes a teammate, how a teammate is stopped, what an agent without `Write` can still write, and whether `claude -p` can host a teammate and bring it back after `--resume`. The `-p` lines are carried from headless runs on 2.1.312 (2026-10-28) and the interactive lines from a re-run in an interactive lead session with Agent Teams on (2026-10-29, version not recorded beside it); neither was re-measured when this note was written. The hosting and `--resume` lines were measured on 2.1.322 on 2026-11-11, in one probe for issue #143: a `claude -p` run that spawned one teammate, then a second `claude -p --resume` process that messaged it. The delegation skill lines cited were read, and re-read on 2026-11-01, when the lens-review skill was checked and found to say nothing about where its report goes. Not covered: the interactive idle notification's content, a lead in `-p` with nothing of its own still running, teammates in a terminal pane of their own, teammate compaction, and a resumed teammate finishing a turn normally (the probe's revived turn failed on an API error the probe itself caused).
 
 Read this before writing a rule about how teammates report, wait or stop, or before testing one headless. `-p` and
 interactive sessions differ on three of these behaviours, so a headless run does not answer for an interactive lead.
@@ -29,7 +29,9 @@ interactive sessions differ on three of these behaviours, so a headless run does
 - [trap] A background command finishing does not wake a teammate that ended its turn: it ran again only when the lead messaged it, 65 s after the command finished #silent-failure #measured (interactive). A headless forked skill fails worse, in [[Skill Loading]]: ending its turn ends the run
 - [fact] In `-p`, with the lead kept alive, the same completion restarted the teammate under its own task id and it read the output #measured (`-p`)
 - [fact] The delegation skill has teammates run builds in the foreground for that reason ("While teammates run", `SKILL.md:98`).
-- [fact] `ListAgents` and `TaskStop` are in the tool list with Agent Teams on and off alike, and there is no `TeamCreate` #measured (`-p`, the session's `init` tool list)
+- [fact] `ListAgents` and `TaskStop` are in the tool list with Agent Teams on and off alike, and there is no `TeamCreate` #measured (`-p`, the session's `init` tool list; still no `TeamCreate` on 2.1.322)
+- [fact] `claude -p` with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` hosts an in-process teammate: the lead's `Agent` call with a `name` and `subagent_type: general-purpose` returned `async_launched`, and the teammate ran in the lead's process and wrote its own transcript, `subagents/agent-<agentId>.jsonl` beside the session's #measured (2.1.322, one run; the teammate's metadata file recorded `requestShape: background`)
+- [fact] A later `claude -p --resume <session id>` in a new process brings that teammate back: the lead's `SendMessage` to it by name returned "Resuming agent <name>" with a `revivedAgentId`, and the teammate's first request was rebuilt in full from its transcript, carrying text that had been stored in its earlier tool-result rows #measured (2.1.322, one run; the request's `api-request` row had `base: null` and `keep: 0`, decoded as [[Plugin Platform]] describes)
 - [fact] `TaskStop` stops a teammate at once, including the `Bash` call it has in flight #measured (`-p`, teams on and off)
 - [trap] A shutdown request is processed only when the teammate's turn ends: it ran its remaining four steps, ended its turn, then approved #measured (interactive)
 - [trap] In `-p` a shutdown request reported success and never reached the teammate at all #measured (`-p`)
@@ -43,3 +45,4 @@ interactive sessions differ on three of these behaviours, so a headless run does
 - see_also [[Teammate Mailbox]]
 - see_also [[Built-in Worktrees]]
 - see_also [[Skill Loading]]
+- see_also [[Plugin Platform]]

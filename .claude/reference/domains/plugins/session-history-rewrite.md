@@ -5,12 +5,12 @@ permalink: plugins/session-history-rewrite
 tags: [plugins, mods, session-compact, session-append, context, resume]
 verified: 2026-11-04
 coverage: partial
-measured_on: "Claude Code 2.1.318"
+measured_on: "Claude Code 2.1.318 and 2.1.322"
 ---
 
 # Rewriting Session History
 
-> **Scope.** What a mod can change in the conversation the model reads: a `session.append` hook on the `tool-result` door, a `session.compact` hook that answers with its own messages, and `$.session.compact()`. Every `#measured` line comes from a probe plugin loaded with `--plugin-dir` into `claude -p` sessions, and one interactive session, on 2.1.318 (2026-11-04), reading synthetic 50 KB files and checking each request's context tokens in the transcript. Not covered: subagent transcripts (`agentId`), the `precompute` trigger, whether skills invoked before the hook's compaction are attached again (no probe invoked one), results with media blocks, and whether a `session.compact` hook in a second plugin answers a compaction that the first plugin started.
+> **Scope.** What a mod can change in the conversation the model reads: a `session.append` hook on the `tool-result` door, a `session.compact` hook that answers with its own messages, and `$.session.compact()`. Every `#measured` line comes from a probe plugin loaded with `--plugin-dir` into `claude -p` sessions, and one interactive session, on 2.1.318 (2026-11-04), reading synthetic 50 KB files and checking each request's context tokens in the transcript, except the `tool_reference` line, measured on 2.1.322 on 2026-11-11 on an in-process teammate in `claude -p`, in one probe for issue #143. Not covered: subagent transcripts (`agentId`) beyond that line, the `precompute` trigger, whether skills invoked before the hook's compaction are attached again (no probe invoked one), results with media blocks, and whether a `session.compact` hook in a second plugin answers a compaction that the first plugin started.
 
 Read this before writing a mod that trims tool results, stands in for the engine's compaction summary, or starts a
 compaction itself. The traps here produce a rewrite that works in the live session and is gone after `--resume`, or
@@ -19,6 +19,7 @@ a summary where the mod meant to prune.
 ## Observations
 
 - [fact] A `session.append` hook on `{ door: "tool-result" }` that replaces a `tool_result` block's `content` changes what is stored and what the model is sent: a Read result cut to 1,238 characters added about 1,000 tokens to the next request, against about 24,600 for the same read uncut #measured
+- [trap] Text that hook added inside a ToolSearch result's `tool_result` content, beside its `tool_reference` block, was followed by every later request of that agent failing with `400 Tool definitions/code execution functions cannot be mixed with other content`, after `--resume` as well, while the earlier requests carrying text added to plain text results succeeded #measured (2.1.322, an in-process teammate; the cause is inferred from which requests failed, since no request was sent without that text, and a top-level text block beside such a row was not tried)
 - [fact] A `session.compact` hook that returns `{ messages }` without calling `next` writes no summary and makes no model call: the `compact_boundary` row recorded 4 to 9 ms, and every message the hook returned stood in the transcript word for word #measured
 - [fact] Messages handed back without their `handle` are rebuilt from `role`, `text`, `toolUses` and `toolResults`, and the engine accepted them, including a rebuilt tool-result message after an assistant message kept with its handle #measured
 - [fact] Under the `auto` trigger the hook runs mid-turn between tool calls, and the turn's next request carries the hook's messages: with old results stubbed, context stayed at 62K to 67K where the same reads otherwise reached 112K #measured

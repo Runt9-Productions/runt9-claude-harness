@@ -11,22 +11,24 @@ tags:
 
 ## Status
 
-- **Live item:** none
-- **How far along:** spec approved
-- **Blocked on:** nothing
+- **Live item:** 03
+- **How far along:** 01 and 02 built
+- **Blocked on:** 03 waits for the re-measurement in verification
 - **Last moved:** 2026-11-11
 
 ## Build Order
 
-01, 02
+01, 02, 03
 
 ## Checklist
 
-- [ ] 01 teammate-delivery holds a mid-turn message and adds it to the teammate's next tool-result row, with its
+- [x] 01 teammate-delivery holds a mid-turn message and adds it to the teammate's next tool-result row, with its
   tests, README and version rise
-- [ ] 02 The knowledge base facts on where a mid-tool-call append is filed and what a rebuild keeps, the watcher
-  project's question on teammate rows answered, and the probe facts on `claude -p` hosting a teammate and on
-  delta-encoded `api-request` rows
+- [x] 02 The knowledge base facts on a `tool-result` hook reaching a teammate's rows and what a rebuild keeps, the
+  watcher project's question on teammate rows answered, the probe facts on `claude -p` hosting a teammate and on
+  delta-encoded `api-request` rows, and the `tool_reference` trap
+- [ ] 03 The knowledge base facts on where a row appended during a teammate's tool call is filed and whether a
+  rebuilt conversation keeps it, from a re-measurement with its records kept
 
 ## Relations
 

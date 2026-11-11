@@ -42,11 +42,13 @@ says the plugin does.
   of the previous plugin version in verification, with record lines, before they enter the knowledge base, since no
   record lines from the investigation were kept (lead, 2026-11-11).
 
+- [decision] The `tool_reference` trap (text inside a ToolSearch result's `tool_result` content made every later
+  request fail with a 400) goes in `domains/plugins/session-history-rewrite.md`, and the edit scope widens to that
+  note (owner, 2026-11-11). It settles the question of whether and where the trap enters the knowledge base.
+
 ## Open questions
 
-- [question] Does the `tool_reference` trap (text inside a ToolSearch result's `tool_result` content made every later
-  request fail with a 400) go in the knowledge base, in `domains/plugins/session-history-rewrite.md`, outside the
-  approved scope?
+- None.
 
 ## Relations
 
