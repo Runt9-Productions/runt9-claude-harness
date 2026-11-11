@@ -2,13 +2,14 @@
 
 Under Agent Teams, a message sent to an in-process teammate normally waits in its mailbox until the teammate's
 current turn ends. With this plugin, a message the model sends to a teammate that is mid-turn is added to that
-teammate's conversation at once, so its next model request reads it. Nothing else about sending changes.
+teammate's next tool result, so the model request after that tool call reads it. Nothing else about sending changes.
 
 Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. There are no settings.
 
 ## What the teammate sees
 
-The message arrives as one row: a header line naming the sender, then the body with every line quoted.
+The message arrives as a text block after the teammate's next tool result: a header line naming the sender, then the
+body with every line quoted.
 
 ```
 Message from team-lead, delivered during your turn:
@@ -35,29 +36,26 @@ HTML such as `<div>`, one-word tags and a `<` followed by a space or by anything
 A send is diverted only when it comes from the model, exactly one agent matches the address (by id, by name or by
 teammate id), that agent is a teammate, it is running, and the plugin has seen its current turn start. Everything
 else goes to the mailbox as usual: an idle or finished teammate, an unknown or ambiguous name, a subagent that is
-not a teammate, and any send made by a plugin. If anything fails, or another plugin refuses the row, the message
-goes to the mailbox instead.
+not a teammate, and any send made by a plugin. If looking up the teammate fails, the message goes to the mailbox
+instead.
+
+A diverted message is held until the teammate's next tool result and added to that row. A tool result that holds
+anything but text or images, such as a tool search's result, is skipped, and the message waits for the next one.
 
 Teammates hosted in their own terminal pane (tmux, iTerm2) run in another process and are not affected.
 
 After the plugin reloads, it has forgotten which turns are open, so sends use the mailbox until each teammate
-makes its next model request. It has also forgotten the messages it added before the reload: if the teammate's turn
-then ends without another model request, those messages get neither the wake-up nor a resend described below.
+makes its next model request. A reload while a message is held for a teammate, as during its tool call, loses that
+message, with no toast.
 
 ## When the turn ends
 
-If the teammate's turn ends before any request carried the message:
-
-- If the turn ended with an answer and the message is still in the conversation, the teammate gets one short
-  mailbox message saying that a message reached it mid-turn and where to find it. If the conversation no longer
-  holds it, the message itself is sent through the mailbox.
-- If the turn was interrupted, refused or ended in an error, the teammate is not restarted. A toast says the
-  message went unread.
-
-A toast also reports a mailbox send that failed and any error inside the plugin.
+Messages still held when the teammate's turn ends, because no tool result came after them, are sent through the
+mailbox, one send each, however the turn ended. A toast reports a mailbox send that failed and any error inside the
+plugin.
 
 ## Other plugins
 
 A diverted message does not travel by mailbox, so other plugins' `session.receive` hooks never see it, and neither
-do `session.send` hooks that run after this plugin's. `session.append` hooks see it as a `note` row from this
-plugin.
+do `session.send` hooks that run after this plugin's. `session.append` hooks that run after this plugin's see it
+inside the teammate's `tool-result` row, not as a row of its own.

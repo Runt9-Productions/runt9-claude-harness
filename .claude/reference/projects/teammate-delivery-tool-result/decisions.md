@@ -29,6 +29,11 @@ says the plugin does.
   and the README says so, rather than keeping held messages somewhere a reload does not clear (owner, 2026-11-11).
   It settles the question of what a reload may lose.
 - [decision] The spec and the rewritten issue text are approved (owner, 2026-11-11).
+- [decision] This pull request also adds two facts from the investigation probes to the knowledge base, and the edit
+  scope widens to `domains/agent-teams/lifecycle.md` (`claude -p` hosts an in-process teammate, and `--resume`
+  rebuilds its conversation) and `domains/plugins/overview.md` (a transcript's `api-request` rows are delta-encoded
+  and are how to check what a request carried) (owner, 2026-11-11). It settles the question of whether the probe
+  facts join this pull request.
 
 ## Open questions
 

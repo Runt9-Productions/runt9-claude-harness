@@ -78,6 +78,12 @@ The per-file map for issue #143, with the rulings in [[Teammate Delivery Tool Re
   updated, and a `sources` check against the new `register.ts`.
 - `projects/watcher-plugin/decisions.md`: its open question on whether `session.append` fires for an in-process
   teammate's rows gets a `[fact]` line answering it from this measurement.
+- `domains/agent-teams/lifecycle.md`: `claude -p` can host an in-process teammate, and `--resume` rebuilds that
+  teammate's conversation from its transcript #measured (2.1.322).
+- `domains/plugins/overview.md`: a transcript's `api-request` rows are delta-encoded, as a `base` request id, a
+  `keep` count and `tail` hashes; most `tail` hashes are the sha256 of a transcript row's `{role, content}` as compact
+  JSON with sorted keys, and `api-request-blob` rows map the rest to a message. These rows are how to check what a
+  request carried #measured (2.1.322).
 
 ## Draft ticket description
 

@@ -1,30 +1,14 @@
-import type {
-  AgentInfo,
-  ApiMessage,
-  EngineInterface,
-  Register,
-  SessionSendInput,
-  TurnCompleteReason,
-} from 'claude-code'
-
-// The stored text blocks of one diverted row.
-type Row = readonly string[]
+import type { AgentInfo, ApiContentBlock, EngineInterface, Register, SessionSendInput } from 'claude-code'
 
 type Turn = {
   id: string
-  // Diverted rows that no model request has carried yet.
-  rows: Row[]
-  // Set the moment the turn closes; an append still in flight reads it.
-  ending?: TurnCompleteReason
+  // Composed messages waiting for the teammate's next tool result.
+  texts: string[]
   recipient?: string
 }
 
-// The engine's name for the lead in an idle teammate's mailbox; a diverted row must name it the same way.
+// The engine's name for the lead in an idle teammate's mailbox; a diverted message must name it the same way.
 const LEAD_NAME = 'team-lead'
-
-const WAKE_UP =
-  'A message reached you while you were working and was added to your conversation, ' +
-  'under a header naming its sender. Read it there before you go on.'
 
 const LINE_BREAK = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/
 
@@ -54,46 +38,30 @@ const ENVELOPE_LIKE_TAG = new RegExp(
   'gu',
 )
 
-// Separates text blocks when matching, so a row matches whole blocks and never the start of a longer one.
-const BLOCK_SEPARATOR = '\u0000'
-
 function escapeTags(text: string): string {
   return text.replace(ENVELOPE_LIKE_TAG, '$&\\')
 }
 
-function composeRow(sender: string, body: string): string {
+function composeMessage(sender: string, body: string): string {
   const quoted = escapeTags(body)
     .split(LINE_BREAK)
     .map(line => `> ${line}`)
   return [`Message from ${sender}, delivered during your turn:`, ...quoted].join('\n')
 }
 
-function textBlocks(content: readonly { type: string; text?: unknown }[]): string[] {
-  return content.flatMap(block => (block.type === 'text' && typeof block.text === 'string' ? [block.text] : []))
+function isTextOrImage(part: unknown): boolean {
+  if (typeof part !== 'object' || part === null) return false
+  if (!('type' in part)) return false
+  return part.type === 'text' || part.type === 'image'
 }
 
-function bounded(blocks: readonly string[]): string {
-  return BLOCK_SEPARATOR + blocks.join(BLOCK_SEPARATOR) + BLOCK_SEPARATOR
-}
-
-// Marks each row found in `messages`, a repeated row needing a repeated occurrence.
-function heldRows(rows: readonly Row[], messages: readonly ApiMessage[]): boolean[] {
-  const haystack = bounded(messages.flatMap(message => textBlocks(message.content)))
-  const searchFrom = new Map<string, number>()
-  return rows.map(row => {
-    const needle = bounded(row)
-    const at = haystack.indexOf(needle, searchFrom.get(needle) ?? 0)
-    if (at === -1) return false
-    // The closing separator is the next block's opening one.
-    searchFrom.set(needle, at + needle.length - 1)
-    return true
-  })
-}
-
-// A refused read holds nothing, so every row counts as missing from it.
-async function conversation($: EngineInterface, agentId: string): Promise<readonly ApiMessage[]> {
-  const messages = await $.session.messages({ agentId, as: 'api' })
-  return Array.isArray(messages) ? messages : []
+// Text sent beside a `tool_reference` in a tool result has made the API refuse every later request, so a row whose
+// results hold anything but text and images is left without the messages.
+function takesMessages(block: ApiContentBlock): boolean {
+  if (block.type !== 'tool_result') return true
+  const content = block.content
+  if (content === undefined || typeof content === 'string') return true
+  return Array.isArray(content) && content.every(isTextOrImage)
 }
 
 function messageOf(error: unknown): string {
@@ -103,28 +71,6 @@ function messageOf(error: unknown): string {
 async function mail($: EngineInterface, agentId: string, recipient: string, text: string): Promise<void> {
   const sent = await $.session.send({ to: { agentId }, text })
   if (!sent.isDelivered) $.ui.toast(`teammate-delivery: a message for ${recipient} was lost: ${sent.reason}`)
-}
-
-async function settle(
-  $: EngineInterface,
-  agentId: string,
-  recipient: string,
-  ending: TurnCompleteReason,
-  rows: readonly Row[],
-): Promise<void> {
-  if (rows.length === 0) return
-  if (ending !== 'answer') {
-    const count = rows.length === 1 ? 'A message' : `${rows.length} messages`
-    $.ui.toast(`teammate-delivery: ${count} sent to ${recipient} mid-turn went unread; its turn ended (${ending})`)
-    return
-  }
-  const held = heldRows(rows, await conversation($, agentId))
-  const missing = rows.filter((_, i) => !held[i])
-  if (missing.length === 0) {
-    await mail($, agentId, recipient, WAKE_UP)
-    return
-  }
-  for (const row of missing) await mail($, agentId, recipient, row.join('\n'))
 }
 
 // The running teammate that `to` names, when exactly one agent answers to it.
@@ -140,22 +86,18 @@ function senderName(agents: readonly AgentInfo[], agentId: string | undefined): 
   return agents.find(agent => agent.id === agentId)?.name ?? agentId
 }
 
-// Stores a model's message in the open turn of the teammate it addresses. Undefined means nothing was stored.
-async function storeRow($: EngineInterface, openTurns: ReadonlyMap<string, Turn>, e: SessionSendInput) {
+// The open turn of the teammate a model's message addresses, with the message composed for it. Undefined leaves the
+// message to the mailbox.
+async function divertedMessage($: EngineInterface, openTurns: ReadonlyMap<string, Turn>, e: SessionSendInput) {
   if (e.origin.kind !== 'model' || openTurns.size === 0) return undefined
   const agents = await $.agent.list()
   const target = addressedTeammate(agents, e.to)
   if (target === undefined) return undefined
+  // Read after the listing, so a turn that closed meanwhile is not found.
   const turn = openTurns.get(target.id)
   if (turn === undefined) return undefined
-  const sender = senderName(agents, e.agentId)
-  const text = composeRow(sender, e.text)
-  const stored = await $.session.append({
-    message: { type: 'user', content: [{ type: 'text', text }] },
-    agentId: target.id,
-  })
-  if (stored.deny !== undefined) return undefined
-  return { row: textBlocks(stored.message.content), target, turn }
+  const text = composeMessage(senderName(agents, e.agentId), e.text)
+  return { text, turn, recipient: target.name ?? target.id }
 }
 
 async function safely($: EngineInterface, work: () => Promise<void>): Promise<void> {
@@ -172,8 +114,8 @@ export const register: Register = on => {
   function openTurn(agentId: string, turnId: string): Turn {
     const current = openTurns.get(agentId)
     if (current?.id === turnId) return current
-    // A turn whose end this module never heard leaves its rows to the next one.
-    const turn: Turn = { id: turnId, rows: current?.rows ?? [], recipient: current?.recipient }
+    // A turn whose end this module never heard leaves its messages to the next one.
+    const turn: Turn = { id: turnId, texts: current?.texts ?? [], recipient: current?.recipient }
     openTurns.set(agentId, turn)
     return turn
   }
@@ -183,30 +125,10 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // A step also reopens a turn whose start went unheard, as after a reload.
   on('turn.step', async function* ($, e, next) {
-    const agentId = e.agentId
-    // A step also reopens a turn whose start went unheard, as after a reload.
-    const turn = agentId === undefined ? undefined : openTurn(agentId, e.turnId)
-    // Read before `next`: a row stored while the request streams can merge into the messages it carried. Only
-    // rows stored before the read are candidates, so one stored during it stays.
-    let carried: Row[] = []
-    if (agentId !== undefined && turn !== undefined && turn.rows.length > 0) {
-      const candidates = turn.rows.slice()
-      await safely($, async () => {
-        const held = heldRows(candidates, (await conversation($, agentId)).slice(0, e.messageCount))
-        carried = candidates.filter((_, i) => held[i])
-      })
-    }
-    const result = yield* next(e)
-    // A request that drew no response reached no model, so its rows wait for the turn end.
-    if (turn !== undefined && result.stopReason !== null) {
-      // Removes from the live list, which a turn end may have emptied meanwhile.
-      for (const row of carried) {
-        const at = turn.rows.indexOf(row)
-        if (at !== -1) turn.rows.splice(at, 1)
-      }
-    }
-    return result
+    if (e.agentId !== undefined) openTurn(e.agentId, e.turnId)
+    return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -214,30 +136,27 @@ export const register: Register = on => {
     const turn = agentId === undefined ? undefined : openTurns.get(agentId)
     if (agentId === undefined || turn?.id !== e.turnId) return next(e)
     openTurns.delete(agentId)
-    turn.ending = e.reason
-    const rows = turn.rows.splice(0)
     const result = await next(e)
-    await safely($, () => settle($, agentId, turn.recipient ?? agentId, e.reason, rows))
+    const recipient = turn.recipient ?? agentId
+    for (const text of turn.texts) await safely($, () => mail($, agentId, recipient, text))
     return result
   })
 
-  on('session.send', async ($, e, next) => {
-    // A failed lookup or append leaves the message to the mailbox.
-    const stored = await storeRow($, openTurns, e).catch(() => undefined)
-    if (stored === undefined) return next(e)
+  on('session.append', { door: 'tool-result' }, ($, e, next) => {
+    const turn = e.agentId === undefined ? undefined : openTurns.get(e.agentId)
+    if (turn === undefined || turn.texts.length === 0) return next(e)
+    if (!e.message.content.every(takesMessages)) return next(e)
+    const messages = turn.texts.splice(0).map(text => ({ type: 'text', text }))
+    return next({ ...e, message: { ...e.message, content: [...e.message.content, ...messages] } })
+  })
 
-    // The row is stored from here on, so falling back to the mailbox would deliver it twice. Looked up again because
-    // the turn may have ended during the append, and the next one begun.
-    const { row, target, turn } = stored
-    const recipient = target.name ?? target.id
-    const live = openTurns.get(target.id)
-    if (live !== undefined) {
-      live.rows.push(row)
-      live.recipient = recipient
-    } else if (turn.ending !== undefined) {
-      const ending = turn.ending
-      await safely($, () => settle($, target.id, recipient, ending, [row]))
-    }
+  on('session.send', async ($, e, next) => {
+    // A failed lookup leaves the message to the mailbox.
+    const diverted = await divertedMessage($, openTurns, e).catch(() => undefined)
+    if (diverted === undefined) return next(e)
+    // Nothing is awaited between finding the turn and holding the message, so the turn is still open here.
+    diverted.turn.texts.push(diverted.text)
+    diverted.turn.recipient = diverted.recipient
     return { isDelivered: true }
   })
 }

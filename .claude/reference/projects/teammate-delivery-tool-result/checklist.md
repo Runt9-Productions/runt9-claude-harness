@@ -24,8 +24,9 @@ tags:
 
 - [ ] 01 teammate-delivery holds a mid-turn message and adds it to the teammate's next tool-result row, with its
   tests, README and version rise
-- [ ] 02 The knowledge base facts on where a mid-tool-call append is filed and what a rebuild keeps, and the watcher
-  project's question on teammate rows answered
+- [ ] 02 The knowledge base facts on where a mid-tool-call append is filed and what a rebuild keeps, the watcher
+  project's question on teammate rows answered, and the probe facts on `claude -p` hosting a teammate and on
+  delta-encoded `api-request` rows
 
 ## Relations
 
