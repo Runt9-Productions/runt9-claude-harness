@@ -17,16 +17,20 @@ The per-file map for issue #143, with the rulings in [[Teammate Delivery Tool Re
 
 - [fact] A row a plugin adds with `$.session.append` for an in-process teammate while its tool call is open is stored
   with the `tool_use` row as its parent, and the tool result that follows has the same parent, so the row is off the
-  chain the conversation is rebuilt from #measured (Claude Code 2.1.322)
+  chain the conversation is rebuilt from #measured (Claude Code 2.1.322, interactive, teammate-delivery 0.1.2)
 - [fact] The request in flight still carries that row, merged into the tool-result message; a request after the
-  teammate was woken from an ended turn carried the tool-result message without it #measured (2.1.322, from the
-  teammate's `api-request` records)
-- [fact] A `session.append` hook on the `tool-result` door fires for a teammate's rows with `e.agentId` set, and text
-  it adds, as a top-level block or inside the `tool_result` content, is stored, sent on the next request, and kept by a
-  conversation rebuilt with `--resume` #measured (2.1.322, `claude -p` with an in-process teammate)
+  teammate was woken from an ended turn carried the tool-result message without it #measured (2.1.322, interactive,
+  from the teammate's `api-request` records)
+- [fact] A `session.append` hook on the `tool-result` door fires for a teammate's rows, and text it adds as a
+  top-level block is stored on the chain, sent on the next request and kept when the teammate is woken #measured
+  (2.1.322, interactive, teammate-delivery 0.2.0)
+- [fact] In `claude -p` a named spawn is a background subagent with no `teammateId`, which the plugin never diverts
+  for; the engine itself delivers its mail at the next tool round. With the plugin off, an interactive teammate gets
+  mail only after its turn ends #measured (2.1.322)
 - [trap] Text added inside a ToolSearch result's `tool_result` content, beside a `tool_reference` block, made every
-  later request fail with `400 Tool definitions/code execution functions cannot be mixed with other content` #measured
-  (2.1.322; the cause is inferred from which requests failed, and a top-level block beside such a row was not tried)
+  later request fail with `400 Tool definitions/code execution functions cannot be mixed with other content`; text as
+  a top-level block in the same message as such a result was accepted in every run #measured (2.1.322; the cause is
+  inferred from which requests failed)
 - [trap] `claude plugin validate --strict` warned "gating hook without .catch" on a probe's `session.append` hook that
   only returned `next(e)` #measured (2.1.322)
 
@@ -80,8 +84,10 @@ The per-file map for issue #143, with the rulings in [[Teammate Delivery Tool Re
   updated, and a `sources` check against the new `register.ts`.
 - `projects/watcher-plugin/decisions.md`: its open question on whether `session.append` fires for an in-process
   teammate's rows gets a `[fact]` line answering it from this measurement.
-- `domains/agent-teams/lifecycle.md`: `claude -p` can host an in-process teammate, and `--resume` rebuilds that
-  teammate's conversation from its transcript #measured (2.1.322).
+- `domains/agent-teams/lifecycle.md`: `claude -p` hosts a named spawn as a background subagent, not an in-process
+  teammate, and `--resume` rebuilds its conversation from its transcript #measured (2.1.322).
+- `domains/agent-teams/mailbox.md` (item 03): the engine's own delivery to a teammate and to a `-p` subagent, and
+  0.1.2's rows filed off the chain or stored after the final request, from the interactive runs.
 - `domains/plugins/overview.md`: a transcript's `api-request` rows are delta-encoded, as a `base` request id, a
   `keep` count and `tail` hashes; most `tail` hashes are the sha256 of a transcript row's `{role, content}` as compact
   JSON with sorted keys, and `api-request-blob` rows map the rest to a message. These rows are how to check what a

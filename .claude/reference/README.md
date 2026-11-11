@@ -11,8 +11,8 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Mod CI Checks](domains/plugins/mod-ci.md) | changing the `plugins` CI job, checking a mod locally, or writing a kit test |
 | [Hooks Module Loader](domains/plugins/hooks-module-loader.md) | splitting a mod's hooks module across files, or moving a function, atom or matcher value between them |
 | [Skill Loading](domains/skills/overview.md) | relying on a skill being in context: when it loads, and what survives compaction |
-| [Teammate Mailbox](domains/agent-teams/mailbox.md) | sending text between teammates that holds tags, or changing how teammate-delivery delivers a message |
-| [Teammate Lifecycle](domains/agent-teams/lifecycle.md) | writing a rule about how teammates report, wait or stop, or testing one headless |
+| [Teammate Mailbox](domains/agent-teams/mailbox.md) | sending text between teammates that holds tags, changing how teammate-delivery delivers a message, appending a row for a teammate with `$.session.append`, or testing delivery in `claude -p` |
+| [Teammate Lifecycle](domains/agent-teams/lifecycle.md) | writing a rule about how teammates report, wait or stop, or testing one headless, where a named spawn is a background subagent rather than a teammate |
 | [Built-in Worktrees](domains/worktrees/overview.md) | relying on a worktree's contents or base, or on a language server answer inside one |
 | [TypeScript Language Server](domains/lsp/typescript.md) | trusting a TypeScript `findReferences`, `incomingCalls` or `hover` answer, or changing the root `tsconfig.json` |
 | [Guardrails](domains/guardrails/overview.md) | writing an auto-mode rule, a permission deny rule or a sandbox setting, or relying on one of them to stop a call |
