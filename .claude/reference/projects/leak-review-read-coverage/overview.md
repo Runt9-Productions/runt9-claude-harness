@@ -3,7 +3,7 @@ title: Leak Review Read Coverage
 type: note
 permalink: projects/leak-review-read-coverage/overview
 tags: ["leak-scan", "pre-push"]
-status: implementation
+status: complete
 opened: "2026-11-11"
 ---
 
@@ -14,7 +14,8 @@ ends when `harness/leak-scan/review.sh` decides coverage from what the review ac
 
 ## Where it stands
 
-- [status] Spec approved; being built from the checklist
+- [status] Built: `review.sh` takes what the review read from the Read tool's results in stream-json output and
+  refuses an input whose ranges leave a line unread; the measured result shape lives in [[Leak Review]]
 
 ## Documents
 

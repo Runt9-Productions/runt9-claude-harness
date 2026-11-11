@@ -18,6 +18,13 @@ lines over 6 files. It assumes the stream-json design in [[Leak Review Read Cove
 | Stubs and tests | `harness/githooks/test_pre_push.bats`, `harness/leak-scan/test_review_text.bats` | +30 to 50, -12 | both fake `claude` emit stream-json; a gap test and a never-opened test |
 | Knowledge base | this project, a new `domains/development-process/leak-review.md`, `domains/development-process/overview.md`, `README.md` | 40 to 60 | the overview gains one relation |
 
+## Actual
+
+Production 26 added and 17 removed over 4 files (`review.sh` 22 and 13); tests 91 added and 18 removed over 2 files;
+knowledge base 253 added over 8 files. The estimate missed the test review's strengthening of the text check's stub
+and the review fix round (a relative `filePath`, an overlapping re-read), which doubled the tests, and counted the
+domain note but not this project's own notes.
+
 ## Existing pieces
 
 - The check: the loop over `inputs` in `harness/leak-scan/review.sh:169-177`, comparing the `read` report with `wc -l`.

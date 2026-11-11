@@ -10,7 +10,7 @@ tags: ["leak-scan", "pre-push"]
 ## Status
 
 - **Live item:** none
-- **How far along:** both items built
+- **How far along:** both items built; nothing left
 - **Blocked on:** nothing
 - **Last moved:** 2026-11-11
 

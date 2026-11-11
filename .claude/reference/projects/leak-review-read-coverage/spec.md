@@ -18,7 +18,8 @@ The per-file map for issue #144, with the rulings in [[Leak Review Read Coverage
 - The `claude -p` call (`:155-158`): `--output-format stream-json --verbose`, writing `$scratch/stream.jsonl`. Then
   take the last line whose `type` is `result` into `$scratch/result.json`, so the "did not run" check and the jq calls
   after it stay as they are. Output that is not JSON lines counts as did not run.
-- Coverage (`:169-177`): for each input, take every user line's `.tool_use_result.file` whose `filePath` ends in
+- Coverage (`:169-177`): for each input, take every user line's `.tool_use_result.file` (an object; the StructuredOutput tool's line carries a string)
+  whose `filePath` is the input's name, as a Read given a relative path reports it, or ends in
   `/<input>`, as ranges from `startLine` for `numLines`. Sort by start and walk them from line 1, extending the covered
   prefix while a range touches it. The first line not covered must be past `wc -l` of the input, or exit 2 with
   `leak-review: did not read line <n> of the <lines> lines in <input>`. An input with no Read result reports line 1.
