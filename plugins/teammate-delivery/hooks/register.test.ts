@@ -31,6 +31,10 @@ type Options = {
   mailboxThrows?: boolean
   // Runs inside each agent listing, before it answers.
   duringList?: () => Promise<unknown>
+  // Each model request fails before a response arrives.
+  noResponse?: boolean
+  // Runs inside each model request, before it answers.
+  duringStep?: () => Promise<unknown>
 }
 
 // The engine beneath the plugin.
@@ -60,7 +64,9 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
   // A stream hook's handler has to be a generator, and this step streams no chunks.
   // oxlint-disable-next-line require-yield
   on('turn.step', async function* (_, e) {
-    return { turnId: e.turnId, index: 0, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: null }
+    await options.duringStep?.()
+    const stopReason = options.noResponse ? null : ('end_turn' as const)
+    return { turnId: e.turnId, index: 0, answer: '', toolUses: [], stopReason, usage: null }
   })
   on('turn.complete', () => ({ text: '' }))
 
@@ -211,13 +217,14 @@ describe('diverting into a running turn', () => {
     expect(disguises.map(({ name }, i) => [name, rows[i]])).toEqual(expected)
   })
 
-  test('a message is added once: later tool results and the turn end carry nothing more', async ($, on) => {
+  test('a message is added once, and the turn end mails nothing once a response has read it', async ($, on) => {
     const w = world(on, [WORKER])
     await start($, WORKER)
     await modelSend($, 'worker-a', 'hello')
     await carriedTexts($, WORKER)
 
     expect(await carriedTexts($, WORKER)).toEqual([])
+    await step($, WORKER)
     await end($, WORKER, 'answer')
     expect(mailed(w)).toHaveLength(0)
   })
@@ -354,6 +361,29 @@ describe('the end of the turn', () => {
       ])
     })
   }
+
+  test('a message added to a tool result is mailed when the turn ends by error before a response read it', async ($, on) => {
+    const w = world(on, [WORKER], { noResponse: true })
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+    await storeToolResult($, WORKER)
+    await step($, WORKER)
+
+    await end($, WORKER, 'error')
+
+    expect(mailed(w).map(send => [send.to, send.text])).toEqual([[WORKER.id, `${LEAD_HEADER}\n> hello`]])
+  })
+
+  test('a message added to a tool result while a request streams is not read by its response', async ($, on) => {
+    const w = world(on, [WORKER], { duringStep: () => storeToolResult($, WORKER) })
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+    await step($, WORKER)
+
+    await end($, WORKER, 'aborted')
+
+    expect(mailed(w).map(send => send.text)).toEqual([`${LEAD_HEADER}\n> hello`])
+  })
 
   test("a mailbox refusal is toasted with the recipient's name and the reason", async ($, on) => {
     const w = world(on, [WORKER], { mailboxRefuses: true })

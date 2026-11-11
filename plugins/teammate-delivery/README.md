@@ -51,8 +51,10 @@ message, with no toast.
 ## When the turn ends
 
 Messages still held when the teammate's turn ends, because no tool result came after them, are sent through the
-mailbox, one send each, however the turn ended. A toast reports a mailbox send that failed and any error inside the
-plugin.
+mailbox, one send each, however the turn ended. So is a message added to a tool result that no model response went
+on to read, as when the turn is interrupted or fails right after that tool call. The teammate may then read that
+message twice: in its tool result and from the mailbox. A toast reports a mailbox send that failed and any error
+inside the plugin.
 
 ## Other plugins
 

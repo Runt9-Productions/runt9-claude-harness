@@ -3,7 +3,9 @@ import type { AgentInfo, ApiContentBlock, EngineInterface, Register, SessionSend
 type Turn = {
   id: string
   // Composed messages waiting for the teammate's next tool result.
-  texts: string[]
+  held: string[]
+  // Messages added to a tool result, oldest first, that no model response has read yet.
+  unread: string[]
   recipient?: string
 }
 
@@ -109,11 +111,13 @@ async function safely($: EngineInterface, work: () => Promise<void>): Promise<vo
 export const register: Register = on => {
   const openTurns = new Map<string, Turn>()
 
-  function openTurn(agentId: string, turnId: string): void {
+  function openTurn(agentId: string, turnId: string): Turn {
     const current = openTurns.get(agentId)
-    if (current?.id === turnId) return
+    if (current?.id === turnId) return current
     // A turn whose end this module never heard leaves its messages to the next one.
-    openTurns.set(agentId, { id: turnId, texts: current?.texts ?? [], recipient: current?.recipient })
+    const turn: Turn = { id: turnId, held: current?.held ?? [], unread: current?.unread ?? [], recipient: current?.recipient }
+    openTurns.set(agentId, turn)
+    return turn
   }
 
   on('turn.start', ($, e, next) => {
@@ -123,8 +127,13 @@ export const register: Register = on => {
 
   // A step also reopens a turn whose start went unheard, as after a reload.
   on('turn.step', async function* ($, e, next) {
-    if (e.agentId !== undefined) openTurn(e.agentId, e.turnId)
-    return yield* next(e)
+    const turn = e.agentId === undefined ? undefined : openTurn(e.agentId, e.turnId)
+    // Counted before `next`, since a text added while the request streams is not in it and lands after those that are.
+    const carried = turn?.unread.length ?? 0
+    const result = yield* next(e)
+    // No stop reason means no response arrived, so no model read the request.
+    if (result.stopReason !== null) turn?.unread.splice(0, carried)
+    return result
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -134,15 +143,18 @@ export const register: Register = on => {
     openTurns.delete(agentId)
     const result = await next(e)
     const recipient = turn.recipient ?? agentId
-    for (const text of turn.texts) await safely($, () => mail($, agentId, recipient, text))
+    // An unread text was added before any still held, so it is mailed first.
+    for (const text of [...turn.unread, ...turn.held]) await safely($, () => mail($, agentId, recipient, text))
     return result
   })
 
   on('session.append', { door: 'tool-result' }, ($, e, next) => {
     const turn = e.agentId === undefined ? undefined : openTurns.get(e.agentId)
-    if (turn === undefined || turn.texts.length === 0) return next(e)
+    if (turn === undefined || turn.held.length === 0) return next(e)
     if (!e.message.content.every(takesMessages)) return next(e)
-    const messages = turn.texts.splice(0).map(text => ({ type: 'text', text }))
+    const added = turn.held.splice(0)
+    turn.unread.push(...added)
+    const messages = added.map(text => ({ type: 'text', text }))
     return next({ ...e, message: { ...e.message, content: [...e.message.content, ...messages] } })
   })
 
@@ -154,7 +166,7 @@ export const register: Register = on => {
     // open when it takes the message.
     const turn = openTurns.get(diverted.agentId)
     if (turn === undefined) return next(e)
-    turn.texts.push(diverted.text)
+    turn.held.push(diverted.text)
     turn.recipient = diverted.recipient
     return { isDelivered: true }
   })
