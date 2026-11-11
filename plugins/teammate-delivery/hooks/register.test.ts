@@ -109,7 +109,7 @@ async function storeToolResult($: Engine, loop: AgentInfo | undefined, content: 
   return stored.message?.content ?? []
 }
 
-// The texts a tool result stored now carries beside its result.
+// The texts that storing a tool result adds beside it.
 async function carriedTexts($: Engine, loop: AgentInfo | undefined, content?: unknown): Promise<string[]> {
   const blocks = await storeToolResult($, loop, content)
   return blocks
@@ -388,7 +388,7 @@ describe('the end of the turn', () => {
   test("a mailbox refusal is toasted with the recipient's name and the reason", async ($, on) => {
     const w = world(on, [WORKER], { mailboxRefuses: true })
     await start($, WORKER)
-    // Addressed by id, so a toast naming the recipient as the sender addressed it shows the id.
+    // Addressed by id, so the toast must take the name from the agent, not from the address.
     await modelSend($, WORKER.id, 'hello')
 
     await end($, WORKER, 'answer')

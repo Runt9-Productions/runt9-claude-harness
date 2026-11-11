@@ -57,9 +57,9 @@ function isTextOrImage(part: unknown): boolean {
   return part.type === 'text' || part.type === 'image'
 }
 
-// Text inside a `tool_reference` result's content makes every later request fail. The messages go beside the results
-// instead, which `tool_reference` rows accept too, but other result kinds are untried, so only rows of text and image
-// results take them. Skipping a row delays the messages by one tool call at most.
+// Text inside a `tool_reference` result's content makes every later request fail, so messages go beside the results,
+// which `tool_reference` rows accept. Other result kinds are untried, so only rows of text and image results take
+// them; skipping a row delays the messages by one tool call at most.
 function takesMessages(block: ApiContentBlock): boolean {
   if (block.type !== 'tool_result') return true
   const content = block.content
