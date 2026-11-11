@@ -130,6 +130,10 @@ Rulings for building the `watcher` plugin. Platform facts measured for it that o
   depends on the answer, since it reloads its checks and moves its entry itself.
 - [question] Does `session.append` fire for an in-process teammate's rows? It needs an interactive session to
   measure; without it the stalled-teammate check falls back to the roster and `TeammateIdle`.
+- [fact] Yes: in an interactive lead, a `session.append` hook fires for an in-process teammate's rows on the `prompt`,
+  `response`, `tool-result`, `note` and `attachment` doors, and it does take an interactive session, since a named
+  `Agent` spawn in `claude -p` is a background subagent #measured (Claude Code 2.1.322, three interactive sessions for
+  issue #143, a diagnostic hook with no door filter; see [[Teammate Mailbox]] and [[Teammate Lifecycle]])
 
 ## Relations
 

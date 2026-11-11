@@ -1,8 +1,6 @@
-import type { AgentInfo, AgentStatus, ApiMessage, On, SessionSendInput, TurnCompleteReason } from 'claude-code'
+import type { AgentInfo, AgentStatus, ApiContentBlock, On, SessionSendInput, TurnCompleteReason } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-
-const BRIEF: ApiMessage = { role: 'user', content: [{ type: 'text', text: 'Synthetic task brief.' }] }
 
 function agent(id: string, name: string, status: AgentStatus = 'running', isTeammate = true): AgentInfo {
   return {
@@ -18,55 +16,42 @@ function agent(id: string, name: string, status: AgentStatus = 'running', isTeam
 const WORKER = agent('agent-0001', 'worker-a')
 const REVIEWER = agent('agent-0002', 'reviewer-b')
 
+const LEAD_HEADER = 'Message from team-lead, sent during your turn:'
+
 type World = {
   sends: SessionSendInput[]
   toasts: string[]
   agentListCalls: () => number
-  rows: () => string[]
-  // Texts the conversation has lost since they were stored, as a compaction would.
-  dropped: Set<string>
+  stored: () => readonly unknown[]
 }
 
 type Options = {
-  sharedLoop?: boolean
   mailboxRefuses?: boolean
-  // Join adjacent user messages into one, so a row stored after a request was built can land inside its last message.
-  mergesUserMessages?: boolean
+  // The engine skips a hook that throws, so the plugin's mailbox send rejects from the call beneath it.
+  mailboxThrows?: boolean
+  // Runs inside each agent listing, before it answers.
+  duringList?: () => Promise<unknown>
+  // Each model request fails before a response arrives.
+  noResponse?: boolean
+  // Runs inside each model request, before it answers.
   duringStep?: () => Promise<unknown>
-  // Every request ends with no response, as a failed one does.
-  requestFails?: boolean
 }
 
-// The engine beneath the plugin. A conversation is the brief then the rows appended to it, unless `sharedLoop`
-// answers every agent with the one conversation.
+// The engine beneath the plugin.
 function world(on: On, agents: readonly AgentInfo[], options: Options = {}): World {
   const session = mock.session(on)
   const sends: SessionSendInput[] = []
   const toasts: string[] = []
-  const dropped = new Set<string>()
   let agentListCalls = 0
-  const textsFor = (agentId?: string) =>
-    session
-      .appended()
-      .filter(row => options.sharedLoop || row.agentId === agentId)
-      .flatMap(row => row.message.content.map(block => String(block.text)))
 
-  on('agent.list', () => {
+  on('agent.list', async () => {
     agentListCalls += 1
+    await options.duringList?.()
     return { value: [...agents] }
-  })
-  on('session.messages', (_, e) => {
-    const messages: ApiMessage[] = [
-      BRIEF,
-      ...textsFor(e.agentId)
-        .filter(text => !dropped.has(text))
-        .map((text): ApiMessage => ({ role: 'user', content: [{ type: 'text', text }] })),
-    ]
-    if (!options.mergesUserMessages) return { value: messages }
-    return { value: [{ role: 'user', content: messages.flatMap(message => [...message.content]) }] }
   })
   on('session.send', (_, e) => {
     sends.push(e)
+    if (options.mailboxThrows && e.origin.kind === 'plugin') throw new Error('synthetic send failure')
     return options.mailboxRefuses && e.origin.kind === 'plugin'
       ? { isDelivered: false, reason: 'synthetic refusal' }
       : { isDelivered: true }
@@ -80,12 +65,12 @@ function world(on: On, agents: readonly AgentInfo[], options: Options = {}): Wor
   // oxlint-disable-next-line require-yield
   on('turn.step', async function* (_, e) {
     await options.duringStep?.()
-    const stopReason = options.requestFails ? null : ('end_turn' as const)
-    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason, usage: null }
+    const stopReason = options.noResponse ? null : ('end_turn' as const)
+    return { turnId: e.turnId, index: 0, answer: '', toolUses: [], stopReason, usage: null }
   })
   on('turn.complete', () => ({ text: '' }))
 
-  return { sends, toasts, agentListCalls: () => agentListCalls, rows: () => textsFor(WORKER.id), dropped }
+  return { sends, toasts, agentListCalls: () => agentListCalls, stored: () => session.appended() }
 }
 
 function modelSend($: Engine, to: string, text: string, from?: AgentInfo) {
@@ -96,8 +81,8 @@ function start($: Engine, loop: AgentInfo, turnId = 'turn-1') {
   return $.turn.start({ text: '', turnId, agentId: loop.id })
 }
 
-async function step($: Engine, loop: AgentInfo, messageCount: number, turnId = 'turn-1') {
-  const stream = $.turn.step({ turnId, index: 0, model: 'synthetic-model', messageCount, agentId: loop.id })
+async function step($: Engine, loop: AgentInfo, turnId = 'turn-1') {
+  const stream = $.turn.step({ turnId, index: 0, model: 'synthetic-model', messageCount: 1, agentId: loop.id })
   while (!(await stream.next()).done);
 }
 
@@ -108,42 +93,56 @@ function end($: Engine, loop: AgentInfo, reason: TurnCompleteReason, turnId = 't
     : $.turn.complete({ ...fields, reason })
 }
 
-// Holds every diverted append until `release`; `atGate` settles once one is waiting.
-function holdAppends(on: On) {
-  let release = () => {}
-  const gate = new Promise<void>(resolve => (release = resolve))
-  let reached = () => {}
-  const atGate = new Promise<void>(resolve => (reached = resolve))
-  on('session.append', { door: 'note' }, async (_, e, next) => {
-    reached()
-    await gate
-    return next(e)
+let rowCount = 0
+
+// Stores a tool result in `loop`'s conversation as the engine does, and returns the row's blocks as stored.
+async function storeToolResult($: Engine, loop: AgentInfo | undefined, content: unknown = 'synthetic output') {
+  rowCount += 1
+  const result: ApiContentBlock = { type: 'tool_result', tool_use_id: `toolu_synthetic_${rowCount}`, content }
+  const stored = await $.session.append({
+    message: { type: 'user', role: 'user', content: [result] },
+    door: 'tool-result',
+    origin: { kind: 'tool', tool: 'Bash' },
+    uuid: `row-${rowCount}`,
+    agentId: loop?.id,
   })
-  return { atGate, release }
+  return stored.message?.content ?? []
+}
+
+// The texts that storing a tool result adds beside it.
+async function carriedTexts($: Engine, loop: AgentInfo | undefined, content?: unknown): Promise<string[]> {
+  const blocks = await storeToolResult($, loop, content)
+  return blocks
+    .filter(block => block.type === 'text')
+    .map(block => String(block.text))
 }
 
 const passedThrough = (w: World) => w.sends.filter(send => send.origin.kind === 'model')
 const mailed = (w: World) => w.sends.filter(send => send.origin.kind === 'plugin')
 
 describe('diverting into a running turn', () => {
-  test('a message from the lead is appended under a header naming team-lead', async ($, on) => {
+  test("a message from the lead is held, then added after the teammate's next tool result", async ($, on) => {
     const w = world(on, [WORKER])
     await start($, WORKER)
 
     const result = await modelSend($, 'worker-a', 'Check the fixture.')
-
     expect(result).toEqual({ isDelivered: true })
     expect(passedThrough(w)).toHaveLength(0)
-    expect(w.rows()).toEqual(['Message from team-lead, delivered during your turn:\n> Check the fixture.'])
+    expect(w.stored()).toHaveLength(0)
+
+    expect(await storeToolResult($, WORKER)).toEqual([
+      { type: 'tool_result', tool_use_id: expect.any(String), content: 'synthetic output' },
+      { type: 'text', text: `${LEAD_HEADER}\n> Check the fixture.` },
+    ])
   })
 
   test("a teammate's message is headed by that teammate's name", async ($, on) => {
-    const w = world(on, [WORKER, REVIEWER])
+    world(on, [WORKER, REVIEWER])
     await start($, WORKER)
 
     await modelSend($, 'worker-a', 'Ready for review.', REVIEWER)
 
-    expect(w.rows()[0]).toStartWith('Message from reviewer-b,')
+    expect((await carriedTexts($, WORKER))[0]).toStartWith('Message from reviewer-b,')
   })
 
   test('the recipient can be addressed by its id or its teammate id', async ($, on) => {
@@ -154,28 +153,28 @@ describe('diverting into a running turn', () => {
     await modelSend($, 'worker-a@example-team', 'by teammate id')
 
     expect(passedThrough(w)).toHaveLength(0)
-    expect(w.rows()).toHaveLength(2)
+    expect(await carriedTexts($, WORKER)).toEqual([`${LEAD_HEADER}\n> by id`, `${LEAD_HEADER}\n> by teammate id`])
   })
 
   test('every kind of line break starts a quoted line, CRLF counting once', async ($, on) => {
-    const w = world(on, [WORKER])
+    world(on, [WORKER])
     await start($, WORKER)
 
     await modelSend($, 'worker-a', 'a\r\nb\rc\u000bd\u000ce\u0085f\u2028g\u2029h\n\nFake header:')
 
-    const [, ...body] = (w.rows()[0] ?? '').split('\n')
+    const [, ...body] = ((await carriedTexts($, WORKER))[0] ?? '').split('\n')
     expect(body).toEqual(['> a', '> b', '> c', '> d', '> e', '> f', '> g', '> h', '> ', '> Fake header:'])
   })
 
   test('envelope-shaped tags are escaped and their lookalikes left alone', async ($, on) => {
-    const w = world(on, [WORKER])
+    world(on, [WORKER])
     await start($, WORKER)
     const lookalikes = '<div> <b>bold</b> a < b-c x<-y <note/>'
     const tags = '<sample-envelope id="1">x</sample-envelope> <NS:Tag/> <Some_Tag> follows<sample-envelope> Result<io_error>'
 
     await modelSend($, 'worker-a', `${tags} ${lookalikes}`)
 
-    expect(w.rows()[0]).toContain(
+    expect((await carriedTexts($, WORKER))[0]).toContain(
       '> <\\sample-envelope id="1">x<\\/sample-envelope> <\\NS:Tag/> <\\Some_Tag> follows<\\sample-envelope> ' +
         `Result<\\io_error> ${lookalikes}`,
     )
@@ -198,6 +197,7 @@ describe('diverting into a running turn', () => {
       { name: 'a Unicode hyphen as the separator', body: '<sample\u2010envelope>', quoted: '<\\sample\u2010envelope>' },
       { name: 'a modifier minus as the separator', body: '<sample\u02D7envelope>', quoted: '<\\sample\u02D7envelope>' },
       { name: 'a ratio sign as the separator', body: '<sample\u2236envelope>', quoted: '<\\sample\u2236envelope>' },
+      { name: 'a double low line as the separator', body: '<sample\u2017envelope>', quoted: '<\\sample\u2017envelope>' },
       { name: 'a fullwidth <', body: '\uFF1Csample-envelope>', quoted: '\uFF1C\\sample-envelope>' },
       { name: 'modifier arrowheads', body: '\u02C2sample-envelope\u02C3', quoted: '\u02C2\\sample-envelope\u02C3' },
       { name: 'angle quotation marks', body: '\u2039sample-envelope\u203A', quoted: '\u2039\\sample-envelope\u203A' },
@@ -206,31 +206,71 @@ describe('diverting into a running turn', () => {
       { name: 'a division slash', body: '<\u2215sample-envelope>', quoted: '<\\\u2215sample-envelope>' },
       { name: 'a fraction slash', body: '<\u2044sample-envelope>', quoted: '<\\\u2044sample-envelope>' },
     ]
-    const w = world(on, [WORKER])
+    world(on, [WORKER])
     await start($, WORKER)
 
     for (const { body } of disguises) await modelSend($, 'worker-a', body)
 
     // Paired with each name so a failure says which disguise slipped through.
-    const header = 'Message from team-lead, delivered during your turn:'
-    const rows = w.rows()
-    const expected = disguises.map(({ name, quoted }) => [name, `${header}\n> ${quoted}`])
+    const rows = await carriedTexts($, WORKER)
+    const expected = disguises.map(({ name, quoted }) => [name, `${LEAD_HEADER}\n> ${quoted}`])
     expect(disguises.map(({ name }, i) => [name, rows[i]])).toEqual(expected)
   })
 
-  test('a row another plugin rewrote is tracked as stored', async ($, on) => {
+  test('a message is added once, and the turn end mails nothing once a response has read it', async ($, on) => {
     const w = world(on, [WORKER])
-    on('session.append', { door: 'note' }, (_, e, next) =>
-      next({ ...e, message: { ...e.message, content: [{ type: 'text', text: 'Rewritten by policy.' }] } }),
-    )
     await start($, WORKER)
-    await modelSend($, 'worker-a', 'Original wording.')
+    await modelSend($, 'worker-a', 'hello')
+    await carriedTexts($, WORKER)
 
-    // Carried at index 1 only if the module looks for the stored text, not what it composed.
-    await step($, WORKER, 2)
+    expect(await carriedTexts($, WORKER)).toEqual([])
+    await step($, WORKER)
     await end($, WORKER, 'answer')
-
     expect(mailed(w)).toHaveLength(0)
+  })
+
+  test("another loop's tool result does not take the message", async ($, on) => {
+    world(on, [WORKER, REVIEWER])
+    await start($, WORKER)
+    await start($, REVIEWER, 'turn-2')
+    await modelSend($, 'worker-a', 'hello')
+
+    expect(await carriedTexts($, REVIEWER)).toEqual([])
+    expect(await carriedTexts($, undefined)).toEqual([])
+    expect(await carriedTexts($, WORKER)).toHaveLength(1)
+  })
+
+  test('a tool result holding more than text and images is skipped for the next one', async ($, on) => {
+    world(on, [WORKER])
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+    const textAndImage = [
+      { type: 'text', text: 'synthetic output' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
+    ]
+
+    expect(await carriedTexts($, WORKER, [{ type: 'tool_reference', tool_name: 'SyntheticTool' }])).toEqual([])
+    expect(await carriedTexts($, WORKER, textAndImage)).toEqual([`${LEAD_HEADER}\n> hello`])
+  })
+
+  test('messages held by a turn whose end went unheard carry into the next turn', async ($, on) => {
+    world(on, [WORKER])
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+
+    await start($, WORKER, 'turn-2')
+
+    expect(await carriedTexts($, WORKER)).toEqual([`${LEAD_HEADER}\n> hello`])
+  })
+
+  test('a turn first seen at a model request takes messages', async ($, on) => {
+    const w = world(on, [WORKER])
+    await step($, WORKER)
+
+    await modelSend($, 'worker-a', 'hello')
+
+    expect(passedThrough(w)).toHaveLength(0)
+    expect(await carriedTexts($, WORKER)).toHaveLength(1)
   })
 })
 
@@ -251,7 +291,6 @@ describe('staying on the mailbox', () => {
       await modelSend($, to, 'hello')
 
       expect(passedThrough(w)).toHaveLength(1)
-      expect(w.rows()).toHaveLength(0)
     })
   }
 
@@ -271,7 +310,6 @@ describe('staying on the mailbox', () => {
     await modelSend($, 'worker-a', 'hello')
 
     expect(passedThrough(w)).toHaveLength(1)
-    expect(w.rows()).toHaveLength(0)
   })
 
   test("a plugin's send passes straight through", async ($, on) => {
@@ -281,168 +319,94 @@ describe('staying on the mailbox', () => {
     await $.session.send({ to: 'worker-a', text: 'hello', origin: { kind: 'plugin', name: 'other-plugin' } })
 
     expect(w.sends).toHaveLength(1)
-    expect(w.rows()).toHaveLength(0)
+    expect(await carriedTexts($, WORKER)).toEqual([])
   })
 
-  test('a refused append falls back to the mailbox', async ($, on) => {
-    const w = world(on, [WORKER])
-    on('session.append', { door: 'note' }, () => ({ deny: 'synthetic policy' }))
+  test('a turn that closes while the agents are being listed leaves the send to the mailbox', async ($, on) => {
+    let release = () => {}
+    const gate = new Promise<void>(resolve => (release = resolve))
+    let reached = () => {}
+    const atGate = new Promise<void>(resolve => (reached = resolve))
+    const w = world(on, [WORKER], {
+      duringList: () => {
+        reached()
+        return gate
+      },
+    })
     await start($, WORKER)
 
-    await modelSend($, 'worker-a', 'hello')
+    const sending = modelSend($, 'worker-a', 'hello')
+    await atGate
+    await end($, WORKER, 'answer')
+    release()
+    await sending
 
     expect(passedThrough(w)).toHaveLength(1)
   })
 })
 
 describe('the end of the turn', () => {
-  test('rows the conversation still holds get one wake-up message', async ($, on) => {
-    const w = world(on, [WORKER])
+  for (const reason of ['answer', 'aborted', 'refusal', 'error'] as const) {
+    test(`a turn ending by ${reason} sends each held message by mailbox`, async ($, on) => {
+      const w = world(on, [WORKER])
+      await start($, WORKER)
+      await modelSend($, 'worker-a', 'first')
+      await modelSend($, 'worker-a', 'second')
+
+      await end($, WORKER, reason)
+
+      expect(mailed(w).map(send => [send.to, send.text])).toEqual([
+        [WORKER.id, `${LEAD_HEADER}\n> first`],
+        [WORKER.id, `${LEAD_HEADER}\n> second`],
+      ])
+    })
+  }
+
+  test('a message added to a tool result is mailed when the turn ends by error before a response read it', async ($, on) => {
+    const w = world(on, [WORKER], { noResponse: true })
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+    await storeToolResult($, WORKER)
+    await step($, WORKER)
+
+    await end($, WORKER, 'error')
+
+    expect(mailed(w).map(send => [send.to, send.text])).toEqual([[WORKER.id, `${LEAD_HEADER}\n> hello`]])
+  })
+
+  test('a message added to a tool result while a request streams is not read by its response', async ($, on) => {
+    const w = world(on, [WORKER], { duringStep: () => storeToolResult($, WORKER) })
+    await start($, WORKER)
+    await modelSend($, 'worker-a', 'hello')
+    await step($, WORKER)
+
+    await end($, WORKER, 'aborted')
+
+    expect(mailed(w).map(send => send.text)).toEqual([`${LEAD_HEADER}\n> hello`])
+  })
+
+  test("a mailbox refusal is toasted with the recipient's name and the reason", async ($, on) => {
+    const w = world(on, [WORKER], { mailboxRefuses: true })
+    await start($, WORKER)
+    // Addressed by id, so the toast must take the name from the agent, not from the address.
+    await modelSend($, WORKER.id, 'hello')
+
+    await end($, WORKER, 'answer')
+
+    // The lookahead rejects the teammate id, which starts with the name.
+    expect(w.toasts).toEqual([expect.stringMatching(/\bworker-a\b(?!@).*synthetic refusal/)])
+  })
+
+  test('a mailbox send that throws is toasted, and the next held message is still sent', async ($, on) => {
+    const w = world(on, [WORKER], { mailboxThrows: true })
     await start($, WORKER)
     await modelSend($, 'worker-a', 'first')
     await modelSend($, 'worker-a', 'second')
 
     await end($, WORKER, 'answer')
 
-    expect(mailed(w)).toHaveLength(1)
-    expect(mailed(w)[0]?.text).toContain('header naming its sender')
-  })
-
-  test('a row the conversation lost is sent whole', async ($, on) => {
-    const w = world(on, [WORKER])
-    await start($, WORKER)
-    await modelSend($, 'worker-a', 'kept')
-    await modelSend($, 'worker-a', 'lost')
-    const [, lost = ''] = w.rows()
-    w.dropped.add(lost)
-
-    await end($, WORKER, 'answer')
-
-    expect(mailed(w).map(send => send.text)).toEqual([lost])
-  })
-
-  test('a request that carried the rows leaves nothing to send', async ($, on) => {
-    const w = world(on, [WORKER])
-    await start($, WORKER)
-    await modelSend($, 'worker-a', 'hello')
-
-    await step($, WORKER, 2)
-    await end($, WORKER, 'answer')
-
-    expect(mailed(w)).toHaveLength(0)
-  })
-
-  test('a request built before the row was stored does not count as carrying it', async ($, on) => {
-    const w = world(on, [WORKER])
-    await start($, WORKER)
-    await modelSend($, 'worker-a', 'hello')
-
-    await step($, WORKER, 1)
-    await end($, WORKER, 'answer')
-
-    expect(mailed(w)).toHaveLength(1)
-  })
-
-  test('a row stored while the request streams does not count as carried', async ($, on) => {
-    const w = world(on, [WORKER], { mergesUserMessages: true, duringStep: () => modelSend($, 'worker-a', 'hello') })
-    await start($, WORKER)
-
-    await step($, WORKER, 1)
-    await end($, WORKER, 'answer')
-
-    expect(mailed(w)).toHaveLength(1)
-  })
-
-  test('a row that is a prefix of a carried row does not count as carried', async ($, on) => {
-    const w = world(on, [WORKER])
-    await start($, WORKER)
-    await modelSend($, 'worker-a', 'stop now')
-    await step($, WORKER, 2)
-    await modelSend($, 'worker-a', 'stop')
-
-    await step($, WORKER, 2)
-    await end($, WORKER, 'answer')
-
-    expect(mailed(w)).toHaveLength(1)
-  })
-
-  test("another loop's request does not count as carrying the row", async ($, on) => {
-    const w = world(on, [WORKER, REVIEWER], { sharedLoop: true })
-    await start($, WORKER)
-    await start($, REVIEWER, 'turn-2')
-    await modelSend($, 'worker-a', 'hello')
-
-    await step($, REVIEWER, 2, 'turn-2')
-    await end($, WORKER, 'answer')
-
-    expect(mailed(w)).toHaveLength(1)
-  })
-
-  test('a request that drew no response does not count as carrying the row', async ($, on) => {
-    const w = world(on, [WORKER], { requestFails: true })
-    await start($, WORKER)
-    await modelSend($, 'worker-a', 'hello')
-
-    await step($, WORKER, 2)
-    await end($, WORKER, 'error')
-
-    expect(w.toasts).toEqual([expect.stringContaining('went unread')])
-  })
-
-  test('a turn that closes while the append is in flight is woken by the send itself', async ($, on) => {
-    const w = world(on, [WORKER])
-    const { atGate, release } = holdAppends(on)
-    await start($, WORKER)
-
-    const sending = modelSend($, 'worker-a', 'hello')
-    await atGate
-    await end($, WORKER, 'answer')
-    expect(mailed(w)).toHaveLength(0)
-    release()
-
-    expect(await sending).toEqual({ isDelivered: true })
-    expect(mailed(w)).toHaveLength(1)
-    expect(passedThrough(w)).toHaveLength(0)
-  })
-
-  test('a row stored as one turn ends and the next begins is left to the next turn', async ($, on) => {
-    const w = world(on, [WORKER])
-    const { atGate, release } = holdAppends(on)
-    await start($, WORKER)
-
-    const sending = modelSend($, 'worker-a', 'hello')
-    await atGate
-    await end($, WORKER, 'answer')
-    await start($, WORKER, 'turn-2')
-    release()
-    await sending
-    expect(mailed(w)).toHaveLength(0)
-
-    // No request carries it, so the second turn's end sends the one wake-up, which a dropped row would not.
-    await end($, WORKER, 'answer', 'turn-2')
-    expect(mailed(w)).toHaveLength(1)
-  })
-
-  for (const reason of ['aborted', 'refusal', 'error'] as const) {
-    test(`a turn ending by ${reason} toasts the unread rows and sends nothing`, async ($, on) => {
-      const w = world(on, [WORKER])
-      await start($, WORKER)
-      await modelSend($, 'worker-a', 'hello')
-
-      await end($, WORKER, reason)
-
-      expect(mailed(w)).toHaveLength(0)
-      expect(w.toasts).toEqual([expect.stringContaining('went unread')])
-    })
-  }
-
-  test('a mailbox refusal is toasted', async ($, on) => {
-    const w = world(on, [WORKER], { mailboxRefuses: true })
-    await start($, WORKER)
-    await modelSend($, 'worker-a', 'hello')
-
-    await end($, WORKER, 'answer')
-
-    expect(w.toasts).toEqual([expect.stringContaining('synthetic refusal')])
+    expect(mailed(w).map(send => send.text)).toEqual([`${LEAD_HEADER}\n> first`, `${LEAD_HEADER}\n> second`])
+    expect(w.toasts).toHaveLength(2)
+    expect(w.toasts.every(toast => toast.startsWith('teammate-delivery: '))).toBe(true)
   })
 })

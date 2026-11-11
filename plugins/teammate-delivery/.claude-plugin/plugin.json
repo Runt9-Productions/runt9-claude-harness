@@ -1,7 +1,7 @@
 {
   "name": "teammate-delivery",
-  "version": "0.1.2",
-  "description": "Lets a teammate that is mid-turn read a message on its next model request, not after the turn is over",
+  "version": "0.2.0",
+  "description": "Lets a teammate that is mid-turn read a message with its next tool result, not after the turn is over",
   "author": {
     "name": "Runt9 Productions"
   }
