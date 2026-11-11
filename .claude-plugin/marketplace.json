@@ -23,7 +23,7 @@
     {
       "name": "teammate-delivery",
       "source": "./plugins/teammate-delivery",
-      "description": "Lets a teammate that is mid-turn read a message on its next model request, not after the turn is over"
+      "description": "Lets a teammate that is mid-turn read a message with its next tool result, not after the turn is over"
     },
     {
       "name": "test-review",

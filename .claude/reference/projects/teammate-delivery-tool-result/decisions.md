@@ -34,10 +34,19 @@ says the plugin does.
   rebuilds its conversation) and `domains/plugins/overview.md` (a transcript's `api-request` rows are delta-encoded
   and are how to check what a request carried) (owner, 2026-11-11). It settles the question of whether the probe
   facts join this pull request.
+- [decision] The plugin's description in `plugin.json` and in its `.claude-plugin/marketplace.json` entry reads
+  "Lets a teammate that is mid-turn read a message with its next tool result, not after the turn is over", and the
+  edit scope widens to that marketplace line (owner, 2026-11-11).
+
+- [proposal] The facts on where a mid-tool-call append is filed and what a rebuild drops wait for a re-measurement
+  of the previous plugin version in verification, with record lines, before they enter the knowledge base, since no
+  record lines from the investigation were kept (lead, 2026-11-11).
 
 ## Open questions
 
-- None.
+- [question] Does the `tool_reference` trap (text inside a ToolSearch result's `tool_result` content made every later
+  request fail with a 400) go in the knowledge base, in `domains/plugins/session-history-rewrite.md`, outside the
+  approved scope?
 
 ## Relations
 

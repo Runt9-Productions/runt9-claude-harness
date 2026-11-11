@@ -35,7 +35,7 @@ The per-file map for issue #143, with the rulings in [[Teammate Delivery Tool Re
 - `Turn` (line 13): `rows` becomes the composed texts held for the turn; `ending` goes, since no send can store a row
   after the turn closed.
 - `storeRow` (line 144): composes the row as now and returns the target and turn, without calling
-  `$.session.append`. The `deny` case goes.
+  `$.session.append`. The `deny` case goes. Built as `divertedMessage`, with `composeRow` renamed `composeMessage`.
 - `session.send` (line 224): a diverted send pushes the composed text onto the open turn and answers
   `{ isDelivered: true }`. The branch for a turn that ended during the append (lines 233-240) goes. A turn that closed
   while `$.agent.list()` was in flight leaves the send to the mailbox.
@@ -65,7 +65,9 @@ The per-file map for issue #143, with the rulings in [[Teammate Delivery Tool Re
 - "When it applies": the message is held until the teammate's next tool result and added to that row; a result that
   holds anything but text or images is skipped.
 - "When the turn ends": held messages go by mailbox whatever the ending; the wake-up message goes.
-- The reload paragraph says that a reload during a teammate's tool call loses the messages held for it, with no toast.
+- The reload paragraph says that a reload loses the messages held for a teammate, from the send until its next tool
+  result, with no toast.
+- "What the teammate sees": the message arrives as a text block after the next tool result, not as a row of its own.
 - "Other plugins": `session.append` hooks see the message inside a `tool-result` row, not as a `note` row.
 
 ## `plugins/teammate-delivery/.claude-plugin/plugin.json`
