@@ -112,7 +112,7 @@ fi
 
 # Severity enum and field names are read by the jq calls below.
 schema='{
-  "type": "object", "additionalProperties": false, "required": ["findings", "open_questions", "read"],
+  "type": "object", "additionalProperties": false, "required": ["findings", "open_questions"],
   "properties": {
     "findings": {"type": "array", "items": {
       "type": "object", "additionalProperties": false, "required": ["severity", "location", "text", "reveals"],
@@ -120,18 +120,14 @@ schema='{
                      "text": {"type": "string"}, "reveals": {"type": "string"}}}},
     "open_questions": {"type": "array", "items": {
       "type": "object", "additionalProperties": false, "required": ["location", "text", "question"],
-      "properties": {"location": {"type": "string"}, "text": {"type": "string"}, "question": {"type": "string"}}}},
-    "read": {"type": "array", "items": {
-      "type": "object", "additionalProperties": false, "required": ["file", "lines"],
-      "properties": {"file": {"type": "string"}, "lines": {"type": "integer"}}}}
+      "properties": {"location": {"type": "string"}, "text": {"type": "string"}, "question": {"type": "string"}}}}
   }
 }'
 
 request="$request In the input files, a line longer than 4000 characters is split into pieces of 4000 that overlap \
 by 200. The reviewer brief, the repository's review profile and CLAUDE.md, where it has them, are reviewer-brief.md, \
 code-review-profile.md and CLAUDE.md, all here. Read every input file to its last line, in pages where it \
-is long, and give each one's name and the last line number you read of it in read. Report every finding and open \
-question in the structured output."
+is long. Report every finding and open question in the structured output."
 
 # A lens has no frontmatter: the whole file is the prompt, and the first non-empty line after its title is its summary.
 jq -n --arg description "$(sed -n '2,$ { /[^[:space:]]/ { p; q; } }' "$lens")" --arg prompt "$(< "$lens")" \
@@ -154,8 +150,11 @@ done
 status=0
 (cd "$bundle" && env -i "${review_env[@]}" timeout 900 claude -p --restricted --agent public-leak \
     --agents "$scratch/agents.json" --setting-sources project --strict-mcp-config --tools Read \
-    --model "${model:-opus}" --effort high --no-session-persistence --output-format json --json-schema "$schema" \
-    "$request" < /dev/null > "$scratch/result.json" 2> "$scratch/claude.stderr") || status=$?
+    --model "${model:-opus}" --effort high --no-session-persistence --output-format stream-json --verbose \
+    --json-schema "$schema" "$request" < /dev/null > "$scratch/stream.jsonl" 2> "$scratch/claude.stderr") || status=$?
+# The verdict is the last result line. Output that is not JSON lines leaves result.json empty, which reads as no verdict.
+jq -n 'last(inputs | select(.type == "result"))' "$scratch/stream.jsonl" > "$scratch/result.json" \
+    2>> "$scratch/claude.stderr" || true
 if (( status != 0 )) || ! jq -e '.structured_output | objects' "$scratch/result.json" > /dev/null; then
     echo "leak-review: did not run (claude exited $status)" >&2
     cat "$scratch/claude.stderr" >&2
@@ -166,12 +165,22 @@ jq -r '.structured_output
     | (.findings[] | "\(.severity)  \(.location)\n  \(.text)\n  \(.reveals)"),
       (.open_questions[] | "Question  \(.location)\n  \(.text)\n  \(.question)")' "$scratch/result.json" >&2
 
+# What the review read is taken from Read's own results in the stream, never from the model's answer. Each result covers
+# numLines lines from startLine, and names its file by the path Read was given: absolute, or the bare name relative to
+# the bundle. Walking them in order of start from line 1, a range extends what was read only where it touches it and
+# never shrinks it, so a skipped page ends the walk like a short last one. A result whose fields are missing or
+# of another type is left out, so a changed result shape refuses rather than passes.
 for input in "${inputs[@]}"; do
     lines=$(wc -l < "$bundle/$input")
-    read_lines=$(jq --arg file "$input" '[.structured_output.read[] | select(.file == $file) | .lines] | max // 0' \
-        "$scratch/result.json")
-    if (( read_lines < lines )); then
-        echo "leak-review: read $read_lines of the $lines lines in $input" >&2
+    first_unread=$(jq -n --arg name "$input" '
+        [inputs | select(.type == "user") | .tool_use_result | objects | .file | objects
+            | select(.filePath | strings | . == $name or endswith("/" + $name))
+            | [.startLine, .numLines] | select(all(type == "number"))]
+        | sort
+        | reduce .[] as [$start, $count] (1; if $start <= . then [., $start + $count] | max else . end)' \
+        "$scratch/stream.jsonl")
+    if (( first_unread <= lines )); then
+        echo "leak-review: did not read line $first_unread of the $lines lines in $input" >&2
         exit 2
     fi
 done

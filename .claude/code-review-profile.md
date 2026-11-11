@@ -190,8 +190,8 @@ and `CLAUDE.md`. The agent's model is the one `.claude/agents/lens-review/lens-r
   posted. Its one input is `body.md`, the title on its first line and the body after it.
 
 `review.sh` adds to either request: lines over 4000 characters are split into pieces of 4000 that overlap by 200,
-where the copies are, that every input is read to its last line and the last line read of each reported, and that the
-answer goes in the structured output.
+where the copies are, that every input is read to its last line, and that the answer goes in the structured output.
+Nothing about the reading is reported: `review.sh` checks it against the results of the review's own `Read` calls.
 
 ## Delivery
 
