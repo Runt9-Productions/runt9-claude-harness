@@ -27,6 +27,7 @@ Notes an agent reads before the code or the platform behaviour they cover. The f
 | [Bootstrap Update](projects/bootstrap-update/overview.md) | reading the rulings and the designs ruled out behind `bootstrap.py --update` (issue #41) |
 | [Bootstrap Menu](projects/bootstrap-menu/overview.md) | reading the rulings and the designs ruled out behind the `bootstrap.py` selection menu and `all` (#121) |
 | [Watcher Plugin](projects/watcher-plugin/overview.md) | building or changing the `watcher` plugin (issue #35) |
+| [Teammate Delivery Tool Result](projects/teammate-delivery-tool-result/overview.md) | building or reviewing the teammate-delivery fix that carries a mid-turn message on the next tool result (issue #143) |
 | [TypeScript Go LSP Plugin](projects/typescript-go-lsp/overview.md) | reading the rulings and the designs ruled out behind the `typescript-go-lsp` plugin and the root `tsconfig.json` (issue #131) |
 
 ## Local conventions
