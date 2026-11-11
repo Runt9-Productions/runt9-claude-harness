@@ -24,8 +24,10 @@ setup() {
     mkdir -p "$HOME/.local/bin" "$stub_dir"
     ln -s "$(command -v betterleaks)" "$HOME/.local/bin/betterleaks"
     # The hook gives claude a fixed environment, so the stub reads its verdict from ~/stub/mode. Every call is counted,
-    # and the bundle and environment it was given are kept for inspection. Every mode but short reports each file read
-    # to its last line; short stops one line before the end of commits.patch.
+    # and the bundle and environment it was given are kept for inspection. It prints a stream as stream-json does: a
+    # Read result for each file in the bundle, the structured output tool's result, then the result line. Each file is
+    # read whole, except commits.patch: its lines from 2 to the end, then line 3 again, then line 1. short stops one
+    # line before the end of commits.patch, and gap starts at line 3, skipping line 2.
     cat > "$HOME/.local/bin/claude" << 'EOF'
 #!/usr/bin/env bash
 echo call >> "$HOME/stub/calls"
@@ -33,25 +35,38 @@ env > "$HOME/stub/env"
 rm -rf "$HOME/stub/bundle"
 cp -r . "$HOME/stub/bundle"
 mode=$(cat "$HOME/stub/mode")
-read=
+# read_result <file> <start line> <line count>
+read_result() {
+    printf '{"type":"user","tool_use_result":{"type":"text","file":{"filePath":"%s","startLine":%d,"numLines":%d}}}\n' \
+        "$PWD/$1" "$2" "$3"
+}
 for file in *; do
     lines=$(wc -l < "$file")
-    if [[ $mode == short && $file == commits.patch ]]; then
-        lines=$(( lines - 1 ))
+    if [[ $file != commits.patch ]]; then
+        read_result "$file" 1 "$lines"
+        continue
     fi
-    read+="{\"file\":\"$file\",\"lines\":$lines},"
+    case $mode in
+        short) read_result "$file" 2 $(( lines - 2 )) ;;
+        gap) read_result "$file" 3 $(( lines - 2 )) ;;
+        *)
+            read_result "$file" 2 $(( lines - 1 ))
+            read_result "$file" 3 1
+            ;;
+    esac
+    read_result "$file" 1 1
 done
-read="[${read%,}]"
+echo '{"type":"user","tool_use_result":"Structured output provided successfully"}'
 finding() { printf '[{"severity":"%s","location":"a","text":"t","reveals":"r"}]' "$1"; }
 case $mode in
-    normal|crash) output="{\"findings\":$(finding Normal),\"open_questions\":[],\"read\":$read}" ;;
-    unknown) output="{\"findings\":$(finding Low),\"open_questions\":[],\"read\":$read}" ;;
-    question) output="{\"findings\":[],\"open_questions\":[{\"location\":\"a\",\"text\":\"t\",\"question\":\"q\"}],\"read\":$read}" ;;
-    short) output="{\"findings\":[],\"open_questions\":[],\"read\":$read}" ;;
-    unstructured) echo '{"result":"no verdict"}'; exit 0 ;;
+    normal|crash) output="{\"findings\":$(finding Normal),\"open_questions\":[]}" ;;
+    unknown) output="{\"findings\":$(finding Low),\"open_questions\":[]}" ;;
+    question) output="{\"findings\":[],\"open_questions\":[{\"location\":\"a\",\"text\":\"t\",\"question\":\"q\"}]}" ;;
+    short|gap) output="{\"findings\":[],\"open_questions\":[]}" ;;
+    unstructured) echo '{"type":"result","result":"no verdict"}'; exit 0 ;;
     fail) exit 1 ;;
 esac
-echo "{\"structured_output\":$output}"
+echo "{\"type\":\"result\",\"structured_output\":$output}"
 # crash prints a passing verdict and still exits non-zero.
 if [[ $mode == crash ]]; then
     exit 1
@@ -143,7 +158,15 @@ leak="write to someone@acme-corp"".com"
     [ "$status" -eq 1 ]
     [ "$calls" -eq 1 ]
     patch_lines=$(( $(wc -l < "$stub_dir/bundle/commits.patch") ))
-    [[ $output == *"leak-review: read $(( patch_lines - 1 )) of the $patch_lines lines in commits.patch"* ]]
+    [[ $output == *"leak-review: did not read line $patch_lines of the $patch_lines lines in commits.patch"* ]]
+}
+
+@test "review that skipped a line in the middle of an input: refused" {
+    push gap "$remote" "$(new_branch)"
+    [ "$status" -eq 1 ]
+    [ "$calls" -eq 1 ]
+    patch_lines=$(( $(wc -l < "$stub_dir/bundle/commits.patch") ))
+    [[ $output == *"leak-review: did not read line 2 of the $patch_lines lines in commits.patch"* ]]
 }
 
 @test "Normal finding only: allowed, and only the pass is kept, under the install directory" {

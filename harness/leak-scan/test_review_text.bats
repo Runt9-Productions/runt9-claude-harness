@@ -9,7 +9,11 @@ setup() {
     review_text=$BATS_TEST_DIRNAME/review-text.sh
 
     # The stub goes first on PATH, so the real claude is never reached. It keeps the bundle, agent definitions, model
-    # and effort it was given, and reports every input read to its last line, with the findings in ~/findings or none.
+    # and effort it was given. As the real claude does, it refuses stream-json without --verbose, and prints only the
+    # result line for any other format. For stream-json it prints a Read result for each file read whole, then the
+    # result line with the findings in ~/findings or none. A file named in ~/unread is read under a name that ends in
+    # its own, one named in ~/unnumbered is read with no startLine, through the empty line Read adds at the end, and
+    # one named in ~/relative is read by its bare name, as Read reports a path given relative to the bundle.
     export HOME=$BATS_TEST_TMPDIR/home
     mkdir -p "$HOME/.local/bin"
     export PATH=$HOME/.local/bin:$PATH
@@ -17,20 +21,43 @@ setup() {
 #!/usr/bin/env bash
 rm -rf "$HOME/bundle"
 cp -r . "$HOME/bundle"
+format=text
+verbose=
 while (( $# )); do
     case $1 in
         --agents) cp "$2" "$HOME/agents.json" ;;
         --model) echo "$2" > "$HOME/model" ;;
         --effort) echo "$2" > "$HOME/effort" ;;
+        --output-format) format=$2 ;;
+        --verbose) verbose=1 ;;
     esac
     shift
 done
-read=
+if [[ $format == stream-json && -z $verbose ]]; then
+    echo "Error: When using --print, --output-format=stream-json requires --verbose" >&2
+    exit 1
+fi
+unread=$(cat "$HOME/unread" 2> /dev/null || true)
+unnumbered=$(cat "$HOME/unnumbered" 2> /dev/null || true)
+relative=$(cat "$HOME/relative" 2> /dev/null || true)
 for file in *; do
-    read+="{\"file\":\"$file\",\"lines\":$(wc -l < "$file")},"
+    if [[ $format != stream-json ]]; then
+        break
+    fi
+    lines=$(wc -l < "$file")
+    if [[ $file == "$unread" ]]; then
+        fields="\"filePath\":\"$PWD/x$file\",\"startLine\":1,\"numLines\":$lines"
+    elif [[ $file == "$unnumbered" ]]; then
+        fields="\"filePath\":\"$PWD/$file\",\"numLines\":$(( lines + 1 ))"
+    elif [[ $file == "$relative" ]]; then
+        fields="\"filePath\":\"$file\",\"startLine\":1,\"numLines\":$lines"
+    else
+        fields="\"filePath\":\"$PWD/$file\",\"startLine\":1,\"numLines\":$lines"
+    fi
+    echo "{\"type\":\"user\",\"tool_use_result\":{\"type\":\"text\",\"file\":{$fields}}}"
 done
 findings=$(cat "$HOME/findings" 2> /dev/null || echo '[]')
-echo "{\"structured_output\":{\"findings\":$findings,\"open_questions\":[],\"read\":[${read%,}]}}"
+echo "{\"type\":\"result\",\"structured_output\":{\"findings\":$findings,\"open_questions\":[]}}"
 EOF
     chmod +x "$HOME/.local/bin/claude"
 
@@ -89,6 +116,29 @@ EOF
     run "$review_text" "$body" "$repo" main
     [ "$status" -eq 1 ]
     [[ $output == *"leak-review: raised 1 question(s) or finding(s) not rated Normal"* ]]
+}
+
+@test "a review with no Read result for its input, only for another file whose name ends in it, exits 2" {
+    printf 'Example title\n\nExample body.\n' > "$body"
+    echo body.md > "$HOME/unread"
+    run "$review_text" "$body" "$repo" main
+    [ "$status" -eq 2 ]
+    [[ $output == *"leak-review: did not read line 1 of the 3 lines in body.md"* ]]
+}
+
+@test "a Read result for its input with no startLine counts for nothing, and exits 2" {
+    printf 'Example title\n\nExample body.\n' > "$body"
+    echo body.md > "$HOME/unnumbered"
+    run "$review_text" "$body" "$repo" main
+    [ "$status" -eq 2 ]
+    [[ $output == *"leak-review: did not read line 1 of the 3 lines in body.md"* ]]
+}
+
+@test "a Read result that names its input by a path relative to the bundle counts as reading it" {
+    printf 'Example title\n\nExample body.\n' > "$body"
+    echo body.md > "$HOME/relative"
+    run "$review_text" "$body" "$repo" main
+    [ "$status" -eq 0 ]
 }
 
 @test "a check that did not run exits 2, not 1" {
