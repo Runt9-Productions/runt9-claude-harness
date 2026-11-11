@@ -12,7 +12,7 @@ The message arrives as a text block after the teammate's next tool result: a hea
 body with every line quoted.
 
 ```
-Message from team-lead, delivered during your turn:
+Message from team-lead, sent during your turn:
 > Run the fixture suite again.
 > Then report back.
 ```

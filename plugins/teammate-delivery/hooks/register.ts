@@ -46,7 +46,7 @@ function composeMessage(sender: string, body: string): string {
   const quoted = escapeTags(body)
     .split(LINE_BREAK)
     .map(line => `> ${line}`)
-  return [`Message from ${sender}, delivered during your turn:`, ...quoted].join('\n')
+  return [`Message from ${sender}, sent during your turn:`, ...quoted].join('\n')
 }
 
 function isTextOrImage(part: unknown): boolean {

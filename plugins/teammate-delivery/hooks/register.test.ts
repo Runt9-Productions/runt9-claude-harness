@@ -16,7 +16,7 @@ function agent(id: string, name: string, status: AgentStatus = 'running', isTeam
 const WORKER = agent('agent-0001', 'worker-a')
 const REVIEWER = agent('agent-0002', 'reviewer-b')
 
-const LEAD_HEADER = 'Message from team-lead, delivered during your turn:'
+const LEAD_HEADER = 'Message from team-lead, sent during your turn:'
 
 type World = {
   sends: SessionSendInput[]
@@ -202,9 +202,8 @@ describe('diverting into a running turn', () => {
     for (const { body } of disguises) await modelSend($, 'worker-a', body)
 
     // Paired with each name so a failure says which disguise slipped through.
-    const header = 'Message from team-lead, delivered during your turn:'
     const rows = await carriedTexts($, WORKER)
-    const expected = disguises.map(({ name, quoted }) => [name, `${header}\n> ${quoted}`])
+    const expected = disguises.map(({ name, quoted }) => [name, `${LEAD_HEADER}\n> ${quoted}`])
     expect(disguises.map(({ name }, i) => [name, rows[i]])).toEqual(expected)
   })
 

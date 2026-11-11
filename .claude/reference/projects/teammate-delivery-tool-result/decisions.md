@@ -46,6 +46,19 @@ says the plugin does.
   request fail with a 400) goes in `domains/plugins/session-history-rewrite.md`, and the edit scope widens to that
   note (owner, 2026-11-11). It settles the question of whether and where the trap enters the knowledge base.
 
+- [decision] The plugin is verified by a verifier driving an interactive lead session in tmux, since `claude -p` on
+  2.1.322 hosts only background subagents with no `teammateId`, which the plugin never diverts for; it first checks
+  whether the engine delivers a real teammate's mail mid-turn without the plugin (owner, 2026-11-11). It settles the
+  question of how the plugin is verified.
+
+- [decision] The header on a delivered message is "Message from <sender>, sent during your turn:", true both for a
+  message added to a tool result and for one mailed at the turn's end (owner, 2026-11-11). It settles the question of
+  the header's wording.
+- [decision] The plugin keeps skipping a tool result that holds anything but text or images, although top-level text
+  beside a `tool_reference` result was accepted in every verification run, since that evidence covers no other
+  result kind and the delay costs at most one tool call (owner, 2026-11-11). It settles the question of dropping the
+  skip rule.
+
 ## Open questions
 
 - None.
