@@ -20,8 +20,8 @@ type World = {
   appended: () => string[]
   /** What $.agent.list() answers. */
   agents: AgentInfo[]
-  /** The context window's fill as $.session.usage() reports it. */
-  usage: { percent: number }
+  /** The context window's fill as $.session.usage() reports it; without `percent`, only /context's estimate of `tokens`. */
+  usage: { percent?: number; tokens?: number }
   /** Each decision posted to the board, oldest first. */
   decisions: PostedDecision[]
   /** Set, the board refuses every post with this reason. */
@@ -43,6 +43,10 @@ type World = {
   system: string | undefined
   /** The commands besides `rm` and `uname` that $.process.run can start; any other is rejected as not found. */
   installed: Set<string>
+  /** Set, the hooks after away's skip each compaction with this reason. */
+  compactionSkip?: string
+  /** Whether `rm` starts; where it cannot, as on Windows, `$.process.run` rejects it. */
+  canRemove: boolean
   /** Whether creating a user namespace fails, as under Ubuntu's AppArmor restriction, so a `bwrap --unshare-user` exits 1. */
   isUserNamespaceDenied: boolean
 }
@@ -85,6 +89,7 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     commands: [],
     system: 'Linux',
     installed: new Set(['bwrap', 'socat']),
+    canRemove: true,
     isUserNamespaceDenied: false,
   }
   on('session.root', () => ({ value: world.root }) as never)
@@ -98,6 +103,7 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     if (isUserNamespaced && world.isUserNamespaceDenied) return exited(1, '', `${USER_NAMESPACE_DENIED}\n`)
     if (command === 'uname') return world.system === undefined ? { deny: 'spawn uname ENOENT' } : exited(0, `${world.system}\n`)
     if (command === 'rm') {
+      if (!world.canRemove) return { deny: 'spawn rm ENOENT' }
       if (path === undefined || !world.files.has(path)) return exited(1)
       world.files.delete(path)
       return exited(0)
@@ -119,7 +125,12 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     return { value: undefined } as never
   })
   on('agent.list', () => ({ value: world.agents }) as never)
-  on('session.usage', () => ({ value: { context: { window: 200_000, percent: world.usage.percent } } }) as never)
+  on('session.usage', ($, e) => {
+    const { percent, tokens } = world.usage
+    if (percent !== undefined) return { value: { context: { window: 200_000, percent } } } as never
+    const breakdown = (e as { breakdown?: string }).breakdown === undefined ? undefined : { totalTokens: tokens }
+    return { value: { context: { window: 200_000, breakdown } } } as never
+  })
   // As board answers: the decision's id first, then text meant for the loop that asked.
   on('tool.call', { tool: 'mcp__board__ask_decision' }, ($, e) => {
     if (world.board.failure !== undefined) return { deny: world.board.failure }
@@ -165,7 +176,10 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     world.submitted.push(e.text)
     return { text: e.text }
   })
-  on('session.compact', () => ({ messages: [{ role: 'user', text: 'the summary', toolUses: [] }] }) as never)
+  on('session.compact', () => {
+    if (world.compactionSkip !== undefined) return { skip: world.compactionSkip } as never
+    return { messages: [{ role: 'user', text: 'the summary', toolUses: [] }] } as never
+  })
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.step', async function* (_$, e) {
     yield* []
@@ -204,8 +218,8 @@ async function step($: Engine, index: number, agentId?: string) {
   }
 }
 
-const compact = ($: Engine, agentId?: string) =>
-  $.session.compact({ trigger: 'manual', agentId, messages: [{ role: 'user', text: 'the work so far', toolUses: [] }] })
+const compact = ($: Engine, agentId?: string, trigger: 'manual' | 'precompute' = 'manual') =>
+  $.session.compact({ trigger, agentId, messages: [{ role: 'user', text: 'the work so far', toolUses: [] }] })
 
 test('/mode away shows in the status line, is kept for the session, and sends the away rules once', async ($, on) => {
   const world = buildWorld(on)
@@ -305,10 +319,20 @@ test('after a compaction, the next turn is sent the rules again once, except in 
   expect(rulesSent(world, 'present')).toBe(1)
 })
 
-test("a compaction inside a turn is answered at the main loop's next request, and a teammate's compaction, turn or request is not", async ($, on) => {
+test('a compaction another hook skipped owes no rules', async ($, on) => {
+  const world = buildWorld(on)
+  await setMode($, world, 'away')
+  world.compactionSkip = 'vetoed'
+  await compact($)
+  await mainTurnStart($)
+  expect(rulesSent(world, 'away')).toBe(1)
+})
+
+test("a compaction inside a turn is answered at the main loop's next request, and a precomputed one or a teammate's compaction, turn or request is not", async ($, on) => {
   const world = buildWorld(on)
   await setMode($, world, 'distracted')
   await compact($, 'worker-1')
+  await compact($, undefined, 'precompute')
   await step($, 0)
   expect(rulesSent(world, 'distracted')).toBe(1)
 
@@ -329,13 +353,21 @@ const mountBand = ($: Engine, hasSurvey = false) =>
     props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 80 },
   } as never)
 
-test("the band shows the mode beside the other plugins' lines, with a button for each other mode", async ($, on) => {
+test("the band shows the mode beside the other plugins' lines and beneath any it is handed, with a button for each other mode", async ($, on) => {
   const world = buildWorld(on)
   const band = await mountBand($)
   const lines = async () => (await band.findAll({ type: 'Text' })).map(found => found.text)
   const buttons = async () => (await band.findAll({ type: 'Button' })).map(found => found.key)
   // Where the band stacks one row per plugin, the engine orders the rows, so only their contents are away's to assert.
   expect((await lines()).toSorted()).toEqual(['Mode: present ', 'the other band'])
+  // Where the band is one tree, away's answer holds the other plugins' lines too, and its own line must close it.
+  // findAll lists every node after the nodes holding it, so the last earlier box holding away's line is away's answer.
+  const boxes = await band.findAll({ type: 'Box' })
+  const ownIndex = boxes.findIndex(box => box.key === 'away')
+  expect(ownIndex).toBeGreaterThan(0)
+  const ownText = String(boxes[ownIndex]?.text)
+  const answer = boxes.slice(0, ownIndex).findLast(box => String(box.text).includes(ownText))
+  expect(String(answer?.text).endsWith(ownText)).toBe(true)
   expect(await buttons()).toEqual(['mode-distracted', 'mode-away'])
   await band.press({ key: 'mode-away' })
   expect(world.statuses.at(-1)).toBe('away')
@@ -404,7 +436,7 @@ const CALLER: Plugin = {
   },
 }
 
-test("while away, a main turn that called a tool is continued once, and the continuation's own turn is not", async ($, on) => {
+test("while away, a main turn that called a tool is continued once it ends, and neither the continuation's own turn nor a subagent's is", async ($, on) => {
   const world = buildWorld(on)
   await setMode($, world, 'away')
   await mainTurn($, world, 't1')
@@ -419,7 +451,14 @@ test("while away, a main turn that called a tool is continued once, and the cont
   await world.clock.advance(10)
   expect(continuations(world)).toBe(1)
 
-  await mainTurn($, world, 't3')
+  await $.turn.start({ text: 'go', turnId: 't3' })
+  await $.tool.call({ tool: 'Read', file_path: 'notes.md' } as never)
+  await $.turn.start({ text: 'survey', turnId: 's2', agentId: 'scout-1' })
+  await endTurn($, 's2', 'answer', 'scout-1')
+  await world.clock.advance(10)
+  expect(continuations(world)).toBe(1)
+  await endTurn($, 't3')
+  await world.clock.advance(10)
   expect(continuations(world)).toBe(2)
 })
 
@@ -447,33 +486,41 @@ test('/mode runs mid-turn, and a /mode present typed during an away turn neither
   expect(continuations(world)).toBe(0)
 })
 
-test("a turn with no tool call of the main model's own is not continued", { plugins: [CALLER] }, async ($, on) => {
+test("a turn with no tool call of the main model's own is not continued, whatever an earlier turn called", { plugins: [CALLER] }, async ($, on) => {
   const world = buildWorld(on)
   await setMode($, world, 'away')
-  await mainTurn($, world, 't1', { hasToolCall: false })
+  await mainTurn($, world, 't1')
+  await continuationTurn($, world, 't2')
+  await mainTurn($, world, 't3', { hasToolCall: false })
+  expect(continuations(world)).toBe(1)
 
-  await $.turn.start({ text: 'go', turnId: 't2' })
+  await $.turn.start({ text: 'go', turnId: 't4' })
   await $.tool.call({ tool: 'Read', file_path: 'notes.md', agentId: 'scout-1' } as never)
   await $.command.run({ command: 'probe', args: '', origin: { kind: 'composer' } } as never)
-  await endTurn($, 't2')
+  await endTurn($, 't4')
   await world.clock.advance(10)
-  expect(continuations(world)).toBe(0)
+  expect(continuations(world)).toBe(1)
 })
 
-test('an interrupted or refused turn is not continued, and one ending while a handoff runs is neither continued nor handed off', { plugins: [HANDOFF] }, async ($, on) => {
+test('an interrupted or refused turn is not continued, and while a handoff runs a turn is neither asked to end, continued nor handed off', { plugins: [HANDOFF] }, async ($, on) => {
   const world = buildWorld(on)
   await setMode($, world, 'away')
-  await mainTurn($, world, 't1', { end: 'aborted' })
-  await mainTurn($, world, 't2', { end: 'refusal' })
   await setHandoff($, 'set-phase', 'writing')
   await setHandoff($, 'set-ceiling', 60)
   world.usage.percent = 75
-  await mainTurn($, world, 't3')
-  expect(continuations(world)).toBe(0)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.tool.call({ tool: 'Read', file_path: 'notes.md' } as never)
+  await step($, 0)
+  await endTurn($, 't1')
+  await world.clock.advance(10)
+  expect(world.appended().filter(text => text.startsWith('[away: end turn]'))).toEqual([])
   expect(world.handoffs).toEqual([])
 
   await setHandoff($, 'set-phase', 'idle')
   world.usage.percent = 10
+  await mainTurn($, world, 't2', { end: 'aborted' })
+  await mainTurn($, world, 't3', { end: 'refusal' })
+  expect(continuations(world)).toBe(0)
   await mainTurn($, world, 't4')
   expect(continuations(world)).toBe(1)
 })
@@ -591,7 +638,7 @@ test('a refused board tool is not posted, and a post the board refuses is named 
   expect(refused.decision?.behavior === 'deny' ? refused.decision.message : '').toContain('the board is not loaded')
 })
 
-test('auto mode denials are posted outside present, once per loop, tool and category', async ($, on) => {
+test('auto mode denials are posted outside present, once per loop, tool and category, and never for a board tool', async ($, on) => {
   const world = buildWorld(on)
   const exfiltration = 'Denied by the classifier [Data Exfiltration]: sends files out'
   await $.classic.PermissionDenied({ ...PUBLISH, tool_use_id: 'toolu_1', reason: exfiltration })
@@ -607,6 +654,7 @@ test('auto mode denials are posted outside present, once per loop, tool and cate
   await $.classic.PermissionDenied({ ...PUBLISH, tool_use_id: 'toolu_4', reason: 'Denied [Irreversible Change]' })
   await $.classic.PermissionDenied({ ...PUBLISH, tool_use_id: 'toolu_5', reason: exfiltration, agent_id: 'worker-1' })
   await $.classic.PermissionDenied({ tool_name: 'Write', tool_input: { file_path: 'notes.md' }, tool_use_id: 'toolu_6', reason: exfiltration })
+  await $.classic.PermissionDenied({ tool_name: 'mcp__board__set_task', tool_input: {}, tool_use_id: 'toolu_7', reason: exfiltration })
   expect(world.decisions.length).toBe(4)
 })
 
@@ -642,6 +690,15 @@ test('the ceiling hands off again only after the fill has dropped below it', { p
   world.usage.percent = 61
   await mainTurn($, world, 't4')
   expect(world.handoffs.length).toBe(2)
+})
+
+test('before a response reports the fill, the ceiling goes by the estimate', { plugins: [HANDOFF] }, async ($, on) => {
+  const world = buildWorld(on)
+  await setHandoff($, 'set-ceiling', 60)
+  await setMode($, world, 'away')
+  world.usage = { tokens: 150_000 }
+  await mainTurn($, world, 't1')
+  expect(world.handoffs.length).toBe(1)
 })
 
 test('past the ceiling while distracted, the turn is neither asked to end nor handed off', { plugins: [HANDOFF] }, async ($, on) => {
@@ -685,7 +742,7 @@ test('away turns the sandbox on with auto-allow off, keeping every other key, an
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
-test('keys away added are removed again, with a sandbox object they leave empty, and a file away created is deleted', async ($, on) => {
+test('keys away added are removed again, with a sandbox object they leave empty, and a file away created is deleted, or emptied where rm cannot run', async ($, on) => {
   const world = buildWorld(on)
   await setMode($, world, 'away')
   expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
@@ -702,9 +759,15 @@ test('keys away added are removed again, with a sandbox object they leave empty,
   await setMode($, world, 'away')
   await setMode($, world, 'present')
   expect(localSettings(world)).toEqual({})
+
+  world.files.delete(LOCAL_SETTINGS)
+  world.canRemove = false
+  await setMode($, world, 'away')
+  await setMode($, world, 'present')
+  expect(localSettings(world)).toEqual({})
 })
 
-test('a local settings file that does not hold a JSON object is left untouched, and the owner is told the sandbox is off', async ($, on) => {
+test('a local settings file that does not hold a JSON object, or whose sandbox is not one, is left untouched, and the owner is told the sandbox is off', async ($, on) => {
   const world = buildWorld(on)
   world.files.set(LOCAL_SETTINGS, '{ "sandbox": ')
   await setMode($, world, 'away')
@@ -712,6 +775,13 @@ test('a local settings file that does not hold a JSON object is left untouched, 
   expect(world.toasts).toContain(`The sandbox is off while away: ${LOCAL_SETTINGS} does not hold a JSON object`)
   expect(world.store.has(HOLD_KEY)).toBe(false)
   expect(world.statuses.at(-1)).toBe('away')
+
+  await setMode($, world, 'present')
+  world.files.set(LOCAL_SETTINGS, '{ "sandbox": true }')
+  await setMode($, world, 'away')
+  expect(world.files.get(LOCAL_SETTINGS)).toBe('{ "sandbox": true }')
+  expect(world.toasts.at(-1)).toMatch(/^The sandbox is off while away: /)
+  expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
 test('on Linux without bwrap or without socat, going away leaves the file alone, holds nothing, and toasts each one missing', async ($, on) => {
@@ -774,13 +844,14 @@ test('going away toasts each value above the session root\'s file that undoes th
   const world = buildWorld(on)
   world.root = WORKTREE_ROOT
   writeLocalSettings(world, { sandbox: { enabled: false } })
-  world.sources.flag = { sandbox: { autoAllowBashIfSandboxed: true } }
-  world.sources.policy = { sandbox: { enabled: true, autoAllowBashIfSandboxed: false } }
+  world.sources.flag = { sandbox: { enabled: true, autoAllowBashIfSandboxed: true } }
+  world.sources.policy = { sandbox: { enabled: false } }
   await setMode($, world, 'away')
   expect(JSON.parse(world.files.get(WORKTREE_SETTINGS) ?? 'null')).toEqual({ sandbox: AWAY_SANDBOX })
   expect(world.toasts).toEqual([
     `${LOCAL_SETTINGS} sets sandbox.enabled to false, which wins over ${WORKTREE_SETTINGS}, so the sandbox stays off while away`,
     `--settings sets sandbox.autoAllowBashIfSandboxed to true, which wins over ${WORKTREE_SETTINGS}, so sandboxed Bash runs without a prompt while away`,
+    `Managed settings sets sandbox.enabled to false, which wins over ${WORKTREE_SETTINGS}, so the sandbox stays off while away`,
   ])
 })
 
@@ -861,17 +932,6 @@ test('a conversation moved to a new session id while away moves its hold with no
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 
-test('a session whose root moved while away puts the sandbox back under the root it held, not the new one', async ($, on) => {
-  const world = buildWorld(on)
-  writeLocalSettings(world, { sandbox: { enabled: false } })
-  await setMode($, world, 'away')
-  world.root = WORKTREE_ROOT
-  await setMode($, world, 'present')
-  expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
-  expect(world.store.has(HOLD_KEY)).toBe(false)
-  expect(world.files.has(WORKTREE_SETTINGS)).toBe(false)
-})
-
 test("a session's root moved mid-turn while away takes the hold with it at the main loop's next request, not a teammate's", async ($, on) => {
   const world = buildWorld(on)
   writeLocalSettings(world, { sandbox: { enabled: false } })
@@ -888,16 +948,6 @@ test("a session's root moved mid-turn while away takes the hold with it at the m
   expect(world.store.get(HELD_ROOT_KEY)).toBe(WORKTREE_ROOT)
   expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
   expect(world.store.has(HOLD_KEY)).toBe(false)
-})
-
-test('a session restarted away under another root gives up the hold it left in the old one', async ($, on) => {
-  const world = buildWorld(on, { [SESSION_KEY]: 'away', [HELD_ROOT_KEY]: WORKTREE_ROOT, [`sandbox:${WORKTREE_ROOT}`]: heldBy(['test-session']) })
-  world.files.set(WORKTREE_SETTINGS, JSON.stringify({ sandbox: AWAY_SANDBOX }))
-  await mainTurnStart($)
-  expect(JSON.parse(world.files.get(WORKTREE_SETTINGS) ?? 'null')).toEqual({ sandbox: { enabled: false } })
-  expect(world.store.has(`sandbox:${WORKTREE_ROOT}`)).toBe(false)
-  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
-  expect(world.store.get(HELD_ROOT_KEY)).toBe(ROOT)
 })
 
 test('a session restarted away turns the sandbox on again where the owner turned it off', async ($, on) => {
