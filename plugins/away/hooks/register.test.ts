@@ -185,11 +185,6 @@ function buildWorld(on: On, seed: Record<string, unknown> = {}): World {
     yield* []
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null }
   })
-  // What the other plugins draw in the band; away draws its line beneath it.
-  on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e)
-    return h(Text, null, 'the other band') as never
-  })
   return world
 }
 
@@ -353,21 +348,19 @@ const mountBand = ($: Engine, hasSurvey = false) =>
     props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 80 },
   } as never)
 
-test("the band shows the mode beside the other plugins' lines and beneath any it is handed, with a button for each other mode", async ($, on) => {
+test('the band keeps what the other plugins draw above the mode, with a button for each other mode', async ($, on) => {
   const world = buildWorld(on)
   const band = await mountBand($)
   const lines = async () => (await band.findAll({ type: 'Text' })).map(found => found.text)
   const buttons = async () => (await band.findAll({ type: 'Button' })).map(found => found.key)
-  // Where the band stacks one row per plugin, the engine orders the rows, so only their contents are away's to assert.
-  expect((await lines()).toSorted()).toEqual(['Mode: present ', 'the other band'])
-  // Where the band is one tree, away's answer holds the other plugins' lines too, and its own line must close it.
-  // findAll lists every node after the nodes holding it, so the last earlier box holding away's line is away's answer.
-  const boxes = await band.findAll({ type: 'Box' })
-  const ownIndex = boxes.findIndex(box => box.key === 'away')
-  expect(ownIndex).toBeGreaterThan(0)
-  const ownText = String(boxes[ownIndex]?.text)
-  const answer = boxes.slice(0, ownIndex).findLast(box => String(box.text).includes(ownText))
-  expect(String(answer?.text).endsWith(ownText)).toBe(true)
+  expect(await band.keepsBeneath()).toBe(true)
+  // findAll lists nodes in drawing order, so the engine's placeholder for the other plugins' lines must come first.
+  const nodes = await band.findAll({})
+  const beneathIndex = nodes.findIndex(node => node.type === 'engine')
+  const ownIndex = nodes.findIndex(node => node.key === 'away')
+  expect(beneathIndex).toBeGreaterThanOrEqual(0)
+  expect(beneathIndex).toBeLessThan(ownIndex)
+  expect(await lines()).toEqual(['Mode: present '])
   expect(await buttons()).toEqual(['mode-distracted', 'mode-away'])
   await band.press({ key: 'mode-away' })
   expect(world.statuses.at(-1)).toBe('away')
@@ -377,7 +370,7 @@ test("the band shows the mode beside the other plugins' lines and beneath any it
 test('the band draws nothing of its own while a survey is up', async ($, on) => {
   buildWorld(on)
   const band = await mountBand($, true)
-  expect(await band.find({ type: 'Text', text: 'the other band' })).toBeDefined()
+  expect(await band.keepsBeneath()).toBe(true)
   expect(await band.find({ type: 'Text', text: /Mode:/ })).toBeUndefined()
 })
 
@@ -767,7 +760,7 @@ test('keys away added are removed again, with a sandbox object they leave empty,
   expect(localSettings(world)).toEqual({})
 })
 
-test('a local settings file that does not hold a JSON object, or whose sandbox is not one, is left untouched, and the owner is told the sandbox is off', async ($, on) => {
+test('a local settings file that does not hold a JSON object, or whose sandbox is not one, is left untouched, and the owner is told why the sandbox is off', async ($, on) => {
   const world = buildWorld(on)
   world.files.set(LOCAL_SETTINGS, '{ "sandbox": ')
   await setMode($, world, 'away')
@@ -780,7 +773,7 @@ test('a local settings file that does not hold a JSON object, or whose sandbox i
   world.files.set(LOCAL_SETTINGS, '{ "sandbox": true }')
   await setMode($, world, 'away')
   expect(world.files.get(LOCAL_SETTINGS)).toBe('{ "sandbox": true }')
-  expect(world.toasts.at(-1)).toMatch(/^The sandbox is off while away: /)
+  expect(world.toasts.at(-1)).toBe(`The sandbox is off while away: ${LOCAL_SETTINGS} holds a sandbox that is not a JSON object`)
   expect(world.store.has(HOLD_KEY)).toBe(false)
 })
 

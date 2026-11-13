@@ -212,8 +212,8 @@ async function putSandboxBack($: EngineInterface, root: string, hold: SandboxHol
 /**
  * Applies `edit` to the local settings at `path`, a missing file counting as `{}`, and writes the result unless it is
  * unchanged, so a file away has nothing to change in keeps its own formatting. An edit answering undefined deletes the
- * file. Whether the file holds the edit: one that cannot be read, does not hold a JSON object or cannot be written is
- * left as it was, and toasted after `consequence`.
+ * file. Whether the file holds the edit: one that cannot be read, cannot be parsed or cannot be written is left as it
+ * was, and toasted after `consequence`.
  */
 async function editLocalSettings(
   $: EngineInterface,
@@ -229,8 +229,8 @@ async function editLocalSettings(
     return false
   }
   const settings = parseLocalSettings(text ?? EMPTY_SETTINGS)
-  if (settings === undefined) {
-    $.ui.toast(`${consequence}: ${path} does not hold a JSON object`)
+  if (typeof settings === 'string') {
+    $.ui.toast(`${consequence}: ${path} ${settings}`)
     return false
   }
   const edited = await edit(settings, text === undefined)
@@ -305,7 +305,8 @@ async function higherSandboxValues($: EngineInterface, root: string): Promise<{ 
 async function readIfReadable($: EngineInterface, path: string): Promise<LocalSettings | undefined> {
   try {
     const text = await readLocalSettingsText($, path)
-    return parseLocalSettings(text ?? EMPTY_SETTINGS)
+    const settings = parseLocalSettings(text ?? EMPTY_SETTINGS)
+    return typeof settings === 'string' ? undefined : settings
   } catch {
     return undefined
   }
