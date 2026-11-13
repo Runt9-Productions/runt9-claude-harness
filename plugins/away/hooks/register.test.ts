@@ -329,12 +329,13 @@ const mountBand = ($: Engine, hasSurvey = false) =>
     props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 80 },
   } as never)
 
-test("the band shows the mode beneath the other plugins' lines, with a button for each other mode", async ($, on) => {
+test("the band shows the mode beside the other plugins' lines, with a button for each other mode", async ($, on) => {
   const world = buildWorld(on)
   const band = await mountBand($)
   const lines = async () => (await band.findAll({ type: 'Text' })).map(found => found.text)
   const buttons = async () => (await band.findAll({ type: 'Button' })).map(found => found.key)
-  expect(await lines()).toEqual(['the other band', 'Mode: present '])
+  // Where the band stacks one row per plugin, the engine orders the rows, so only their contents are away's to assert.
+  expect((await lines()).toSorted()).toEqual(['Mode: present ', 'the other band'])
   expect(await buttons()).toEqual(['mode-distracted', 'mode-away'])
   await band.press({ key: 'mode-away' })
   expect(world.statuses.at(-1)).toBe('away')

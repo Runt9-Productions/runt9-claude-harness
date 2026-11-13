@@ -458,7 +458,8 @@ export const register: Register = on => {
     return result
   })
 
-  // The band holds one tree, so this draws beneath what the other plugins draw rather than answering without next.
+  // Where the band holds one tree, this draws beneath what the other plugins draw rather than answering without next.
+  // Where it stacks one row per plugin, next holds nothing of theirs and the engine orders the rows.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     if (e.props.hasSurvey) return below
