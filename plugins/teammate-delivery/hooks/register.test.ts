@@ -10,6 +10,15 @@ function agent(id: string, name: string, status: AgentStatus = 'running', isTeam
     description: 'synthetic task',
     type: 'general-purpose',
     status,
+    kind: isTeammate ? 'in_process_teammate' : 'local_agent',
+    // The engine's task record has no `idle` or `waiting`: a loop between turns or held is still running there.
+    taskStatus: status === 'idle' || status === 'waiting' ? 'running' : status,
+    label: 'synthetic task',
+    startTime: 0,
+    cwd: '/work',
+    tokenCount: 0,
+    tokenSamples: [],
+    hasRow: true,
   }
 }
 

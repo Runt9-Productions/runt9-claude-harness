@@ -15,7 +15,7 @@ async function decisionOf($: Engine, summary: string) {
 }
 
 test('a nudge is a hidden row to the agent judged with the check, the observation and its evidence, a teammate gone idle is reported to its lead, and one refusing the row is sent a message unless it has ended', async ($, on) => {
-  const ended: AgentInfo = { ...SCOUT, id: 'a-ended', teammateId: 'ended@crew', name: 'ended', status: 'completed' }
+  const ended: AgentInfo = { ...SCOUT, id: 'a-ended', teammateId: 'ended@crew', name: 'ended', status: 'completed', taskStatus: 'completed' }
   const world = engine(on, { alpha: checkFile('turn-end', 'prompts'), tango: checkFile('teammate-idle', 'prompts', 'teammates') }, [SCOUT, ended])
   await judgedTurn($, world, raising([{ name: 'alpha', summary: 'MAIN-SUMMARY' }]))
   await judgedTurn($, world, raising([{ name: 'alpha', summary: 'SCOUT-SUMMARY' }]), SCOUT.id)
@@ -77,7 +77,7 @@ test("a flag is a board decision with the three answers, the owner's Useful, Sen
 })
 
 test("Send to the session prompts an idle main session, adds a row to a running one or to the teammate judged, with the owner's note, and toasts a send that cannot arrive", { plugins: [BOARD] }, async ($, on) => {
-  const ended: AgentInfo = { ...SCOUT, id: 'a-ended', teammateId: 'ended@crew', name: 'ended', status: 'completed' }
+  const ended: AgentInfo = { ...SCOUT, id: 'a-ended', teammateId: 'ended@crew', name: 'ended', status: 'completed', taskStatus: 'completed' }
   const world = engine(on, { kilo: checkFile('turn-end', 'prompts', 'all', 'haiku', 'flag') }, [SCOUT, ended])
   await judgedTurn($, world, raising([{ name: 'kilo', summary: 'IDLE-SUMMARY' }]))
   await judgedTurn($, world, raising([{ name: 'kilo', summary: 'RUNNING-SUMMARY' }]))

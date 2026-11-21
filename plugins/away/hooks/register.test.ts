@@ -390,7 +390,21 @@ const HANDOFF: Plugin = {
 const setHandoff = ($: Engine, command: 'set-phase' | 'set-ceiling', value: string | number): Promise<unknown> =>
   $.command.run({ command, args: String(value), origin: { kind: 'composer' } } as CommandRunInput)
 
-const WORKER: AgentInfo = { id: 'worker-1', name: 'worker', description: 'Survey the parser', type: 'teammate', status: 'running' }
+const WORKER: AgentInfo = {
+  id: 'worker-1',
+  name: 'worker',
+  description: 'Survey the parser',
+  type: 'teammate',
+  status: 'running',
+  kind: 'in_process_teammate',
+  taskStatus: 'running',
+  label: 'Survey the parser',
+  startTime: 0,
+  cwd: '/work',
+  tokenCount: 0,
+  tokenSamples: [],
+  hasRow: true,
+}
 
 /** Another plugin whose `probe` command makes a tool call of its own. */
 const CALLER: Plugin = {
@@ -486,7 +500,7 @@ test('a turn that ends while a teammate the main loop spawned is mid-run is not 
   expect(continuations(world)).toBe(0)
 
   world.agents.pop()
-  world.agents.push({ ...WORKER, status: 'idle' }, { ...WORKER, id: 'worker-2', status: 'completed' })
+  world.agents.push({ ...WORKER, status: 'idle' }, { ...WORKER, id: 'worker-2', status: 'completed', taskStatus: 'completed' })
   await mainTurn($, world, 't2')
   expect(continuations(world)).toBe(1)
 })
