@@ -1,20 +1,26 @@
 version: 2
+# One pull request a week carries every ecosystem's updates, so they merge together rather than each waiting on a
+# rebase after the one before.
+multi-ecosystem-groups:
+  weekly:
+    schedule:
+      interval: weekly
 updates:
   - package-ecosystem: github-actions
     directory: /
-    schedule:
-      interval: weekly
+    multi-ecosystem-group: weekly
+    patterns: ["*"]
     cooldown:
       default-days: 7
   - package-ecosystem: npm
     directory: /
-    schedule:
-      interval: weekly
+    multi-ecosystem-group: weekly
+    patterns: ["*"]
     cooldown:
       default-days: 7
   - package-ecosystem: pip
     directory: /
-    schedule:
-      interval: weekly
+    multi-ecosystem-group: weekly
+    patterns: ["*"]
     cooldown:
       default-days: 7

@@ -100,7 +100,7 @@ test('an answer the append cannot deliver to an idle teammate reaches it as a me
 
 test('an answer to an agent the owner stopped is not sent as a message, which would resume it', async ($, on) => {
   const toasts: string[] = []
-  const agents: AgentInfo[] = [{ ...WORKER, status: 'killed' }]
+  const agents: AgentInfo[] = [{ ...WORKER, status: 'killed', taskStatus: 'killed' }]
   engine(on, { toasts, agents, isAppendRefused: true })
   const sent = captureSends(on, agents)
   await $.tool.call({ ...ASK, agentId: WORKER.id } as never)

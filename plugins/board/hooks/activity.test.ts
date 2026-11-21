@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { AgentInfo, PromptComposeInput } from 'claude-code'
 
-import { PHASES, PROBE_CALLER, SCOUT, SET_TASK, SPAWN_SCOUT, WORKER, complete, composeNothingBeneath, engine, mountPane, resultText, step } from './test-support'
+import { PHASES, PROBE_CALLER, SCOUT, SET_TASK, SPAWN_SCOUT, UNREAD_AGENT_FIELDS, WORKER, complete, composeNothingBeneath, engine, mountPane, resultText, step } from './test-support'
 
 test('the guidance is added only where a surface draws', async ($, on) => {
   engine(on)
@@ -48,7 +48,7 @@ test('with no surface, as in claude -p, neither the main session nor a teammate 
 })
 
 test('a subagent, whose prompt carries no guidance, is asked about its status only once it has set one', async ($, on) => {
-  const explorer: AgentInfo = { id: 'explorer', description: 'Find the parser', type: 'Explore', status: 'running' }
+  const explorer: AgentInfo = { ...UNREAD_AGENT_FIELDS, kind: 'local_agent', id: 'explorer', description: 'Find the parser', type: 'Explore', status: 'running' }
   engine(on, { agents: [explorer] })
   const call = { ...WORKER_CALL, agentId: explorer.id }
   const beforeStatus: boolean[] = []
