@@ -8,16 +8,20 @@ const SANDBOX_KEYS = ['enabled', 'autoAllowBashIfSandboxed'] as const
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
-/** The settings `text` holds, or undefined when it is not a JSON object whose `sandbox`, where present, is one too. */
-export function parseLocalSettings(text: string): LocalSettings | undefined {
+/**
+ * The settings `text` holds, or why they cannot be edited, worded to follow the file's path: "does not hold a JSON
+ * object", or "holds a sandbox that is not a JSON object".
+ */
+export function parseLocalSettings(text: string): LocalSettings | string {
+  const notAnObject = 'does not hold a JSON object'
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch {
-    return undefined
+    return notAnObject
   }
-  if (!isObject(parsed)) return undefined
-  if (parsed.sandbox !== undefined && !isObject(parsed.sandbox)) return undefined
+  if (!isObject(parsed)) return notAnObject
+  if (parsed.sandbox !== undefined && !isObject(parsed.sandbox)) return 'holds a sandbox that is not a JSON object'
   return parsed
 }
 
