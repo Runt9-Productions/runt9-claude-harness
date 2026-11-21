@@ -111,7 +111,7 @@ Your lens directory is `.claude/agents/lens-review/reference/`. List its lenses,
 for file in .claude/agents/lens-review/reference/*.md; do
     [[ -e $file ]] || { echo "no lenses"; exit 3; }
     id=${file##*/}
-    printf '%s\t%s\n' "${id%.md}" "$(sed -n '2,$ { /[^[:space:]]/ { p; q; } }' "$file")"
+    printf '%s\t%s\n' "${id%.md}" "$(sed -n '2,${/[^[:space:]]/{p;q;};}' "$file")"
 done
 ```
 
