@@ -130,7 +130,7 @@ code-review-profile.md and CLAUDE.md, all here. Read every input file to its las
 is long. Report every finding and open question in the structured output."
 
 # A lens has no frontmatter: the whole file is the prompt, and the first non-empty line after its title is its summary.
-jq -n --arg description "$(sed -n '2,$ { /[^[:space:]]/ { p; q; } }' "$lens")" --arg prompt "$(< "$lens")" \
+jq -n --arg description "$(sed -n '2,${/[^[:space:]]/{p;q;};}' "$lens")" --arg prompt "$(< "$lens")" \
     '{"public-leak": {description: $description, prompt: $prompt}}' > "$scratch/agents.json"
 
 # The review gets only these variables, so nothing the caller sets can alter it: not ANTHROPIC_BASE_URL, NODE_OPTIONS
