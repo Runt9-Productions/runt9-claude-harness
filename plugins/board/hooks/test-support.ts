@@ -108,8 +108,21 @@ export function saved(store: Map<string, unknown>, key = SESSION_KEY): string {
   return JSON.stringify(store.get(key))
 }
 
+/** The fields `$.agent.list()` gives a running agent that the board never reads. */
+export const UNREAD_AGENT_FIELDS = {
+  taskStatus: 'running',
+  label: '',
+  startTime: 0,
+  cwd: '/work',
+  tokenCount: 0,
+  tokenSamples: [],
+  hasRow: true,
+} satisfies Partial<AgentInfo>
+
 // A teammate's own calls carry an id that differs from the `name@session` one its spawn answered.
 export const SCOUT: AgentInfo = {
+  ...UNREAD_AGENT_FIELDS,
+  kind: 'in_process_teammate',
   id: 'ascout-1',
   teammateId: 'scout@team',
   name: 'scout',
@@ -120,7 +133,16 @@ export const SCOUT: AgentInfo = {
 export const SPAWN_SCOUT = { tool: 'Agent', description: 'Survey the parser', prompt: SCOUT.description, name: 'scout' }
 
 export const READ_BOARD = { tool: 'mcp__board__read_board' }
-export const WORKER: AgentInfo = { id: 'worker', teammateId: 'worker@team', name: 'worker', description: 'Worker', type: 'teammate', status: 'running' }
+export const WORKER: AgentInfo = {
+  ...UNREAD_AGENT_FIELDS,
+  kind: 'in_process_teammate',
+  id: 'worker',
+  teammateId: 'worker@team',
+  name: 'worker',
+  description: 'Worker',
+  type: 'teammate',
+  status: 'running',
+}
 export function resultText(result: unknown): string {
   return JSON.stringify(result)
 }

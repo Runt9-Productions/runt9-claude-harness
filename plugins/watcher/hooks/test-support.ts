@@ -14,8 +14,28 @@ const TOP_AND_BRANCH = 'git rev-parse --show-toplevel --abbrev-ref HEAD'
 const CHECKS_MARK = '/checks/'
 const USAGE = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
-export const SCOUT: AgentInfo = { id: 'a-scout', teammateId: 'scout@crew', name: 'scout', type: 'teammate', status: 'running', description: 'synthetic brief' }
-export const HELPER: AgentInfo = { id: 'a-helper', type: 'Explore', status: 'running', description: 'synthetic search' }
+/** The fields `$.agent.list()` gives a running agent that the watcher never reads. */
+const UNREAD_AGENT_FIELDS = {
+  taskStatus: 'running',
+  label: '',
+  startTime: 0,
+  cwd: WORK,
+  tokenCount: 0,
+  tokenSamples: [],
+  hasRow: true,
+} satisfies Partial<AgentInfo>
+
+export const SCOUT: AgentInfo = {
+  ...UNREAD_AGENT_FIELDS,
+  kind: 'in_process_teammate',
+  id: 'a-scout',
+  teammateId: 'scout@crew',
+  name: 'scout',
+  type: 'teammate',
+  status: 'running',
+  description: 'synthetic brief',
+}
+export const HELPER: AgentInfo = { ...UNREAD_AGENT_FIELDS, kind: 'local_agent', id: 'a-helper', type: 'Explore', status: 'running', description: 'synthetic search' }
 
 /** A row the watcher appended, with the loop it went to (`undefined` for the main session). */
 export type Told = { to: string | undefined; text: string }

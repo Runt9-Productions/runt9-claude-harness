@@ -3,6 +3,8 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 function agent(id: string, name: string, status: AgentStatus = 'running', isTeammate = true): AgentInfo {
+  // A held loop's task status depends on why it is held, which no test here needs to pin down.
+  if (status === 'waiting') throw new Error(`no fixture for ${name} while waiting`)
   return {
     id,
     name,
@@ -10,6 +12,15 @@ function agent(id: string, name: string, status: AgentStatus = 'running', isTeam
     description: 'synthetic task',
     type: 'general-purpose',
     status,
+    kind: isTeammate ? 'in_process_teammate' : 'local_agent',
+    // The engine's task record has no `idle`: a teammate between turns is still running there.
+    taskStatus: status === 'idle' ? 'running' : status,
+    label: 'synthetic task',
+    startTime: 0,
+    cwd: '/work',
+    tokenCount: 0,
+    tokenSamples: [],
+    hasRow: true,
   }
 }
 
