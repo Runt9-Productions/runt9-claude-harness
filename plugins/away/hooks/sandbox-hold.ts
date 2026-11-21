@@ -212,8 +212,8 @@ async function putSandboxBack($: EngineInterface, root: string, hold: SandboxHol
 /**
  * Applies `edit` to the local settings at `path`, a missing file counting as `{}`, and writes the result unless it is
  * unchanged, so a file away has nothing to change in keeps its own formatting. An edit answering undefined deletes the
- * file. Whether the file holds the edit: one that cannot be read, does not hold a JSON object or cannot be written is
- * left as it was, and toasted after `consequence`.
+ * file. Whether the file holds the edit: one that cannot be read, cannot be parsed or cannot be written is left as it
+ * was, and toasted after `consequence`.
  */
 async function editLocalSettings(
   $: EngineInterface,
@@ -228,18 +228,18 @@ async function editLocalSettings(
     $.ui.toast(`${consequence}: reading ${path} failed (${String(err)})`)
     return false
   }
-  const settings = parseLocalSettings(text ?? EMPTY_SETTINGS)
-  if (settings === undefined) {
-    $.ui.toast(`${consequence}: ${path} does not hold a JSON object`)
+  const parsed = parseLocalSettings(text ?? EMPTY_SETTINGS)
+  if (typeof parsed === 'string') {
+    $.ui.toast(`${consequence}: ${path} ${parsed}`)
     return false
   }
-  const edited = await edit(settings, text === undefined)
+  const edited = await edit(parsed, text === undefined)
   if (edited === undefined) {
     const isGone = await isDeleted($, path)
     if (isGone) return true
   }
   const editedText = renderLocalSettings(edited ?? {})
-  if (editedText === renderLocalSettings(settings)) return true
+  if (editedText === renderLocalSettings(parsed)) return true
   try {
     await $.fs.write(path, editedText)
   } catch (err) {
@@ -305,7 +305,8 @@ async function higherSandboxValues($: EngineInterface, root: string): Promise<{ 
 async function readIfReadable($: EngineInterface, path: string): Promise<LocalSettings | undefined> {
   try {
     const text = await readLocalSettingsText($, path)
-    return parseLocalSettings(text ?? EMPTY_SETTINGS)
+    const parsed = parseLocalSettings(text ?? EMPTY_SETTINGS)
+    return typeof parsed === 'string' ? undefined : parsed
   } catch {
     return undefined
   }
