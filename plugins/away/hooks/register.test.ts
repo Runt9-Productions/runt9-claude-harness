@@ -348,13 +348,13 @@ const mountBand = ($: Engine, hasSurvey = false) =>
     props: { hasSurvey, isWorking: false, maxRows: 10, bodyColumns: 80 },
   } as never)
 
-test('the band keeps what the other plugins draw above the mode, with a button for each other mode', async ($, on) => {
+test("the band draws next(e)'s answer above the mode, with a button for each other mode", async ($, on) => {
   const world = buildWorld(on)
   const band = await mountBand($)
   const lines = async () => (await band.findAll({ type: 'Text' })).map(found => found.text)
   const buttons = async () => (await band.findAll({ type: 'Button' })).map(found => found.key)
   expect(await band.keepsBeneath()).toBe(true)
-  // findAll lists nodes in drawing order, so the engine's placeholder for the other plugins' lines must come first.
+  // findAll lists nodes in drawing order, so the engine's placeholder for what next(e) answered must come first.
   const nodes = await band.findAll({})
   const beneathIndex = nodes.findIndex(node => node.type === 'engine')
   const ownIndex = nodes.findIndex(node => node.key === 'away')
@@ -685,12 +685,12 @@ test('the ceiling hands off again only after the fill has dropped below it', { p
   expect(world.handoffs.length).toBe(2)
 })
 
-test('before a response reports the fill, the ceiling goes by the estimate', { plugins: [HANDOFF] }, async ($, on) => {
+test('a turn an API error ended before any response goes by the estimate for the ceiling', { plugins: [HANDOFF] }, async ($, on) => {
   const world = buildWorld(on)
   await setHandoff($, 'set-ceiling', 60)
   await setMode($, world, 'away')
   world.usage = { tokens: 150_000 }
-  await mainTurn($, world, 't1')
+  await mainTurn($, world, 't1', { hasToolCall: false, end: 'error' })
   expect(world.handoffs.length).toBe(1)
 })
 
@@ -941,6 +941,16 @@ test("a session's root moved mid-turn while away takes the hold with it at the m
   expect(world.store.get(HELD_ROOT_KEY)).toBe(WORKTREE_ROOT)
   expect(localSettings(world)).toEqual({ sandbox: { enabled: false } })
   expect(world.store.has(HOLD_KEY)).toBe(false)
+})
+
+test('a session restarted away under another root gives up the hold it left in the old one', async ($, on) => {
+  const world = buildWorld(on, { [SESSION_KEY]: 'away', [HELD_ROOT_KEY]: WORKTREE_ROOT, [`sandbox:${WORKTREE_ROOT}`]: heldBy(['test-session']) })
+  world.files.set(WORKTREE_SETTINGS, JSON.stringify({ sandbox: AWAY_SANDBOX }))
+  await mainTurnStart($)
+  expect(JSON.parse(world.files.get(WORKTREE_SETTINGS) ?? 'null')).toEqual({ sandbox: { enabled: false } })
+  expect(world.store.has(`sandbox:${WORKTREE_ROOT}`)).toBe(false)
+  expect(localSettings(world)).toEqual({ sandbox: AWAY_SANDBOX })
+  expect(world.store.get(HELD_ROOT_KEY)).toBe(ROOT)
 })
 
 test('a session restarted away turns the sandbox on again where the owner turned it off', async ($, on) => {

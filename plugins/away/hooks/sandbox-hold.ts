@@ -228,18 +228,18 @@ async function editLocalSettings(
     $.ui.toast(`${consequence}: reading ${path} failed (${String(err)})`)
     return false
   }
-  const settings = parseLocalSettings(text ?? EMPTY_SETTINGS)
-  if (typeof settings === 'string') {
-    $.ui.toast(`${consequence}: ${path} ${settings}`)
+  const parsed = parseLocalSettings(text ?? EMPTY_SETTINGS)
+  if (typeof parsed === 'string') {
+    $.ui.toast(`${consequence}: ${path} ${parsed}`)
     return false
   }
-  const edited = await edit(settings, text === undefined)
+  const edited = await edit(parsed, text === undefined)
   if (edited === undefined) {
     const isGone = await isDeleted($, path)
     if (isGone) return true
   }
   const editedText = renderLocalSettings(edited ?? {})
-  if (editedText === renderLocalSettings(settings)) return true
+  if (editedText === renderLocalSettings(parsed)) return true
   try {
     await $.fs.write(path, editedText)
   } catch (err) {
@@ -305,8 +305,8 @@ async function higherSandboxValues($: EngineInterface, root: string): Promise<{ 
 async function readIfReadable($: EngineInterface, path: string): Promise<LocalSettings | undefined> {
   try {
     const text = await readLocalSettingsText($, path)
-    const settings = parseLocalSettings(text ?? EMPTY_SETTINGS)
-    return typeof settings === 'string' ? undefined : settings
+    const parsed = parseLocalSettings(text ?? EMPTY_SETTINGS)
+    return typeof parsed === 'string' ? undefined : parsed
   } catch {
     return undefined
   }
